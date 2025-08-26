@@ -10,6 +10,58 @@ interface TransactionProgramBadgeProps {
   programId?: string;
 }
 
+// Analyze transaction to detect transfer types
+const analyzeTransactionType = (vaultTx: any): { name: string; id: string } | null => {
+  try {
+    if (!vaultTx.message || !vaultTx.message.instructions) return null;
+    
+    const instructions = vaultTx.message.instructions;
+    const accountKeys = vaultTx.message.accountKeys;
+    
+    // Check each instruction
+    for (const instruction of instructions) {
+      const programIdKey = accountKeys[instruction.programIdIndex];
+      const programIdStr = programIdKey instanceof PublicKey 
+        ? programIdKey.toBase58() 
+        : typeof programIdKey === 'string' 
+          ? programIdKey 
+          : new PublicKey(programIdKey).toBase58();
+      
+      // System Program Transfer (SOL transfer)
+      if (programIdStr === '11111111111111111111111111111111') {
+        const data = instruction.data;
+        // System transfer instruction starts with 2 (u32 little-endian: 0x02000000)
+        if (data && data.length >= 4 && data[0] === 2 && data[1] === 0 && data[2] === 0 && data[3] === 0) {
+          return { name: 'SOL Transfer', id: programIdStr };
+        }
+      }
+      
+      // SPL Token Transfer
+      if (programIdStr === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') {
+        const data = instruction.data;
+        // Token transfer instruction is 3, transferChecked is 12
+        if (data && data.length > 0 && (data[0] === 3 || data[0] === 12)) {
+          return { name: 'SPL Token Transfer', id: programIdStr };
+        }
+      }
+      
+      // Token-2022 Transfer
+      if (programIdStr === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') {
+        const data = instruction.data;
+        // Token transfer instruction is 3, transferChecked is 12
+        if (data && data.length > 0 && (data[0] === 3 || data[0] === 12)) {
+          return { name: 'Token-2022 Transfer', id: programIdStr };
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error analyzing transaction type:', error);
+    return null;
+  }
+};
+
 export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = ({
   multisigPda,
   transactionIndex,
@@ -39,19 +91,26 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
           );
           
           if (vaultTx.message && vaultTx.message.instructions?.length > 0) {
-            // Get the first instruction's program ID
-            const firstInstruction = vaultTx.message.instructions[0];
-            const programIdKey = vaultTx.message.accountKeys[firstInstruction.programIdIndex];
-            const programIdStr = programIdKey instanceof PublicKey 
-              ? programIdKey.toBase58() 
-              : typeof programIdKey === 'string' 
-                ? programIdKey 
-                : new PublicKey(programIdKey).toBase58();
+            // Analyze transaction to determine type
+            const txType = analyzeTransactionType(vaultTx);
             
-            setProgramInfo({
-              name: getProgramName(programIdStr),
-              id: programIdStr,
-            });
+            if (txType) {
+              setProgramInfo(txType);
+            } else {
+              // Fall back to first instruction's program ID
+              const firstInstruction = vaultTx.message.instructions[0];
+              const programIdKey = vaultTx.message.accountKeys[firstInstruction.programIdIndex];
+              const programIdStr = programIdKey instanceof PublicKey 
+                ? programIdKey.toBase58() 
+                : typeof programIdKey === 'string' 
+                  ? programIdKey 
+                  : new PublicKey(programIdKey).toBase58();
+              
+              setProgramInfo({
+                name: getProgramName(programIdStr),
+                id: programIdStr,
+              });
+            }
           } else {
             setProgramInfo({ name: 'Empty Transaction', id: '' });
           }
@@ -131,6 +190,14 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
 
   const getBadgeStyles = (programName: string): string => {
     let baseStyles = "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset";
+    
+    // Transfer types - use distinct styling
+    if (programName === 'SOL Transfer') {
+      return `${baseStyles} bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/20 font-semibold`;
+    }
+    if (programName === 'SPL Token Transfer' || programName === 'Token-2022 Transfer') {
+      return `${baseStyles} bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-emerald-500/20 font-semibold`;
+    }
     
     if (programName === 'Config Transaction') {
       return `${baseStyles} bg-purple-500/10 text-purple-600 dark:text-purple-400 ring-purple-500/20`;
