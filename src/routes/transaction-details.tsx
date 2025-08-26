@@ -13,6 +13,58 @@ import RejectButton from '@/components/RejectButton';
 import ExecuteButton from '@/components/ExecuteButton';
 import CancelButton from '@/components/CancelButton';
 
+// Analyze transaction to detect transfer types (same logic as TransactionProgramBadge)
+const analyzeTransactionType = (vaultTx: any): string | null => {
+  try {
+    if (!vaultTx.message || !vaultTx.message.instructions) return null;
+    
+    const instructions = vaultTx.message.instructions;
+    const accountKeys = vaultTx.message.accountKeys;
+    
+    // Check each instruction
+    for (const instruction of instructions) {
+      const programIdKey = accountKeys[instruction.programIdIndex];
+      const programIdStr = programIdKey instanceof PublicKey 
+        ? programIdKey.toBase58() 
+        : typeof programIdKey === 'string' 
+          ? programIdKey 
+          : new PublicKey(programIdKey).toBase58();
+      
+      // System Program Transfer (SOL transfer)
+      if (programIdStr === '11111111111111111111111111111111') {
+        const data = instruction.data;
+        // System transfer instruction starts with 2 (u32 little-endian: 0x02000000)
+        if (data && data.length >= 4 && data[0] === 2 && data[1] === 0 && data[2] === 0 && data[3] === 0) {
+          return 'SOL Transfer';
+        }
+      }
+      
+      // SPL Token Transfer
+      if (programIdStr === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') {
+        const data = instruction.data;
+        // Token transfer instruction is 3, transferChecked is 12
+        if (data && data.length > 0 && (data[0] === 3 || data[0] === 12)) {
+          return 'SPL Token Transfer';
+        }
+      }
+      
+      // Token-2022 Transfer
+      if (programIdStr === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') {
+        const data = instruction.data;
+        // Token transfer instruction is 3, transferChecked is 12
+        if (data && data.length > 0 && (data[0] === 3 || data[0] === 12)) {
+          return 'Token-2022 Transfer';
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error analyzing transaction type:', error);
+    return null;
+  }
+};
+
 export default function TransactionDetailsPage() {
   const { transactionPda } = useParams<{ transactionPda: string }>();
   const navigate = useNavigate();
@@ -28,6 +80,7 @@ export default function TransactionDetailsPage() {
   // Extract transaction index and proposal from the PDA
   const [transactionIndex, setTransactionIndex] = React.useState<bigint | null>(null);
   const [proposal, setProposal] = React.useState<multisig.generated.Proposal | null>(null);
+  const [transactionType, setTransactionType] = React.useState<string>('Transaction');
   
   React.useEffect(() => {
     const fetchTransactionDetails = async () => {
@@ -46,6 +99,14 @@ export default function TransactionDetailsPage() {
           );
           const index = BigInt(vaultTx.index.toString());
           setTransactionIndex(index);
+          
+          // Detect transaction type
+          const txType = analyzeTransactionType(vaultTx);
+          if (txType) {
+            setTransactionType(txType);
+          } else {
+            setTransactionType('Transaction');
+          }
           
           // Fetch the proposal
           const [proposalPda] = multisig.getProposalPda({
@@ -72,6 +133,7 @@ export default function TransactionDetailsPage() {
             );
             const index = BigInt(configTx.index.toString());
             setTransactionIndex(index);
+            setTransactionType('Config Transaction');
             
             // Fetch the proposal
             const [proposalPda] = multisig.getProposalPda({
@@ -98,6 +160,7 @@ export default function TransactionDetailsPage() {
               );
               const index = BigInt(batch.index.toString());
               setTransactionIndex(index);
+              setTransactionType('Batch Transaction');
               
               // Fetch the proposal
               const [proposalPda] = multisig.getProposalPda({
@@ -165,7 +228,7 @@ export default function TransactionDetailsPage() {
             ← Back to Transactions
           </Link>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-foreground">Transaction Details</h1>
+            <h1 className="text-2xl font-bold text-foreground">{transactionType} Details</h1>
             {isStale && (
               <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
                 Stale
