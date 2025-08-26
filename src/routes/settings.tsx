@@ -2,6 +2,7 @@ import SetProgramIdInput from '@/components/SetProgramIdInput';
 import SetRpcUrlInput from '@/components/SetRpcUrlnput';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import SetExplorerInput from '../components/SetExplorerInput';
+import { ThemeSelector } from '@/components/ThemeSelector';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Suspense } from 'react';
 
@@ -12,6 +13,15 @@ const SettingsPage = () => {
         <main>
           <h1 className="mb-4 text-3xl font-bold">Settings</h1>
           <div className="flex-col justify-start space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Theme</CardTitle>
+                <CardDescription>Choose your preferred color theme.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ThemeSelector />
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader>
                 <CardTitle>RPC Url</CardTitle>
