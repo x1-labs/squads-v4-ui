@@ -2,7 +2,7 @@ import { ArrowDownUp, LucideHome, Settings, Users, Box, Github } from 'lucide-re
 import ConnectWallet from '@/components/ConnectWalletButton';
 import { Link } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
-import { ChangeMultisigFromNav } from './ChangeMultisigFromNav';
+import { SquadSwitcher } from './SquadSwitcher';
 
 export default function TabNav() {
   const location = useLocation();
@@ -64,7 +64,7 @@ export default function TabNav() {
             </ul>
           </div>
           <div>
-            <ChangeMultisigFromNav />
+            <SquadSwitcher />
             <ConnectWallet />
           </div>
         </div>

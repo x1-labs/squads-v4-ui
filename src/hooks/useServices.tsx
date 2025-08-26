@@ -16,10 +16,16 @@ export const useMultisig = () => {
       if (!multisigAddress) return null;
       try {
         const multisigPubkey = new PublicKey(multisigAddress);
+        // First check if the account exists
+        const accountInfo = await connection.getAccountInfo(multisigPubkey);
+        if (!accountInfo) {
+          console.log('No account found at address:', multisigAddress);
+          return null;
+        }
         // @ts-ignore
         return multisig.accounts.Multisig.fromAccountAddress(connection, multisigPubkey);
       } catch (error) {
-        console.error(error);
+        console.error('Error fetching multisig:', error);
         return null;
       }
     },

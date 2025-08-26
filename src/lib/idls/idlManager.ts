@@ -1,14 +1,19 @@
 import { PublicKey } from '@solana/web3.js';
+import { detectIdlFormat, IdlFormat, IdlInfo } from './idlFormats';
+import { KinobiIdlParser } from './kinobiParser';
 
 // Import known IDLs
 import squadsV4Idl from './squads-v4.json';
 import delegationProgramIdl from './delegation_program.json';
 import stakePoolIdl from './stake_pool.json';
+import tokenProgramIdl from './token_program.json';
 
 export interface IdlEntry {
   programId: string;
   name: string;
   idl: any;
+  format: IdlFormat;
+  parser?: KinobiIdlParser;
 }
 
 class IdlManager {
@@ -30,10 +35,16 @@ class IdlManager {
     );
 
     this.addIdl(
-      'ErJn3yvnMcCGWZm4jWuRj2EwTXvgobF9gnkMnEGAMg1L', // The actual deployed program ID
-      'Staker Pool',
-      stakePoolIdl
+      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA', // The actual deployed program ID
+      'Token Program',
+      tokenProgramIdl
     );
+
+    // this.addIdl(
+    //   'ErJn3yvnMcCGWZm4jWuRj2EwTXvgobF9gnkMnEGAMg1L', // The actual deployed program ID
+    //   'Staker Pool',
+    //   stakePoolIdl
+    // );
 
     // Load any saved custom IDLs from localStorage
     this.loadCustomIdls();
@@ -43,7 +54,21 @@ class IdlManager {
    * Add an IDL to the registry
    */
   addIdl(programId: string, name: string, idl: any): void {
-    this.idls.set(programId, { programId, name, idl });
+    const formatInfo = detectIdlFormat(idl);
+    const entry: IdlEntry = {
+      programId,
+      name,
+      idl,
+      format: formatInfo.format
+    };
+
+    // Create parser for Kinobi format
+    if (formatInfo.format === IdlFormat.KINOBI) {
+      entry.parser = new KinobiIdlParser(idl);
+    }
+
+    this.idls.set(programId, entry);
+    console.log(`Added IDL for ${name} (${programId}) - Format: ${formatInfo.format}`);
     this.saveCustomIdls();
   }
 
@@ -69,6 +94,9 @@ class IdlManager {
     // Don't allow removing built-in IDLs
     const builtInIds = [
       'SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf',
+      'DDL3Xp6ie85DXgiPkXJ7abUyS2tGv4CGEod2DeQXQ941',
+      'X1dpTaMXkdEHQwhUk5oidxK9RXer8WoUCinWTyRmVjQ',
+      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
     ];
 
     if (builtInIds.includes(programId)) {
@@ -120,6 +148,10 @@ class IdlManager {
       if (stored) {
         const idls = JSON.parse(stored) as IdlEntry[];
         idls.forEach(entry => {
+          // Recreate parser for Kinobi format IDLs
+          if (entry.format === IdlFormat.KINOBI && entry.idl) {
+            entry.parser = new KinobiIdlParser(entry.idl);
+          }
           this.idls.set(entry.programId, entry);
         });
       }
@@ -136,6 +168,9 @@ class IdlManager {
       // Filter out built-in IDLs
       const builtInIds = [
         'SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf',
+        'DDL3Xp6ie85DXgiPkXJ7abUyS2tGv4CGEod2DeQXQ941',
+        'X1dpTaMXkdEHQwhUk5oidxK9RXer8WoUCinWTyRmVjQ',
+        'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
       ];
 
       const customIdls = Array.from(this.idls.values()).filter(

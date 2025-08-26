@@ -2,6 +2,7 @@ import { Connection, PublicKey, VersionedTransaction } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { BorshInstructionCoder } from '@coral-xyz/anchor';
 import { idlManager } from '../idls/idlManager';
+import { IdlFormat, isAnchorCompatible } from '../idls/idlFormats';
 
 export interface DecodedInstruction {
   programId: string;
@@ -106,20 +107,24 @@ export class SimpleDecoder {
   private initializeCoders() {
     // Load all IDLs and create instruction coders
     const idls = idlManager.getAllIdls();
-    console.log('Initializing decoders for programs:', idls.map(e => ({ name: e.name, id: e.programId })));
+    console.log('Initializing decoders for programs:', idls.map(e => ({ 
+      name: e.name, 
+      id: e.programId, 
+      format: e.format 
+    })));
     
     for (const entry of idls) {
       try {
-        // Try BorshInstructionCoder - with Anchor 0.31.1 it should handle custom types
-        if (entry.idl && entry.idl.instructions) {
+        // Only create BorshInstructionCoder for Anchor-compatible IDLs
+        if (isAnchorCompatible(entry.format) && entry.idl && entry.idl.instructions) {
           try {
             const coder = new BorshInstructionCoder(entry.idl);
             this.instructionCoders.set(entry.programId, coder);
-            console.log(`✅ Created BorshInstructionCoder for ${entry.name}`);
+            console.log(`✅ Created BorshInstructionCoder for ${entry.name} (format: ${entry.format})`);
           } catch (e: any) {
             console.warn(`❌ BorshInstructionCoder failed for ${entry.name}:`, {
               error: e.message || e.toString(),
-              stack: e.stack,
+              format: entry.format,
               idlName: entry.idl.name,
               idlVersion: entry.idl.version,
               hasInstructions: !!entry.idl.instructions,
@@ -130,11 +135,15 @@ export class SimpleDecoder {
               const resolvedIdl = this.resolveCustomTypes(entry.idl);
               const coder = new BorshInstructionCoder(resolvedIdl);
               this.instructionCoders.set(entry.programId, coder);
-              console.log(`✅ Created BorshInstructionCoder for ${entry.name} (with resolved types)`);
+              console.log(`✅ Created BorshInstructionCoder for ${entry.name} (with resolved types, format: ${entry.format})`);
             } catch (e2) {
               console.warn(`❌ BorshInstructionCoder still failed for ${entry.name}:`, e2);
             }
           }
+        } else if (entry.format === IdlFormat.KINOBI && entry.parser) {
+          console.log(`✅ Using Kinobi parser for ${entry.name}`);
+        } else {
+          console.log(`⚠️ No parser available for ${entry.name} (format: ${entry.format})`);
         }
       } catch (error) {
         console.warn(`❌ Failed to create parser for ${entry.name}:`, error);
@@ -142,7 +151,8 @@ export class SimpleDecoder {
     }
     
     console.log('Parsers initialized:', {
-      borshCoders: Array.from(this.instructionCoders.keys())
+      borshCoders: Array.from(this.instructionCoders.keys()),
+      kinobiParsers: idls.filter(e => e.format === IdlFormat.KINOBI).map(e => e.programId)
     });
   }
   
@@ -418,29 +428,22 @@ export class SimpleDecoder {
       return this.parseKnownProgramInstruction(programId, data, accountKeys);
     }
     
-    // Try to decode with Anchor IDL
-    const coder = this.instructionCoders.get(programIdStr);
-    if (coder) {
+    // Get the IDL entry to check format
+    const idlEntry = idlManager.getIdl(programIdStr);
+    
+    // Try Kinobi parser for Kinobi-format IDLs
+    if (idlEntry?.format === IdlFormat.KINOBI && idlEntry.parser) {
       try {
-        const decoded = coder.decode(data);
+        const decoded = idlEntry.parser.decodeInstruction(data);
         if (decoded) {
-          // Get the IDL to map account names
-          const idlEntry = idlManager.getIdl(programIdStr);
-          let accountNames: string[] = [];
-          
-          if (idlEntry?.idl?.instructions) {
-            const instruction = idlEntry.idl.instructions.find(
-              (ix: any) => ix.name === decoded.name
-            );
-            if (instruction?.accounts) {
-              accountNames = instruction.accounts.map((acc: any) => acc.name || `Account`);
-            }
-          }
+          // Get account names from the instruction metadata
+          const instruction = idlEntry.parser.getInstruction(decoded.name);
+          const accountNames = instruction?.accounts?.map(acc => acc.name) || [];
           
           return {
             programId: programIdStr,
             programName: this.getProgramName(programIdStr),
-            instructionName: this.formatInstructionName(decoded.name || 'Unknown Instruction'),
+            instructionName: this.formatInstructionName(decoded.name),
             accounts: accountKeys.map((key, i) => ({
               name: accountNames[i] || `Account ${i}`,
               pubkey: key.pubkey.toBase58(),
@@ -452,7 +455,46 @@ export class SimpleDecoder {
           };
         }
       } catch (error) {
-        console.warn(`BorshInstructionCoder failed for ${programIdStr}:`, error);
+        console.warn(`Kinobi parser failed for ${programIdStr}:`, error);
+      }
+    }
+    
+    // Try to decode with Anchor IDL (for Anchor-compatible formats)
+    if (idlEntry && isAnchorCompatible(idlEntry.format)) {
+      const coder = this.instructionCoders.get(programIdStr);
+      if (coder) {
+        try {
+          const decoded = coder.decode(data);
+          if (decoded) {
+            // Get the IDL to map account names
+            let accountNames: string[] = [];
+            
+            if (idlEntry?.idl?.instructions) {
+              const instruction = idlEntry.idl.instructions.find(
+                (ix: any) => ix.name === decoded.name
+              );
+              if (instruction?.accounts) {
+                accountNames = instruction.accounts.map((acc: any) => acc.name || `Account`);
+              }
+            }
+            
+            return {
+              programId: programIdStr,
+              programName: this.getProgramName(programIdStr),
+              instructionName: this.formatInstructionName(decoded.name || 'Unknown Instruction'),
+              accounts: accountKeys.map((key, i) => ({
+                name: accountNames[i] || `Account ${i}`,
+                pubkey: key.pubkey.toBase58(),
+                isSigner: key.isSigner,
+                isWritable: key.isWritable,
+              })),
+              args: decoded.data || {},
+              rawData: data.toString('hex').slice(0, 100)
+            };
+          }
+        } catch (error) {
+          console.warn(`BorshInstructionCoder failed for ${programIdStr}:`, error);
+        }
       }
     }
     
@@ -490,12 +532,40 @@ export class SimpleDecoder {
   ): DecodedInstruction {
     const programIdStr = programId.toBase58();
     
+    // Check if we have a Kinobi parser for this known program
+    const idlEntry = idlManager.getIdl(programIdStr);
+    if (idlEntry?.format === IdlFormat.KINOBI && idlEntry.parser) {
+      try {
+        const decoded = idlEntry.parser.decodeInstruction(data);
+        if (decoded) {
+          const instruction = idlEntry.parser.getInstruction(decoded.name);
+          const accountNames = instruction?.accounts?.map(acc => acc.name) || [];
+          
+          return {
+            programId: programIdStr,
+            programName: this.getProgramName(programIdStr),
+            instructionName: this.formatInstructionName(decoded.name),
+            accounts: accountKeys.map((key, i) => ({
+              name: accountNames[i] || this.getTokenAccountName(data[0], i),
+              pubkey: key.pubkey.toBase58(),
+              isSigner: key.isSigner,
+              isWritable: key.isWritable,
+            })),
+            args: decoded.data || {},
+            rawData: data.toString('hex').slice(0, 100)
+          };
+        }
+      } catch (error) {
+        console.warn(`Kinobi parser failed for known program ${programIdStr}, falling back to hardcoded parsing:`, error);
+      }
+    }
+    
     // System Program
     if (programIdStr === '11111111111111111111111111111111') {
       return this.parseSystemInstruction(data, accountKeys);
     }
     
-    // Token Programs
+    // Token Programs (fallback to hardcoded parsing if no Kinobi parser)
     if (programIdStr === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
         programIdStr === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') {
       return this.parseTokenInstruction(programIdStr, data, accountKeys);
@@ -628,11 +698,53 @@ export class SimpleDecoder {
     let args: any = {};
     
     switch (instructionType) {
+      case 0: // InitializeMint
+        instructionName = 'Initialize Mint';
+        if (data.length >= 67) {
+          args = {
+            decimals: data[1],
+            mintAuthority: new PublicKey(data.slice(2, 34)).toBase58(),
+            freezeAuthority: data[34] === 1 ? new PublicKey(data.slice(35, 67)).toBase58() : null
+          };
+        }
+        break;
+      case 1: // InitializeAccount
+        instructionName = 'Initialize Account';
+        break;
+      case 2: // InitializeMultisig
+        instructionName = 'Initialize Multisig';
+        if (data.length >= 2) {
+          args = { m: data[1] };
+        }
+        break;
       case 3: // Transfer
         instructionName = 'Transfer';
         if (data.length >= 9) {
           args = {
             amount: data.readBigUInt64LE(1).toString(),
+          };
+        }
+        break;
+      case 4: // Approve
+        instructionName = 'Approve';
+        if (data.length >= 9) {
+          args = {
+            amount: data.readBigUInt64LE(1).toString(),
+          };
+        }
+        break;
+      case 5: // Revoke
+        instructionName = 'Revoke';
+        break;
+      case 6: // SetAuthority
+        instructionName = 'Set Authority';
+        if (data.length >= 3) {
+          const authorityType = data[1];
+          const authorityTypes = ['MintTokens', 'FreezeAccount', 'AccountOwner', 'CloseAccount'];
+          args = {
+            authorityType: authorityTypes[authorityType] || 'Unknown',
+            newAuthority: data[2] === 1 && data.length >= 35 ? 
+              new PublicKey(data.slice(3, 35)).toBase58() : null
           };
         }
         break;
@@ -654,6 +766,83 @@ export class SimpleDecoder {
         break;
       case 9: // CloseAccount
         instructionName = 'Close Account';
+        break;
+      case 10: // FreezeAccount
+        instructionName = 'Freeze Account';
+        break;
+      case 11: // ThawAccount
+        instructionName = 'Thaw Account';
+        break;
+      case 12: // TransferChecked
+        instructionName = 'Transfer Checked';
+        if (data.length >= 10) {
+          args = {
+            amount: data.readBigUInt64LE(1).toString(),
+            decimals: data[9]
+          };
+        }
+        break;
+      case 13: // ApproveChecked
+        instructionName = 'Approve Checked';
+        if (data.length >= 10) {
+          args = {
+            amount: data.readBigUInt64LE(1).toString(),
+            decimals: data[9]
+          };
+        }
+        break;
+      case 14: // MintToChecked
+        instructionName = 'Mint To Checked';
+        if (data.length >= 10) {
+          args = {
+            amount: data.readBigUInt64LE(1).toString(),
+            decimals: data[9]
+          };
+        }
+        break;
+      case 15: // BurnChecked
+        instructionName = 'Burn Checked';
+        if (data.length >= 10) {
+          args = {
+            amount: data.readBigUInt64LE(1).toString(),
+            decimals: data[9]
+          };
+        }
+        break;
+      case 16: // InitializeAccount2
+        instructionName = 'Initialize Account 2';
+        if (data.length >= 33) {
+          args = {
+            owner: new PublicKey(data.slice(1, 33)).toBase58()
+          };
+        }
+        break;
+      case 17: // SyncNative
+        instructionName = 'Sync Native';
+        break;
+      case 18: // InitializeAccount3
+        instructionName = 'Initialize Account 3';
+        if (data.length >= 33) {
+          args = {
+            owner: new PublicKey(data.slice(1, 33)).toBase58()
+          };
+        }
+        break;
+      case 19: // InitializeMultisig2
+        instructionName = 'Initialize Multisig 2';
+        if (data.length >= 2) {
+          args = { m: data[1] };
+        }
+        break;
+      case 20: // InitializeMint2
+        instructionName = 'Initialize Mint 2';
+        if (data.length >= 67) {
+          args = {
+            decimals: data[1],
+            mintAuthority: new PublicKey(data.slice(2, 34)).toBase58(),
+            freezeAuthority: data[34] === 1 ? new PublicKey(data.slice(35, 67)).toBase58() : null
+          };
+        }
         break;
     }
     

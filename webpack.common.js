@@ -32,6 +32,7 @@ module.exports = {
       'dayjs/plugin/relativeTime': path.resolve(__dirname, 'node_modules/dayjs/plugin/relativeTime.js'),
       'dayjs/plugin/utc': path.resolve(__dirname, 'node_modules/dayjs/plugin/utc.js'),
       'process/browser': path.resolve(__dirname, 'node_modules/process/browser.js'),
+      '@/types': path.resolve(__dirname, 'src/types'),
     },
   },
   module: {
