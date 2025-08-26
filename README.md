@@ -27,8 +27,8 @@ The following steps will guide you to build, verify, and host the application.
 #### Steps:
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Squads-Protocol/public-v4-client
-   cd public-v4-client
+   git clone https://github.com/x1-labs/squads-v4-client
+   cd squads-v4-client
    ```
 
 2. Install dependencies:
