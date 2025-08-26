@@ -34,7 +34,13 @@ const ApproveButton = ({
       throw 'Wallet not connected';
     }
     let bigIntTransactionIndex = BigInt(transactionIndex);
+    const actualProgramId = programId ? new PublicKey(programId) : multisig.PROGRAM_ID;
+    // Get fresh blockhash
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+    
     const transaction = new Transaction();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = wallet.publicKey;
     if (proposalStatus === 'None') {
       const createProposalInstruction = multisig.instructions.proposalCreate({
         multisigPda: new PublicKey(multisigPda),
@@ -42,7 +48,7 @@ const ApproveButton = ({
         isDraft: false,
         transactionIndex: bigIntTransactionIndex,
         rentPayer: wallet.publicKey,
-        programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+        programId: actualProgramId,
       });
       transaction.add(createProposalInstruction);
     }
@@ -51,7 +57,7 @@ const ApproveButton = ({
         multisigPda: new PublicKey(multisigPda),
         member: wallet.publicKey,
         transactionIndex: bigIntTransactionIndex,
-        programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+        programId: actualProgramId,
       });
       transaction.add(activateProposalInstruction);
     }
@@ -62,6 +68,7 @@ const ApproveButton = ({
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
     transaction.add(approveProposalInstruction);
+    
     const signature = await wallet.sendTransaction(transaction, connection, {
       skipPreflight: true,
     });
@@ -69,6 +76,7 @@ const ApproveButton = ({
     toast.loading('Confirming...', {
       id: 'transaction',
     });
+    
     const sent = await waitForConfirmation(connection, [signature]);
     if (!sent[0]) {
       throw `Transaction failed or unable to confirm. Check ${signature}`;
@@ -86,7 +94,8 @@ const ApproveButton = ({
           error: (e) => `Failed to approve: ${e}`,
         })
       }
-      className="mr-2"
+      className="h-8 px-3 text-sm"
+      variant="default"
     >
       Approve
     </Button>

@@ -1,0 +1,267 @@
+import React, { useMemo } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { TransactionDecoder } from '@/components/TransactionDecoder';
+import { ApprovalStatus } from '@/components/ApprovalStatus';
+import { useRpcUrl } from '@/hooks/useSettings';
+import { useMultisigData } from '@/hooks/useMultisigData';
+import { useMultisig } from '@/hooks/useServices';
+import * as multisig from '@sqds/multisig';
+import { Button } from '@/components/ui/button';
+import ApproveButton from '@/components/ApproveButton';
+import RejectButton from '@/components/RejectButton';
+import ExecuteButton from '@/components/ExecuteButton';
+import CancelButton from '@/components/CancelButton';
+
+export default function TransactionDetailsPage() {
+  const { transactionPda } = useParams<{ transactionPda: string }>();
+  const navigate = useNavigate();
+  const { rpcUrl } = useRpcUrl();
+  const { multisigAddress, programId } = useMultisigData();
+  const { data: multisigConfig } = useMultisig();
+  
+  // Create connection with the configured RPC URL
+  const connection = useMemo(() => {
+    return new Connection(rpcUrl || 'https://api.mainnet-beta.solana.com', 'confirmed');
+  }, [rpcUrl]);
+
+  // Extract transaction index and proposal from the PDA
+  const [transactionIndex, setTransactionIndex] = React.useState<bigint | null>(null);
+  const [proposal, setProposal] = React.useState<multisig.generated.Proposal | null>(null);
+  
+  React.useEffect(() => {
+    const fetchTransactionDetails = async () => {
+      if (!transactionPda || !multisigAddress || !programId) return;
+      
+      try {
+        // Try to fetch the transaction to get its index
+        const transactionPubkey = new PublicKey(transactionPda);
+        const multisigPubkey = new PublicKey(multisigAddress);
+        
+        // Try as VaultTransaction first
+        try {
+          const vaultTx = await multisig.accounts.VaultTransaction.fromAccountAddress(
+            connection as any,
+            transactionPubkey
+          );
+          const index = BigInt(vaultTx.index.toString());
+          setTransactionIndex(index);
+          
+          // Fetch the proposal
+          const [proposalPda] = multisig.getProposalPda({
+            multisigPda: multisigPubkey,
+            transactionIndex: index,
+            programId: programId,
+          });
+          
+          try {
+            const proposalData = await multisig.accounts.Proposal.fromAccountAddress(
+              connection as any,
+              proposalPda
+            );
+            setProposal(proposalData);
+          } catch (err) {
+            console.log('No proposal found for transaction');
+          }
+        } catch {
+          // Try as ConfigTransaction
+          try {
+            const configTx = await multisig.accounts.ConfigTransaction.fromAccountAddress(
+              connection as any,
+              transactionPubkey
+            );
+            const index = BigInt(configTx.index.toString());
+            setTransactionIndex(index);
+            
+            // Fetch the proposal
+            const [proposalPda] = multisig.getProposalPda({
+              multisigPda: multisigPubkey,
+              transactionIndex: index,
+              programId: programId,
+            });
+            
+            try {
+              const proposalData = await multisig.accounts.Proposal.fromAccountAddress(
+                connection as any,
+                proposalPda
+              );
+              setProposal(proposalData);
+            } catch (err) {
+              console.log('No proposal found for transaction');
+            }
+          } catch {
+            // Try as Batch
+            try {
+              const batch = await multisig.accounts.Batch.fromAccountAddress(
+                connection as any,
+                transactionPubkey
+              );
+              const index = BigInt(batch.index.toString());
+              setTransactionIndex(index);
+              
+              // Fetch the proposal
+              const [proposalPda] = multisig.getProposalPda({
+                multisigPda: multisigPubkey,
+                transactionIndex: index,
+                programId: programId,
+              });
+              
+              try {
+                const proposalData = await multisig.accounts.Proposal.fromAccountAddress(
+                  connection as any,
+                  proposalPda
+                );
+                setProposal(proposalData);
+              } catch (err) {
+                console.log('No proposal found for transaction');
+              }
+            } catch (error) {
+              console.error('Failed to fetch transaction details:', error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching transaction:', error);
+      }
+    };
+
+    fetchTransactionDetails();
+  }, [transactionPda, connection, multisigAddress, programId]);
+
+  if (!transactionPda) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold mb-4 text-foreground">Transaction Not Found</h1>
+          <p className="text-muted-foreground mb-4">The requested transaction could not be found.</p>
+          <Button onClick={() => navigate('/transactions')}>
+            Back to Transactions
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if transaction is stale
+  const isStale = transactionIndex !== null && multisigConfig &&
+    Number(multisigConfig.staleTransactionIndex) > Number(transactionIndex);
+
+  // Determine which action buttons to show
+  const proposalStatus = proposal?.status.__kind || 'None';
+  const showApprove = !isStale && ['None', 'Draft', 'Active'].includes(proposalStatus);
+  const showReject = !isStale && ['None', 'Draft', 'Active'].includes(proposalStatus);
+  const showExecute = !isStale && proposalStatus === 'Approved';
+  const showCancel = !isStale && proposalStatus === 'Approved';
+
+  return (
+    <div className="container mx-auto py-8">
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <Link 
+            to="/transactions" 
+            className="text-primary hover:underline text-sm mb-2 inline-block"
+          >
+            ← Back to Transactions
+          </Link>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-foreground">Transaction Details</h1>
+            {isStale && (
+              <span className="inline-flex items-center rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                Stale
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground mt-1 font-mono">
+            {transactionPda}
+          </p>
+        </div>
+        {transactionIndex !== null && multisigAddress && (
+          <div className="flex gap-2">
+            {showApprove && (
+              <ApproveButton
+                multisigPda={multisigAddress}
+                transactionIndex={Number(transactionIndex)}
+                proposalStatus={proposalStatus}
+                programId={programId?.toBase58() || multisig.PROGRAM_ID.toBase58()}
+              />
+            )}
+            {showReject && (
+              <RejectButton
+                multisigPda={multisigAddress}
+                transactionIndex={Number(transactionIndex)}
+                proposalStatus={proposalStatus}
+                programId={programId?.toBase58() || multisig.PROGRAM_ID.toBase58()}
+              />
+            )}
+            {showExecute && (
+              <ExecuteButton
+                multisigPda={multisigAddress}
+                transactionIndex={Number(transactionIndex)}
+                proposalStatus={proposalStatus}
+                programId={programId?.toBase58() || multisig.PROGRAM_ID.toBase58()}
+              />
+            )}
+            {showCancel && (
+              <CancelButton
+                multisigPda={multisigAddress}
+                transactionIndex={Number(transactionIndex)}
+                proposalStatus={proposalStatus}
+                programId={programId?.toBase58() || multisig.PROGRAM_ID.toBase58()}
+              />
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Stale Transaction Warning */}
+      {isStale && (
+        <div className="mb-6 rounded-lg border border-warning/50 bg-warning/10 p-4">
+          <div className="flex items-start gap-3">
+            <svg className="h-5 w-5 text-warning mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-warning">This transaction is stale</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {proposalStatus === 'Executed' 
+                  ? 'This transaction was executed before becoming stale.'
+                  : proposalStatus === 'Cancelled'
+                  ? 'This transaction was cancelled before becoming stale.'
+                  : proposalStatus === 'Rejected'
+                  ? 'This transaction was rejected before becoming stale.'
+                  : 'This transaction has been superseded by newer transactions and can no longer be executed. No actions are available for stale transactions.'
+                }
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approval Status Card */}
+      {proposal && (
+        <div className="bg-card rounded-lg shadow-sm border border-border mb-6 p-6">
+          <h2 className="text-lg font-semibold mb-4 text-foreground">Approval Status</h2>
+          <ApprovalStatus proposal={proposal} compact={false} />
+        </div>
+      )}
+
+      {/* Transaction Decoder */}
+      <div className="bg-card rounded-lg shadow-sm border border-border">
+        {transactionIndex !== null && multisigAddress && programId ? (
+          <TransactionDecoder
+            connection={connection}
+            multisigPda={new PublicKey(multisigAddress)}
+            transactionIndex={transactionIndex}
+            programId={programId}
+          />
+        ) : (
+          <div className="p-8 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <p className="mt-2 text-sm text-muted-foreground">Loading transaction details...</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

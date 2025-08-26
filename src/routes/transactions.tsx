@@ -1,4 +1,4 @@
-import { Table, TableCaption, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Pagination,
   PaginationContent,
@@ -45,28 +45,36 @@ export default function TransactionsPage() {
 
   return (
     <ErrorBoundary>
-      <Suspense fallback={<div>Loading ...</div>}>
+      <Suspense fallback={
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
+            <p className="text-sm text-muted-foreground">Loading transactions...</p>
+          </div>
+        </div>
+      }>
         <div>
-          <div className="mb-4 flex items-center justify-between">
-            <h1 className="text-3xl font-bold">Transactions</h1>
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">Transactions</h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                Manage and execute multisig transactions
+              </p>
+            </div>
             <CreateTransaction />
           </div>
 
           <Suspense>
-            <Table>
-              <TableCaption>A list of your recent transactions.</TableCaption>
-              <TableCaption>
-                Page: {page} of {totalPages}
-              </TableCaption>
-
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Index</TableHead>
-                  <TableHead>Transaction Address</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
+            <div className="rounded-lg border border-border bg-card shadow-sm">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-border hover:bg-transparent">
+                    <TableHead className="w-20 font-semibold text-foreground">Index</TableHead>
+                    <TableHead className="font-semibold text-foreground">Program / Transaction</TableHead>
+                    <TableHead className="font-semibold text-foreground">Status</TableHead>
+                    <TableHead className="text-right font-semibold text-foreground">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
               <Suspense>
                 <TransactionTable
                   multisigPda={multisigAddress!}
@@ -74,25 +82,34 @@ export default function TransactionsPage() {
                   programId={programId!.toBase58()}
                 />
               </Suspense>
-            </Table>
+              </Table>
+            </div>
           </Suspense>
 
-          <Pagination>
-            <PaginationContent>
-              {page > 1 && (
-                <PaginationPrevious
-                  onClick={() => navigate(`/transactions?page=${page - 1}`)}
-                  to={`/transactions?page=${page - 1}`}
-                />
-              )}
-              {page < totalPages && (
-                <PaginationNext
-                  to={`/transactions?page=${page + 1}`}
-                  onClick={() => navigate(`/transactions?page=${page + 1}`)}
-                />
-              )}
-            </PaginationContent>
-          </Pagination>
+          <div className="mt-6 flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing {Math.max(endIndex, 0)} - {startIndex} of {totalTransactions} transactions
+            </p>
+            <Pagination>
+              <PaginationContent>
+                {page > 1 && (
+                  <PaginationPrevious
+                    onClick={() => navigate(`/transactions?page=${page - 1}`)}
+                    to={`/transactions?page=${page - 1}`}
+                  />
+                )}
+                <span className="mx-4 text-sm text-muted-foreground">
+                  Page {page} of {totalPages || 1}
+                </span>
+                {page < totalPages && (
+                  <PaginationNext
+                    to={`/transactions?page=${page + 1}`}
+                    onClick={() => navigate(`/transactions?page=${page + 1}`)}
+                  />
+                )}
+              </PaginationContent>
+            </Pagination>
+          </div>
         </div>
       </Suspense>
     </ErrorBoundary>

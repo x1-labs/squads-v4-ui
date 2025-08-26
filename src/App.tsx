@@ -12,6 +12,7 @@ import ConfigPage from './routes/config';
 import CreatePage from './routes/create';
 import SettingsPage from './routes/settings';
 import TransactionsPage from './routes/transactions';
+import TransactionDetailsPage from './routes/transaction-details';
 import ProgramsPage from './routes/programs';
 import { Routes, Route, HashRouter } from 'react-router-dom';
 
@@ -40,26 +41,27 @@ const App = () => {
                       <Route path="/create" element={<CreatePage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                       <Route path="/transactions" element={<TransactionsPage />} />
+                      <Route path="/transactions/:transactionPda" element={<TransactionDetailsPage />} />
                       <Route path="/programs" element={<ProgramsPage />} />
                       <Route path="*" element={<p>404 - Not Found</p>} /> {/* Catch-all route */}
                     </Routes>
                   </Suspense>
                 </ErrorBoundary>
               </div>
-            </div>
 
-            <Toaster
-              expand
-              visibleToasts={3}
-              icons={{
-                error: <AlertTriangle className="h-4 w-4 text-red-600" />,
-                success: <CheckSquare className="h-4 w-4 text-green-600" />,
-              }}
-            />
+              <Toaster
+                expand
+                visibleToasts={3}
+                icons={{
+                  error: <AlertTriangle className="h-4 w-4 text-red-600" />,
+                  success: <CheckSquare className="h-4 w-4 text-green-600" />,
+                }}
+              />
+            </div>
           </HashRouter>
-        </Wallet>
-      </QueryClientProvider>
-    </ThemeProvider>
+          </Wallet>
+        </QueryClientProvider>
+      </ThemeProvider>
   );
 };
 

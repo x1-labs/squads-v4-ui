@@ -14,7 +14,7 @@ module.exports = {
     pathinfo: false,
   },
   resolve: {
-    extensions: ['.tsx', '.ts', '.js'],
+    extensions: ['.tsx', '.ts', '.js', '.json', '.mjs'],
     plugins: [new TsconfigPathsPlugin()],
     fallback: {
       assert: require.resolve('assert/'),
@@ -22,10 +22,16 @@ module.exports = {
       events: require.resolve('events/'),
       process: require.resolve('process/browser'),
       buffer: require.resolve('buffer/'),
+      crypto: require.resolve('crypto-browserify'),
+      stream: require.resolve('stream-browserify'),
+      vm: require.resolve('vm-browserify'),
     },
     alias: {
       react: path.resolve(__dirname, 'node_modules/react'),
       'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
+      'dayjs/plugin/relativeTime': path.resolve(__dirname, 'node_modules/dayjs/plugin/relativeTime.js'),
+      'dayjs/plugin/utc': path.resolve(__dirname, 'node_modules/dayjs/plugin/utc.js'),
+      'process/browser': path.resolve(__dirname, 'node_modules/process/browser.js'),
     },
   },
   module: {

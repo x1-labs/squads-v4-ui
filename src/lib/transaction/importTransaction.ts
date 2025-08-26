@@ -92,8 +92,24 @@ export const importTransaction = async (
     if (!hasSent.every((s) => !!s)) {
       throw `Unable to confirm transaction`;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
+    
+    // Parse Anchor error codes for better user feedback
+    if (error?.toString?.().includes('0x1784') || error?.toString?.().includes('6020')) {
+      throw 'This multisig is controlled by an external program. Config transactions are not supported for controlled multisigs.';
+    }
+    if (error?.toString?.().includes('NotSupportedForControlled')) {
+      throw 'This operation is not supported for controlled multisigs.';
+    }
+    if (error?.toString?.().includes('custom program error')) {
+      // Extract the error code if possible
+      const match = error.toString().match(/custom program error: (0x[0-9a-fA-F]+)/);
+      if (match) {
+        throw `Transaction failed with error code ${match[1]}. Check the console for details.`;
+      }
+    }
+    
     throw error;
   }
 };

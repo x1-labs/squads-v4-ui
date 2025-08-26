@@ -74,15 +74,24 @@ const RejectButton = ({
     transaction.add(rejectProposalInstruction);
 
     const signature = await wallet.sendTransaction(transaction, connection, {
-      skipPreflight: true,
+      skipPreflight: false,
     });
     console.log('Transaction signature', signature);
     toast.loading('Confirming...', {
       id: 'transaction',
     });
-    const sent = await waitForConfirmation(connection, [signature]);
-    if (!sent[0]) {
+    const sent = await waitForConfirmation(connection, [signature], 30000);
+    if (!sent || !sent[0]) {
+      const txInfo = await connection.getTransaction(signature, {
+        maxSupportedTransactionVersion: 0
+      });
+      if (!txInfo) {
+        throw `Transaction not found on chain. Signature: ${signature}`;
+      }
       throw `Transaction failed or unable to confirm. Check ${signature}`;
+    }
+    if (sent[0].err) {
+      throw `Transaction failed with error: ${JSON.stringify(sent[0].err)}`;
     }
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
   };
@@ -97,7 +106,8 @@ const RejectButton = ({
           error: (e) => `Failed to reject: ${e}`,
         })
       }
-      className="mr-2"
+      className="h-8 px-3 text-sm"
+      variant="destructive"
     >
       Reject
     </Button>
