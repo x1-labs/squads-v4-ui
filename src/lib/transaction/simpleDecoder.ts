@@ -32,7 +32,7 @@ export interface DecodedTransaction {
 export class SimpleDecoder {
   private connection: Connection;
   private instructionCoders: Map<string, BorshInstructionCoder> = new Map();
-  
+
   /**
    * Format token amount with decimals
    */
@@ -41,28 +41,28 @@ export class SimpleDecoder {
     if (decimals === 0) {
       return amountBigInt.toString();
     }
-    
+
     const divisor = BigInt(10 ** decimals);
     const wholePart = amountBigInt / divisor;
     const fractionalPart = amountBigInt % divisor;
-    
+
     if (fractionalPart === BigInt(0)) {
       return wholePart.toString();
     }
-    
+
     const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
     // Remove trailing zeros
     const trimmed = fractionalStr.replace(/0+$/, '');
     return `${wholePart}.${trimmed}`;
   }
-  
+
   /**
    * Format SOL amount (9 decimals)
    */
   private formatSolAmount(lamports: string | number | bigint): string {
     return this.formatTokenAmount(lamports, 9);
   }
-  
+
   /**
    * Truncate address for display
    */
@@ -70,7 +70,7 @@ export class SimpleDecoder {
     if (address.length <= 10) return address;
     return `${address.slice(0, 4)}...${address.slice(-4)}`;
   }
-  
+
   /**
    * Generate human-readable message for token instructions
    */
@@ -81,11 +81,11 @@ export class SimpleDecoder {
     useTruncated: boolean = false
   ): string | undefined {
     const name = instructionName.toLowerCase();
-    
+
     if (name === 'transfer' || name === 'transferchecked') {
       const amount = args.amount || '0';
       const decimals = args.decimals;
-      
+
       // Format amount with decimals if available
       // For basic transfer, decimals are not included in the instruction
       let formattedAmount: string;
@@ -95,7 +95,7 @@ export class SimpleDecoder {
         // For basic transfer without decimals, try common decimal places
         // Most SPL tokens use 6 or 9 decimals
         const amountStr = amount.toString();
-        
+
         // Try 9 decimals first (most common for SPL tokens)
         const with9Decimals = this.formatTokenAmount(amount, 9);
         // Only show alternative if significantly different
@@ -109,94 +109,97 @@ export class SimpleDecoder {
           formattedAmount = `${amountStr} smallest units`;
         }
       }
-      
+
       // Get account addresses - use full addresses for summary
       const fromAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
       const from = useTruncated ? this.truncateAddress(fromAddr) : fromAddr;
-      
+
       const toIndex = name === 'transferchecked' ? 2 : 1;
       const toAddr = accountKeys[toIndex]?.pubkey?.toBase58() || 'Unknown';
       const to = useTruncated ? this.truncateAddress(toAddr) : toAddr;
-      
+
       // Get mint address - for basic transfer, there's no mint in the accounts
       let mint = 'tokens';
       if (name === 'transferchecked' && accountKeys[1]?.pubkey) {
         const mintAddr = accountKeys[1].pubkey.toBase58();
         mint = useTruncated ? this.truncateAddress(mintAddr) : mintAddr;
       }
-      
+
       return `Transfer ${formattedAmount}\nToken: ${mint}\nFrom: ${from}\nTo: ${to}`;
     }
-    
+
     if (name === 'mintto' || name === 'minttochecked') {
       const amount = args.amount || '0';
       const decimals = args.decimals;
-      
-      const formattedAmount = (decimals !== undefined && decimals !== null)
-        ? this.formatTokenAmount(amount, decimals)
-        : `${amount} (raw)`;
-      
+
+      const formattedAmount =
+        decimals !== undefined && decimals !== null
+          ? this.formatTokenAmount(amount, decimals)
+          : `${amount} (raw)`;
+
       const mintAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
       const mint = useTruncated ? this.truncateAddress(mintAddr) : mintAddr;
       const toAddr = accountKeys[1]?.pubkey?.toBase58() || 'Unknown';
       const to = useTruncated ? this.truncateAddress(toAddr) : toAddr;
-      
+
       return `Mint ${formattedAmount}\nToken: ${mint}\nTo: ${to}`;
     }
-    
+
     if (name === 'burn' || name === 'burnchecked') {
       const amount = args.amount || '0';
       const decimals = args.decimals;
-      
-      const formattedAmount = (decimals !== undefined && decimals !== null)
-        ? this.formatTokenAmount(amount, decimals)
-        : `${amount} (raw)`;
-      
+
+      const formattedAmount =
+        decimals !== undefined && decimals !== null
+          ? this.formatTokenAmount(amount, decimals)
+          : `${amount} (raw)`;
+
       const accountAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
       const account = useTruncated ? this.truncateAddress(accountAddr) : accountAddr;
       const mintAddr = accountKeys[1]?.pubkey?.toBase58() || 'tokens';
       const mint = useTruncated ? this.truncateAddress(mintAddr) : mintAddr;
-      
+
       return `Burn ${formattedAmount}\nToken: ${mint}\nFrom: ${account}`;
     }
-    
+
     if (name === 'approve' || name === 'approvechecked') {
       const amount = args.amount || '0';
       const decimals = args.decimals;
-      
-      const formattedAmount = (decimals !== undefined && decimals !== null)
-        ? this.formatTokenAmount(amount, decimals)
-        : `${amount} (raw)`;
-      
+
+      const formattedAmount =
+        decimals !== undefined && decimals !== null
+          ? this.formatTokenAmount(amount, decimals)
+          : `${amount} (raw)`;
+
       const accountAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
       const account = useTruncated ? this.truncateAddress(accountAddr) : accountAddr;
       const delegateAddr = accountKeys[2]?.pubkey?.toBase58() || 'Unknown';
       const delegate = useTruncated ? this.truncateAddress(delegateAddr) : delegateAddr;
-      
+
       return `Approve ${formattedAmount} tokens\nDelegate: ${delegate}\nFrom: ${account}`;
     }
-    
+
     if (name === 'closeaccount') {
       const accountAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
       const account = useTruncated ? this.truncateAddress(accountAddr) : accountAddr;
       const destAddr = accountKeys[1]?.pubkey?.toBase58() || 'Unknown';
       const dest = useTruncated ? this.truncateAddress(destAddr) : destAddr;
-      
+
       return `Close token account\nAccount: ${account}\nReturn rent to: ${dest}`;
     }
-    
+
     return undefined;
   }
-  
+
   constructor(connection: Connection) {
     this.connection = connection;
     this.initializeCoders();
   }
-  
+
   private resolveCustomTypes(idl: any): any {
     // Create a copy of the IDL to avoid modifying the original
     const resolvedIdl = JSON.parse(JSON.stringify(idl));
-    
+
     // Build a type map for quick lookups
     const typeMap = new Map<string, any>();
     if (resolvedIdl.types) {
@@ -206,7 +209,7 @@ export class SimpleDecoder {
         }
       });
     }
-    
+
     // Function to resolve a type reference
     const resolveType = (field: any): any => {
       if (field.type && typeof field.type === 'object') {
@@ -227,20 +230,20 @@ export class SimpleDecoder {
       }
       return field;
     };
-    
+
     // Resolve types in instructions
     if (resolvedIdl.instructions) {
       resolvedIdl.instructions = resolvedIdl.instructions.map((instruction: any) => {
         if (instruction.args && Array.isArray(instruction.args)) {
           return {
             ...instruction,
-            args: instruction.args.map(resolveType)
+            args: instruction.args.map(resolveType),
           };
         }
         return instruction;
       });
     }
-    
+
     // Resolve types in accounts
     if (resolvedIdl.accounts) {
       resolvedIdl.accounts = resolvedIdl.accounts.map((account: any) => {
@@ -249,26 +252,29 @@ export class SimpleDecoder {
             ...account,
             type: {
               ...account.type,
-              fields: account.type.fields.map(resolveType)
-            }
+              fields: account.type.fields.map(resolveType),
+            },
           };
         }
         return account;
       });
     }
-    
+
     return resolvedIdl;
   }
 
   private initializeCoders() {
     // Load all IDLs and create instruction coders
     const idls = idlManager.getAllIdls();
-    console.log('Initializing decoders for programs:', idls.map(e => ({ 
-      name: e.name, 
-      id: e.programId, 
-      format: e.format 
-    })));
-    
+    console.log(
+      'Initializing decoders for programs:',
+      idls.map((e) => ({
+        name: e.name,
+        id: e.programId,
+        format: e.format,
+      }))
+    );
+
     for (const entry of idls) {
       try {
         // Only create BorshInstructionCoder for Anchor-compatible IDLs
@@ -276,7 +282,9 @@ export class SimpleDecoder {
           try {
             const coder = new BorshInstructionCoder(entry.idl);
             this.instructionCoders.set(entry.programId, coder);
-            console.log(`✅ Created BorshInstructionCoder for ${entry.name} (format: ${entry.format})`);
+            console.log(
+              `✅ Created BorshInstructionCoder for ${entry.name} (format: ${entry.format})`
+            );
           } catch (e: any) {
             console.warn(`❌ BorshInstructionCoder failed for ${entry.name}:`, {
               error: e.message || e.toString(),
@@ -284,14 +292,16 @@ export class SimpleDecoder {
               idlName: entry.idl.name,
               idlVersion: entry.idl.version,
               hasInstructions: !!entry.idl.instructions,
-              instructionCount: entry.idl.instructions?.length
+              instructionCount: entry.idl.instructions?.length,
             });
             // Fallback: try with resolved types if direct approach fails
             try {
               const resolvedIdl = this.resolveCustomTypes(entry.idl);
               const coder = new BorshInstructionCoder(resolvedIdl);
               this.instructionCoders.set(entry.programId, coder);
-              console.log(`✅ Created BorshInstructionCoder for ${entry.name} (with resolved types, format: ${entry.format})`);
+              console.log(
+                `✅ Created BorshInstructionCoder for ${entry.name} (with resolved types, format: ${entry.format})`
+              );
             } catch (e2) {
               console.warn(`❌ BorshInstructionCoder still failed for ${entry.name}:`, e2);
             }
@@ -305,13 +315,13 @@ export class SimpleDecoder {
         console.warn(`❌ Failed to create parser for ${entry.name}:`, error);
       }
     }
-    
+
     console.log('Parsers initialized:', {
       borshCoders: Array.from(this.instructionCoders.keys()),
-      kinobiParsers: idls.filter(e => e.format === IdlFormat.KINOBI).map(e => e.programId)
+      kinobiParsers: idls.filter((e) => e.format === IdlFormat.KINOBI).map((e) => e.programId),
     });
   }
-  
+
   /**
    * Decode a transaction from the multisig vault
    */
@@ -327,24 +337,24 @@ export class SimpleDecoder {
         index: transactionIndex,
         programId,
       });
-      
+
       // Try to fetch as VaultTransaction
       try {
         const vaultTx = await multisig.accounts.VaultTransaction.fromAccountAddress(
           this.connection as any,
           transactionPda
         );
-        
+
         // VaultTransactionMessage is a structured object, not a raw buffer
         if (vaultTx.message) {
           // Decode the structured message
           return this.decodeVaultTransactionMessage(vaultTx.message);
         }
-        
+
         return {
           instructions: [],
           signers: [],
-          error: 'No message found in vault transaction'
+          error: 'No message found in vault transaction',
         };
       } catch (vaultError) {
         console.log('Failed to fetch as VaultTransaction:', vaultError);
@@ -354,7 +364,7 @@ export class SimpleDecoder {
             this.connection as any,
             transactionPda
           );
-          
+
           return this.decodeConfigTransaction(configTx, transactionIndex, programId);
         } catch {
           // Try batch transaction
@@ -363,13 +373,13 @@ export class SimpleDecoder {
               this.connection as any,
               transactionPda
             );
-            
+
             return this.decodeBatchTransaction(batch, transactionIndex, programId);
           } catch (error) {
             return {
               instructions: [],
               signers: [],
-              error: `Failed to fetch transaction: ${error}`
+              error: `Failed to fetch transaction: ${error}`,
             };
           }
         }
@@ -379,22 +389,21 @@ export class SimpleDecoder {
       return {
         instructions: [],
         signers: [],
-        error: error instanceof Error ? error.message : 'Failed to decode transaction'
+        error: error instanceof Error ? error.message : 'Failed to decode transaction',
       };
     }
   }
-  
+
   /**
    * Decode a structured VaultTransactionMessage
    */
   private decodeVaultTransactionMessage(message: any): DecodedTransaction {
     try {
       const instructions: DecodedInstruction[] = [];
-      
+
       // Parse each instruction from the structured message
       if (message.instructions && Array.isArray(message.instructions)) {
         for (const compiledIx of message.instructions) {
-          
           // Get the program ID from account keys - handle various formats
           const programIdKey = message.accountKeys[compiledIx.programIdIndex];
           let programId: PublicKey;
@@ -409,17 +418,19 @@ export class SimpleDecoder {
             console.warn('Unknown program ID format:', programIdKey);
             programId = PublicKey.default;
           }
-          
+
           // Get account keys for this instruction
           // accountIndexes is a Uint8Array, need to convert to array
-          const indexArray = compiledIx.accountIndexes ? 
-            Array.from(compiledIx.accountIndexes) : 
-            (compiledIx.accountKeyIndexes || []);
-          
+          const indexArray = compiledIx.accountIndexes
+            ? Array.from(compiledIx.accountIndexes)
+            : compiledIx.accountKeyIndexes || [];
+
           const accountKeys = indexArray.map((index: number) => {
             const pubkey = message.accountKeys[index];
             if (!pubkey) {
-              console.warn(`No account key at index ${index}, total keys: ${message.accountKeys?.length}`);
+              console.warn(
+                `No account key at index ${index}, total keys: ${message.accountKeys?.length}`
+              );
               return {
                 pubkey: PublicKey.default,
                 isSigner: false,
@@ -442,28 +453,24 @@ export class SimpleDecoder {
             return {
               pubkey: publicKey,
               isSigner: index < message.numSigners,
-              isWritable: index < message.numWritableSigners ||
-                        (index >= message.numSigners && 
-                         index < message.numSigners + message.numWritableNonSigners),
+              isWritable:
+                index < message.numWritableSigners ||
+                (index >= message.numSigners &&
+                  index < message.numSigners + message.numWritableNonSigners),
             };
           });
-          
+
           // Parse the instruction
           const instructionData = Buffer.from(compiledIx.data);
-          const decoded = this.parseInstruction(
-            programId,
-            instructionData,
-            accountKeys
-          );
-          
+          const decoded = this.parseInstruction(programId, instructionData, accountKeys);
+
           instructions.push(decoded);
         }
       }
-      
+
       // Get signers - ensure they are PublicKey instances
-      const signers = message.accountKeys
-        ?.slice(0, message.numSigners)
-        ?.map((key: any) => {
+      const signers =
+        message.accountKeys?.slice(0, message.numSigners)?.map((key: any) => {
           if (!key) return 'Unknown';
           if (key instanceof PublicKey) {
             return key.toBase58();
@@ -479,7 +486,7 @@ export class SimpleDecoder {
           }
           return 'Unknown';
         }) || [];
-      
+
       // Get fee payer - ensure it's a PublicKey instance
       let feePayer: string | undefined = undefined;
       if (message.accountKeys?.[0]) {
@@ -497,7 +504,7 @@ export class SimpleDecoder {
           }
         }
       }
-      
+
       return {
         instructions,
         signers,
@@ -508,11 +515,11 @@ export class SimpleDecoder {
       return {
         instructions: [],
         signers: [],
-        error: 'Failed to decode vault transaction message'
+        error: 'Failed to decode vault transaction message',
       };
     }
   }
-  
+
   /**
    * Decode a transaction message buffer
    */
@@ -520,42 +527,41 @@ export class SimpleDecoder {
     try {
       const tx = VersionedTransaction.deserialize(message);
       const instructions: DecodedInstruction[] = [];
-      
+
       // Parse each instruction
       for (let i = 0; i < tx.message.compiledInstructions.length; i++) {
         const compiledIx = tx.message.compiledInstructions[i];
         const programId = tx.message.staticAccountKeys[compiledIx.programIdIndex];
-        
+
         // Get account keys for this instruction
         const accountKeys = compiledIx.accountKeyIndexes.map((index: number) => {
           const pubkey = tx.message.staticAccountKeys[index];
           return {
             pubkey,
             isSigner: index < tx.message.header.numRequiredSignatures,
-            isWritable: index < tx.message.header.numRequiredSignatures - 
-                       tx.message.header.numReadonlySignedAccounts ||
-                      (index >= tx.message.header.numRequiredSignatures &&
-                       index < tx.message.staticAccountKeys.length - 
-                       tx.message.header.numReadonlyUnsignedAccounts),
+            isWritable:
+              index <
+                tx.message.header.numRequiredSignatures -
+                  tx.message.header.numReadonlySignedAccounts ||
+              (index >= tx.message.header.numRequiredSignatures &&
+                index <
+                  tx.message.staticAccountKeys.length -
+                    tx.message.header.numReadonlyUnsignedAccounts),
           };
         });
-        
+
         // Parse the instruction
         const instructionData = Buffer.from(compiledIx.data);
-        const decoded = this.parseInstruction(
-          programId,
-          instructionData,
-          accountKeys
-        );
-        
+        const decoded = this.parseInstruction(programId, instructionData, accountKeys);
+
         instructions.push(decoded);
       }
-      
+
       return {
         instructions,
         signers: tx.message.staticAccountKeys
           .slice(0, tx.message.header.numRequiredSignatures)
-          .map(key => key.toBase58()),
+          .map((key) => key.toBase58()),
         feePayer: tx.message.staticAccountKeys[0]?.toBase58(),
         recentBlockhash: tx.message.recentBlockhash,
       };
@@ -564,11 +570,11 @@ export class SimpleDecoder {
       return {
         instructions: [],
         signers: [],
-        error: 'Failed to parse transaction message'
+        error: 'Failed to parse transaction message',
       };
     }
   }
-  
+
   /**
    * Parse an instruction
    */
@@ -578,15 +584,15 @@ export class SimpleDecoder {
     accountKeys: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>
   ): DecodedInstruction {
     const programIdStr = programId.toBase58();
-    
+
     // Check for known programs first
     if (this.isKnownProgram(programIdStr)) {
       return this.parseKnownProgramInstruction(programId, data, accountKeys);
     }
-    
+
     // Get the IDL entry to check format
     const idlEntry = idlManager.getIdl(programIdStr);
-    
+
     // Try Kinobi parser for Kinobi-format IDLs
     if (idlEntry?.format === IdlFormat.KINOBI && idlEntry.parser) {
       try {
@@ -594,8 +600,8 @@ export class SimpleDecoder {
         if (decoded) {
           // Get account names from the instruction metadata
           const instruction = idlEntry.parser.getInstruction(decoded.name);
-          const accountNames = instruction?.accounts?.map(acc => acc.name) || [];
-          
+          const accountNames = instruction?.accounts?.map((acc) => acc.name) || [];
+
           return {
             programId: programIdStr,
             programName: this.getProgramName(programIdStr),
@@ -607,14 +613,14 @@ export class SimpleDecoder {
               isWritable: key.isWritable,
             })),
             args: decoded.data || {},
-            rawData: data.toString('hex').slice(0, 100)
+            rawData: data.toString('hex').slice(0, 100),
           };
         }
       } catch (error) {
         console.warn(`Kinobi parser failed for ${programIdStr}:`, error);
       }
     }
-    
+
     // Try to decode with Anchor IDL (for Anchor-compatible formats)
     if (idlEntry && isAnchorCompatible(idlEntry.format)) {
       const coder = this.instructionCoders.get(programIdStr);
@@ -624,7 +630,7 @@ export class SimpleDecoder {
           if (decoded) {
             // Get the IDL to map account names
             let accountNames: string[] = [];
-            
+
             if (idlEntry?.idl?.instructions) {
               const instruction = idlEntry.idl.instructions.find(
                 (ix: any) => ix.name === decoded.name
@@ -633,7 +639,7 @@ export class SimpleDecoder {
                 accountNames = instruction.accounts.map((acc: any) => acc.name || `Account`);
               }
             }
-            
+
             return {
               programId: programIdStr,
               programName: this.getProgramName(programIdStr),
@@ -645,7 +651,7 @@ export class SimpleDecoder {
                 isWritable: key.isWritable,
               })),
               args: decoded.data || {},
-              rawData: data.toString('hex').slice(0, 100)
+              rawData: data.toString('hex').slice(0, 100),
             };
           }
         } catch (error) {
@@ -653,11 +659,11 @@ export class SimpleDecoder {
         }
       }
     }
-    
+
     // Fallback to basic parsing
     return this.basicInstructionParse(programId, data, accountKeys);
   }
-  
+
   /**
    * Check if program is a known program
    */
@@ -677,7 +683,7 @@ export class SimpleDecoder {
     ];
     return knownPrograms.includes(programIdStr);
   }
-  
+
   /**
    * Parse known program instructions
    */
@@ -687,7 +693,7 @@ export class SimpleDecoder {
     accountKeys: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>
   ): DecodedInstruction {
     const programIdStr = programId.toBase58();
-    
+
     // Check if we have a Kinobi parser for this known program
     const idlEntry = idlManager.getIdl(programIdStr);
     if (idlEntry?.format === IdlFormat.KINOBI && idlEntry.parser) {
@@ -695,16 +701,23 @@ export class SimpleDecoder {
         const decoded = idlEntry.parser.decodeInstruction(data);
         if (decoded) {
           const instruction = idlEntry.parser.getInstruction(decoded.name);
-          const accountNames = instruction?.accounts?.map(acc => acc.name) || [];
-          
+          const accountNames = instruction?.accounts?.map((acc) => acc.name) || [];
+
           // Generate human-readable message for token transfers
           let humanReadable: string | undefined;
-          if (programIdStr === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' || 
-              programIdStr === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') {
+          if (
+            programIdStr === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
+            programIdStr === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+          ) {
             // Use full addresses for the summary display
-            humanReadable = this.generateTokenInstructionMessage(decoded.name, decoded.data, accountKeys, false);
+            humanReadable = this.generateTokenInstructionMessage(
+              decoded.name,
+              decoded.data,
+              accountKeys,
+              false
+            );
           }
-          
+
           const result: DecodedInstruction = {
             programId: programIdStr,
             programName: this.getProgramName(programIdStr),
@@ -716,56 +729,63 @@ export class SimpleDecoder {
               isWritable: key.isWritable,
             })),
             args: decoded.data || {},
-            rawData: data.toString('hex').slice(0, 100)
+            rawData: data.toString('hex').slice(0, 100),
           };
-          
+
           if (humanReadable) {
             result.humanReadable = humanReadable;
           }
-          
+
           return result;
         }
       } catch (error) {
-        console.warn(`Kinobi parser failed for known program ${programIdStr}, falling back to hardcoded parsing:`, error);
+        console.warn(
+          `Kinobi parser failed for known program ${programIdStr}, falling back to hardcoded parsing:`,
+          error
+        );
       }
     }
-    
+
     // System Program
     if (programIdStr === '11111111111111111111111111111111') {
       return this.parseSystemInstruction(data, accountKeys);
     }
-    
+
     // Token Programs (fallback to hardcoded parsing if no Kinobi parser)
-    if (programIdStr === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
-        programIdStr === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') {
+    if (
+      programIdStr === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
+      programIdStr === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+    ) {
       return this.parseTokenInstruction(programIdStr, data, accountKeys);
     }
-    
+
     // Memo Programs
-    if (programIdStr === 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr' ||
-        programIdStr === 'Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo') {
+    if (
+      programIdStr === 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr' ||
+      programIdStr === 'Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo'
+    ) {
       return this.parseMemoInstruction(programIdStr, data, accountKeys);
     }
-    
+
     // Compute Budget Program
     if (programIdStr === 'ComputeBudget111111111111111111111111111111') {
       return this.parseComputeBudgetInstruction(data, accountKeys);
     }
-    
+
     // Associated Token Program
     if (programIdStr === 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL') {
       return this.parseAssociatedTokenInstruction(data, accountKeys);
     }
-    
+
     // Address Lookup Table Program
     if (programIdStr === 'AddressLookupTab1e1111111111111111111111111') {
       return this.parseAddressLookupTableInstruction(data, accountKeys);
     }
-    
+
     // Fallback
     return this.basicInstructionParse(programId, data, accountKeys);
   }
-  
+
   /**
    * Basic instruction parsing fallback
    */
@@ -775,7 +795,7 @@ export class SimpleDecoder {
     accountKeys: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>
   ): DecodedInstruction {
     const programIdStr = programId.toBase58();
-    
+
     // Generic fallback
     return {
       programId: programIdStr,
@@ -787,12 +807,12 @@ export class SimpleDecoder {
         isSigner: key.isSigner || false,
         isWritable: key.isWritable || false,
       })),
-      args: { 
-        data: data.toString('hex').slice(0, 100) + (data.length > 50 ? '...' : '')
-      }
+      args: {
+        data: data.toString('hex').slice(0, 100) + (data.length > 50 ? '...' : ''),
+      },
     };
   }
-  
+
   /**
    * Parse system program instructions
    */
@@ -804,7 +824,7 @@ export class SimpleDecoder {
     let instructionName = 'Unknown System Instruction';
     let humanReadable: string | undefined;
     let args: any = {};
-    
+
     switch (instructionType) {
       case 0: // CreateAccount
         instructionName = 'Create Account';
@@ -846,7 +866,7 @@ export class SimpleDecoder {
         }
         break;
     }
-    
+
     const result: DecodedInstruction = {
       programId: '11111111111111111111111111111111',
       programName: 'System Program',
@@ -857,16 +877,16 @@ export class SimpleDecoder {
         isSigner: key.isSigner || false,
         isWritable: key.isWritable || false,
       })),
-      args
+      args,
     };
-    
+
     if (humanReadable) {
       result.humanReadable = humanReadable;
     }
-    
+
     return result;
   }
-  
+
   /**
    * Parse token program instructions
    */
@@ -879,7 +899,7 @@ export class SimpleDecoder {
     let instructionName = 'Unknown Token Instruction';
     let humanReadable: string | undefined;
     let args: any = {};
-    
+
     switch (instructionType) {
       case 0: // InitializeMint
         instructionName = 'Initialize Mint';
@@ -887,7 +907,7 @@ export class SimpleDecoder {
           args = {
             decimals: data[1],
             mintAuthority: new PublicKey(data.slice(2, 34)).toBase58(),
-            freezeAuthority: data[34] === 1 ? new PublicKey(data.slice(35, 67)).toBase58() : null
+            freezeAuthority: data[34] === 1 ? new PublicKey(data.slice(35, 67)).toBase58() : null,
           };
         }
         break;
@@ -931,8 +951,10 @@ export class SimpleDecoder {
           const authorityTypes = ['MintTokens', 'FreezeAccount', 'AccountOwner', 'CloseAccount'];
           args = {
             authorityType: authorityTypes[authorityType] || 'Unknown',
-            newAuthority: data[2] === 1 && data.length >= 35 ? 
-              new PublicKey(data.slice(3, 35)).toBase58() : null
+            newAuthority:
+              data[2] === 1 && data.length >= 35
+                ? new PublicKey(data.slice(3, 35)).toBase58()
+                : null,
           };
         }
         break;
@@ -966,7 +988,7 @@ export class SimpleDecoder {
         if (data.length >= 10) {
           args = {
             amount: data.readBigUInt64LE(1).toString(),
-            decimals: data[9]
+            decimals: data[9],
           };
           // Generate human-readable message with proper decimals and full addresses
           const formattedAmount = this.formatTokenAmount(args.amount, args.decimals);
@@ -981,7 +1003,7 @@ export class SimpleDecoder {
         if (data.length >= 10) {
           args = {
             amount: data.readBigUInt64LE(1).toString(),
-            decimals: data[9]
+            decimals: data[9],
           };
         }
         break;
@@ -990,7 +1012,7 @@ export class SimpleDecoder {
         if (data.length >= 10) {
           args = {
             amount: data.readBigUInt64LE(1).toString(),
-            decimals: data[9]
+            decimals: data[9],
           };
         }
         break;
@@ -999,7 +1021,7 @@ export class SimpleDecoder {
         if (data.length >= 10) {
           args = {
             amount: data.readBigUInt64LE(1).toString(),
-            decimals: data[9]
+            decimals: data[9],
           };
         }
         break;
@@ -1007,7 +1029,7 @@ export class SimpleDecoder {
         instructionName = 'Initialize Account 2';
         if (data.length >= 33) {
           args = {
-            owner: new PublicKey(data.slice(1, 33)).toBase58()
+            owner: new PublicKey(data.slice(1, 33)).toBase58(),
           };
         }
         break;
@@ -1018,7 +1040,7 @@ export class SimpleDecoder {
         instructionName = 'Initialize Account 3';
         if (data.length >= 33) {
           args = {
-            owner: new PublicKey(data.slice(1, 33)).toBase58()
+            owner: new PublicKey(data.slice(1, 33)).toBase58(),
           };
         }
         break;
@@ -1034,14 +1056,14 @@ export class SimpleDecoder {
           args = {
             decimals: data[1],
             mintAuthority: new PublicKey(data.slice(2, 34)).toBase58(),
-            freezeAuthority: data[34] === 1 ? new PublicKey(data.slice(35, 67)).toBase58() : null
+            freezeAuthority: data[34] === 1 ? new PublicKey(data.slice(35, 67)).toBase58() : null,
           };
         }
         break;
     }
-    
+
     const isToken2022 = programId === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
-    
+
     const result: DecodedInstruction = {
       programId,
       programName: isToken2022 ? 'Token-2022 Program' : 'Token Program',
@@ -1052,39 +1074,45 @@ export class SimpleDecoder {
         isSigner: key.isSigner || false,
         isWritable: key.isWritable || false,
       })),
-      args
+      args,
     };
-    
+
     if (humanReadable) {
       result.humanReadable = humanReadable;
     }
-    
+
     return result;
   }
-  
+
   /**
    * Decode a config transaction
    */
-  private decodeConfigTransaction(configTx: any, transactionIndex: bigint, programId: PublicKey): DecodedTransaction {
+  private decodeConfigTransaction(
+    configTx: any,
+    transactionIndex: bigint,
+    programId: PublicKey
+  ): DecodedTransaction {
     const actions = configTx.actions || [];
     const decodedActions = actions.map((action: any) => this.decodeConfigAction(action));
-    
+
     return {
-      instructions: [{
-        programId: programId.toBase58(),
-        programName: 'Squads Multisig V4',
-        instructionName: 'Config Transaction',
-        accounts: [],
-        args: {
-          transactionIndex: transactionIndex.toString(),
-          creator: configTx.creator?.toBase58?.() || 'Unknown',
-          actions: decodedActions
-        }
-      }],
+      instructions: [
+        {
+          programId: programId.toBase58(),
+          programName: 'Squads Multisig V4',
+          instructionName: 'Config Transaction',
+          accounts: [],
+          args: {
+            transactionIndex: transactionIndex.toString(),
+            creator: configTx.creator?.toBase58?.() || 'Unknown',
+            actions: decodedActions,
+          },
+        },
+      ],
       signers: [configTx.creator?.toBase58?.() || 'Unknown'],
     };
   }
-  
+
   /**
    * Decode a config action
    */
@@ -1092,186 +1120,199 @@ export class SimpleDecoder {
     if (!action || typeof action !== 'object') {
       return { type: 'Unknown', data: action };
     }
-    
+
     // The action structure in Anchor uses __kind for the discriminator
     const actionType = action.__kind || action.kind;
-    
+
     // If we can't find the action type, show the raw data
     if (!actionType) {
       console.log('Unknown action structure:', action);
-      return { 
-        type: 'Unknown Action', 
-        rawData: action 
+      return {
+        type: 'Unknown Action',
+        rawData: action,
       };
     }
-    
+
     switch (actionType) {
       case 'AddMember':
       case 'addMember':
         const newMemberKey = action.newMember?.key;
         return {
           type: 'Add Member',
-          member: newMemberKey ? 
-            (typeof newMemberKey.toBase58 === 'function' ? newMemberKey.toBase58() : newMemberKey.toString()) : 
-            'Unknown',
+          member: newMemberKey
+            ? typeof newMemberKey.toBase58 === 'function'
+              ? newMemberKey.toBase58()
+              : newMemberKey.toString()
+            : 'Unknown',
           permissions: {
             mask: action.newMember?.permissions?.mask || 0,
-            ...(action.newMember?.permissions || {})
-          }
+            ...(action.newMember?.permissions || {}),
+          },
         };
-      
+
       case 'RemoveMember':
       case 'removeMember':
         const oldMemberKey = action.oldMember;
         return {
           type: 'Remove Member',
-          member: oldMemberKey ? 
-            (typeof oldMemberKey.toBase58 === 'function' ? oldMemberKey.toBase58() : oldMemberKey.toString()) : 
-            'Unknown'
+          member: oldMemberKey
+            ? typeof oldMemberKey.toBase58 === 'function'
+              ? oldMemberKey.toBase58()
+              : oldMemberKey.toString()
+            : 'Unknown',
         };
-      
+
       case 'ChangeThreshold':
       case 'changeThreshold':
         return {
           type: 'Change Threshold',
-          newThreshold: action.newThreshold || 0
+          newThreshold: action.newThreshold || 0,
         };
-      
+
       case 'SetTimeLock':
       case 'setTimeLock':
         return {
           type: 'Set Time Lock',
-          timeLock: action.timeLock || 0
+          timeLock: action.timeLock || 0,
         };
-      
+
       case 'AddSpendingLimit':
       case 'addSpendingLimit':
         return {
           type: 'Add Spending Limit',
-          createKey: action.spendingLimit?.createKey?.toBase58?.() || action.spendingLimit?.createKey,
+          createKey:
+            action.spendingLimit?.createKey?.toBase58?.() || action.spendingLimit?.createKey,
           vaultIndex: action.spendingLimit?.vaultIndex,
           mint: action.spendingLimit?.mint?.toBase58?.() || action.spendingLimit?.mint,
           amount: action.spendingLimit?.amount?.toString?.() || action.spendingLimit?.amount,
           period: action.spendingLimit?.period,
-          members: action.spendingLimit?.members?.map?.((m: any) => 
-            m?.toBase58?.() || m?.toString?.() || m
-          ) || [],
-          destinations: action.spendingLimit?.destinations?.map?.((d: any) => 
-            d?.toBase58?.() || d?.toString?.() || d
-          ) || []
+          members:
+            action.spendingLimit?.members?.map?.(
+              (m: any) => m?.toBase58?.() || m?.toString?.() || m
+            ) || [],
+          destinations:
+            action.spendingLimit?.destinations?.map?.(
+              (d: any) => d?.toBase58?.() || d?.toString?.() || d
+            ) || [],
         };
-      
+
       case 'RemoveSpendingLimit':
       case 'removeSpendingLimit':
         return {
           type: 'Remove Spending Limit',
-          spendingLimitKey: action.spendingLimit?.toBase58?.() || action.spendingLimit
+          spendingLimitKey: action.spendingLimit?.toBase58?.() || action.spendingLimit,
         };
-      
+
       default:
         // For unknown action types, show all the data
         return {
           type: actionType || 'Unknown Action',
-          data: { ...action, __kind: undefined, kind: undefined }
+          data: { ...action, __kind: undefined, kind: undefined },
         };
     }
   }
-  
+
   /**
    * Decode a batch transaction
    */
-  private decodeBatchTransaction(batch: any, transactionIndex: bigint, programId: PublicKey): DecodedTransaction {
+  private decodeBatchTransaction(
+    batch: any,
+    transactionIndex: bigint,
+    programId: PublicKey
+  ): DecodedTransaction {
     return {
-      instructions: [{
-        programId: programId.toBase58(),
-        programName: 'Squads Multisig V4',
-        instructionName: 'Batch Transaction',
-        accounts: [],
-        args: {
-          transactionIndex: transactionIndex.toString(),
-          creator: batch.creator?.toBase58?.() || 'Unknown',
-          vaultIndex: batch.vaultIndex,
-          size: batch.size || 0,
-          executedTransactionIndex: batch.executedTransactionIndex || 0,
-          summary: `Batch contains ${batch.size || 0} transactions, ${batch.executedTransactionIndex || 0} executed`
-        }
-      }],
+      instructions: [
+        {
+          programId: programId.toBase58(),
+          programName: 'Squads Multisig V4',
+          instructionName: 'Batch Transaction',
+          accounts: [],
+          args: {
+            transactionIndex: transactionIndex.toString(),
+            creator: batch.creator?.toBase58?.() || 'Unknown',
+            vaultIndex: batch.vaultIndex,
+            size: batch.size || 0,
+            executedTransactionIndex: batch.executedTransactionIndex || 0,
+            summary: `Batch contains ${batch.size || 0} transactions, ${batch.executedTransactionIndex || 0} executed`,
+          },
+        },
+      ],
       signers: [batch.creator?.toBase58?.() || 'Unknown'],
     };
   }
-  
+
   /**
    * Extract buffer from various message formats
    */
   private extractBuffer(message: any): Buffer | Uint8Array | null {
     if (!message) return null;
-    
+
     if (message.buffer || message.data) {
       return message.buffer || message.data;
     }
-    
+
     if (Buffer.isBuffer(message) || message instanceof Uint8Array) {
       return message;
     }
-    
+
     try {
       return Buffer.from(message);
     } catch {
       return null;
     }
   }
-  
+
   /**
    * Get program name from ID
    */
   private getProgramName(programId: string): string {
     const knownPrograms: Record<string, string> = {
       '11111111111111111111111111111111': 'System Program',
-      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA': 'Token Program',
-      'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb': 'Token-2022 Program',
-      'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL': 'Associated Token Program',
-      'ComputeBudget111111111111111111111111111111': 'Compute Budget Program',
-      'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr': 'Memo Program',
-      'Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo': 'Memo Program (Legacy)',
-      'AddressLookupTab1e1111111111111111111111111': 'Address Lookup Table Program',
-      'Vote111111111111111111111111111111111111111': 'Vote Program',
-      'Stake11111111111111111111111111111111111111': 'Stake Program',
-      'Config1111111111111111111111111111111111111': 'Config Program',
-      'BPFLoaderUpgradeab1e11111111111111111111111': 'BPF Upgradeable Loader',
-      'BPFLoader2111111111111111111111111111111111': 'BPF Loader',
-      'BPFLoader1111111111111111111111111111111111': 'BPF Loader (Deprecated)',
-      'Ed25519SigVerify111111111111111111111111111': 'Ed25519 Program',
-      'KeccakSecp256k11111111111111111111111111111': 'Secp256k1 Program',
-      'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4': 'Jupiter Aggregator',
-      'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc': 'Orca Whirlpool',
+      TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA: 'Token Program',
+      TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb: 'Token-2022 Program',
+      ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL: 'Associated Token Program',
+      ComputeBudget111111111111111111111111111111: 'Compute Budget Program',
+      MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr: 'Memo Program',
+      Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo: 'Memo Program (Legacy)',
+      AddressLookupTab1e1111111111111111111111111: 'Address Lookup Table Program',
+      Vote111111111111111111111111111111111111111: 'Vote Program',
+      Stake11111111111111111111111111111111111111: 'Stake Program',
+      Config1111111111111111111111111111111111111: 'Config Program',
+      BPFLoaderUpgradeab1e11111111111111111111111: 'BPF Upgradeable Loader',
+      BPFLoader2111111111111111111111111111111111: 'BPF Loader',
+      BPFLoader1111111111111111111111111111111111: 'BPF Loader (Deprecated)',
+      Ed25519SigVerify111111111111111111111111111: 'Ed25519 Program',
+      KeccakSecp256k11111111111111111111111111111: 'Secp256k1 Program',
+      JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4: 'Jupiter Aggregator',
+      whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc: 'Orca Whirlpool',
       '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP': 'Orca V2',
-      'MERLuDFBMmsHnsBPZw2sDQZHvXFMwp8EdjudcU2HKky': 'Mercurial',
-      'SSwpkEEcbUqx4vtoEByFjSkhKdCT862DNVb52nZg1UZ': 'Saber',
-      'EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S': 'Lifinity',
-      'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK': 'Raydium CLMM',
+      MERLuDFBMmsHnsBPZw2sDQZHvXFMwp8EdjudcU2HKky: 'Mercurial',
+      SSwpkEEcbUqx4vtoEByFjSkhKdCT862DNVb52nZg1UZ: 'Saber',
+      EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S: 'Lifinity',
+      CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK: 'Raydium CLMM',
       '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8': 'Raydium AMM',
       [multisig.PROGRAM_ID.toBase58()]: 'Squads Multisig V4',
     };
-    
+
     // Check IDL manager for name
     const idlEntry = idlManager.getIdl(programId);
     if (idlEntry) {
       return idlEntry.name;
     }
-    
+
     return knownPrograms[programId] || 'Unknown Program';
   }
-  
+
   /**
    * Format instruction name from snake_case to Title Case
    */
   private formatInstructionName(name: string): string {
     return name
       .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(' ');
   }
-  
+
   /**
    * Get account name for system instructions
    */
@@ -1285,7 +1326,7 @@ export class SimpleDecoder {
         return `Account ${index}`;
     }
   }
-  
+
   /**
    * Get account name for token instructions
    */
@@ -1301,7 +1342,7 @@ export class SimpleDecoder {
         return `Account ${index}`;
     }
   }
-  
+
   /**
    * Parse Memo program instructions
    */
@@ -1317,7 +1358,7 @@ export class SimpleDecoder {
     } catch {
       memoText = data.toString('hex');
     }
-    
+
     return {
       programId,
       programName: 'Memo Program',
@@ -1330,11 +1371,11 @@ export class SimpleDecoder {
       })),
       args: {
         memo: memoText,
-        hexData: data.toString('hex')
-      }
+        hexData: data.toString('hex'),
+      },
     };
   }
-  
+
   /**
    * Parse Compute Budget program instructions
    */
@@ -1345,7 +1386,7 @@ export class SimpleDecoder {
     const instructionType = data[0];
     let instructionName = 'Unknown Compute Budget Instruction';
     let args: any = {};
-    
+
     switch (instructionType) {
       case 0: // RequestUnits (deprecated)
         instructionName = 'Request Units (Deprecated)';
@@ -1381,7 +1422,7 @@ export class SimpleDecoder {
         }
         break;
     }
-    
+
     return {
       programId: 'ComputeBudget111111111111111111111111111111',
       programName: 'Compute Budget Program',
@@ -1392,10 +1433,10 @@ export class SimpleDecoder {
         isSigner: key.isSigner || false,
         isWritable: key.isWritable || false,
       })),
-      args
+      args,
     };
   }
-  
+
   /**
    * Parse Associated Token program instructions
    */
@@ -1413,12 +1454,12 @@ export class SimpleDecoder {
       'System Program',
       'Token Program',
     ];
-    
+
     // Check for idempotent instruction (has additional byte)
     if (data.length > 0) {
       instructionName = 'Create Idempotent';
     }
-    
+
     return {
       programId: 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
       programName: 'Associated Token Program',
@@ -1429,10 +1470,10 @@ export class SimpleDecoder {
         isSigner: key.isSigner || false,
         isWritable: key.isWritable || false,
       })),
-      args: {}
+      args: {},
     };
   }
-  
+
   /**
    * Parse Address Lookup Table program instructions
    */
@@ -1443,7 +1484,7 @@ export class SimpleDecoder {
     const instructionType = data.readUInt32LE(0);
     let instructionName = 'Unknown Lookup Table Instruction';
     let args: any = {};
-    
+
     switch (instructionType) {
       case 0: // CreateLookupTable
         instructionName = 'Create Lookup Table';
@@ -1471,7 +1512,7 @@ export class SimpleDecoder {
         instructionName = 'Close Lookup Table';
         break;
     }
-    
+
     return {
       programId: 'AddressLookupTab1e1111111111111111111111111',
       programName: 'Address Lookup Table Program',
@@ -1482,21 +1523,25 @@ export class SimpleDecoder {
         isSigner: key.isSigner || false,
         isWritable: key.isWritable || false,
       })),
-      args
+      args,
     };
   }
-  
+
   /**
    * Get account name for address lookup table instructions
    */
   private getAddressLookupTableAccountName(instructionType: number, index: number): string {
     switch (instructionType) {
       case 0: // CreateLookupTable
-        return ['Lookup Table', 'Authority', 'Payer', 'System Program'][index] || `Account ${index}`;
+        return (
+          ['Lookup Table', 'Authority', 'Payer', 'System Program'][index] || `Account ${index}`
+        );
       case 1: // FreezeLookupTable
         return ['Lookup Table', 'Authority'][index] || `Account ${index}`;
       case 2: // ExtendLookupTable
-        return ['Lookup Table', 'Authority', 'Payer', 'System Program'][index] || `Account ${index}`;
+        return (
+          ['Lookup Table', 'Authority', 'Payer', 'System Program'][index] || `Account ${index}`
+        );
       case 3: // DeactivateLookupTable
         return ['Lookup Table', 'Authority'][index] || `Account ${index}`;
       case 4: // CloseLookupTable

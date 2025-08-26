@@ -94,7 +94,7 @@ export const importTransaction = async (
     }
   } catch (error: any) {
     console.error(error);
-    
+
     // Parse Anchor error codes for better user feedback
     if (error?.toString?.().includes('0x1784') || error?.toString?.().includes('6020')) {
       throw 'This multisig is controlled by an external program. Config transactions are not supported for controlled multisigs.';
@@ -109,7 +109,7 @@ export const importTransaction = async (
         throw `Transaction failed with error code ${match[1]}. Check the console for details.`;
       }
     }
-    
+
     throw error;
   }
 };

@@ -34,12 +34,12 @@ export const validateSquadAddress = async (
 ): Promise<{ isValid: boolean; error?: string }> => {
   try {
     const pubkey = new PublicKey(address);
-    
+
     const accountInfo = await connection.getAccountInfo(pubkey);
     if (!accountInfo) {
       return { isValid: false, error: 'Address does not exist on chain' };
     }
-    
+
     try {
       // @ts-ignore - Connection type mismatch between versions
       await accounts.Multisig.fromAccountAddress(connection, pubkey);

@@ -1,9 +1,9 @@
 export enum IdlFormat {
   ANCHOR_V01 = 'anchor_v01', // Anchor 0.1.0 - 0.29.x
   ANCHOR_V02 = 'anchor_v02', // Anchor 0.30.x+
-  KINOBI = 'kinobi',         // Kinobi/Codama format
-  SHANK = 'shank',            // Shank format
-  UNKNOWN = 'unknown'
+  KINOBI = 'kinobi', // Kinobi/Codama format
+  SHANK = 'shank', // Shank format
+  UNKNOWN = 'unknown',
 }
 
 export interface IdlInfo {
@@ -25,7 +25,7 @@ export function detectIdlFormat(idl: any): IdlInfo {
     return {
       format: IdlFormat.KINOBI,
       name: idl.program.name || 'Unknown',
-      version: idl.program.version
+      version: idl.program.version,
     };
   }
 
@@ -36,16 +36,16 @@ export function detectIdlFormat(idl: any): IdlInfo {
       return {
         format: IdlFormat.ANCHOR_V01,
         name: idl.name || idl.metadata?.name,
-        version: idl.version || idl.metadata?.version
+        version: idl.version || idl.metadata?.version,
       };
     }
-    
+
     // Anchor v0.2+ might have different structure
     if (idl.version && !idl.metadata?.spec) {
       return {
         format: IdlFormat.ANCHOR_V02,
         name: idl.name,
-        version: idl.version
+        version: idl.version,
       };
     }
 
@@ -53,7 +53,7 @@ export function detectIdlFormat(idl: any): IdlInfo {
     return {
       format: IdlFormat.ANCHOR_V01,
       name: idl.name,
-      version: idl.version
+      version: idl.version,
     };
   }
 
@@ -62,7 +62,7 @@ export function detectIdlFormat(idl: any): IdlInfo {
     return {
       format: IdlFormat.SHANK,
       name: idl.name,
-      version: idl.shankVersion
+      version: idl.shankVersion,
     };
   }
 

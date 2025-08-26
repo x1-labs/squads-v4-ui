@@ -22,17 +22,11 @@ export const ThemeToggle: React.FC = () => {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          onClick={() => setTheme('light')}
-          className="cursor-pointer"
-        >
+        <DropdownMenuItem onClick={() => setTheme('light')} className="cursor-pointer">
           <Sun className="mr-2 h-4 w-4" />
           <span>Light</span>
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setTheme('dark')}
-          className="cursor-pointer"
-        >
+        <DropdownMenuItem onClick={() => setTheme('dark')} className="cursor-pointer">
           <Moon className="mr-2 h-4 w-4" />
           <span>Dark</span>
         </DropdownMenuItem>
@@ -58,12 +52,7 @@ export const SimpleThemeToggle: React.FC = () => {
   const { toggleTheme } = useTheme();
 
   return (
-    <Button
-      variant="outline"
-      size="icon"
-      onClick={toggleTheme}
-      className="h-9 w-9"
-    >
+    <Button variant="outline" size="icon" onClick={toggleTheme} className="h-9 w-9">
       <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
       <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
       <span className="sr-only">Toggle theme</span>

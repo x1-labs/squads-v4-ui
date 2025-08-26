@@ -41,7 +41,10 @@ const App = () => {
                       <Route path="/create" element={<CreatePage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                       <Route path="/transactions" element={<TransactionsPage />} />
-                      <Route path="/transactions/:transactionPda" element={<TransactionDetailsPage />} />
+                      <Route
+                        path="/transactions/:transactionPda"
+                        element={<TransactionDetailsPage />}
+                      />
                       <Route path="/programs" element={<ProgramsPage />} />
                       <Route path="*" element={<p>404 - Not Found</p>} /> {/* Catch-all route */}
                     </Routes>
@@ -59,9 +62,9 @@ const App = () => {
               />
             </div>
           </HashRouter>
-          </Wallet>
-        </QueryClientProvider>
-      </ThemeProvider>
+        </Wallet>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 };
 

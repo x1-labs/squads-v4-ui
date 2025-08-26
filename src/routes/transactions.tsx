@@ -1,4 +1,12 @@
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import {
   Pagination,
   PaginationContent,
@@ -26,7 +34,7 @@ export default function TransactionsPage() {
   }
   const { multisigAddress, programId } = useMultisigData();
   const { data } = useMultisig();
-  
+
   // Check if we have a valid multisig
   if (!multisigAddress || !data) {
     return (
@@ -34,7 +42,7 @@ export default function TransactionsPage() {
         <Suspense fallback={<div>Loading...</div>}>
           <div className="">
             <h1 className="text-3xl font-bold">Transactions</h1>
-            <div className="text-center py-8">
+            <div className="py-8 text-center">
               <p className="text-muted-foreground">
                 Please select a valid squad to view transactions.
               </p>
@@ -62,19 +70,21 @@ export default function TransactionsPage() {
 
   return (
     <ErrorBoundary>
-      <Suspense fallback={
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
-            <p className="text-sm text-muted-foreground">Loading transactions...</p>
+      <Suspense
+        fallback={
+          <div className="flex h-64 items-center justify-center">
+            <div className="text-center">
+              <div className="mb-4 inline-block h-8 w-8 animate-spin rounded-full border-b-2 border-primary"></div>
+              <p className="text-sm text-muted-foreground">Loading transactions...</p>
+            </div>
           </div>
-        </div>
-      }>
+        }
+      >
         <div>
           <div className="mb-6 flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-foreground">Transactions</h1>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Manage and execute multisig transactions
               </p>
             </div>
@@ -87,18 +97,22 @@ export default function TransactionsPage() {
                 <TableHeader>
                   <TableRow className="border-b border-border hover:bg-transparent">
                     <TableHead className="w-20 font-semibold text-foreground">Index</TableHead>
-                    <TableHead className="font-semibold text-foreground">Program / Transaction</TableHead>
+                    <TableHead className="font-semibold text-foreground">
+                      Program / Transaction
+                    </TableHead>
                     <TableHead className="font-semibold text-foreground">Status</TableHead>
-                    <TableHead className="text-right font-semibold text-foreground">Actions</TableHead>
+                    <TableHead className="text-right font-semibold text-foreground">
+                      Actions
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
-              <Suspense>
-                <TransactionTable
-                  multisigPda={multisigAddress!}
-                  transactions={transactions}
-                  programId={programId!.toBase58()}
-                />
-              </Suspense>
+                <Suspense>
+                  <TransactionTable
+                    multisigPda={multisigAddress!}
+                    transactions={transactions}
+                    programId={programId!.toBase58()}
+                  />
+                </Suspense>
               </Table>
             </div>
           </Suspense>

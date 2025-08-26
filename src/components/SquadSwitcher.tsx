@@ -27,7 +27,8 @@ import { PublicKey } from '@solana/web3.js';
 import { validateSquadAddress } from '@/lib/utils';
 
 export const SquadSwitcher = () => {
-  const { squads, selectedSquad, addSquad, removeSquad, selectSquad, updateSquad } = useSquadConfig();
+  const { squads, selectedSquad, addSquad, removeSquad, selectSquad, updateSquad } =
+    useSquadConfig();
   const { setMultisigAddress } = useMultisigAddress();
   const { connection } = useMultisigData();
   const navigate = useNavigate();
@@ -57,7 +58,7 @@ export const SquadSwitcher = () => {
 
       // Validate that the address is actually a squad
       const validation = await validateSquadAddress(connection, newSquadAddress);
-      
+
       if (!validation.isValid) {
         setError(validation.error || 'Invalid address');
         return;
@@ -119,10 +120,8 @@ export const SquadSwitcher = () => {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="w-full justify-between mb-2">
-            <span className="truncate">
-              {selectedSquad ? selectedSquad.name : 'Select Squad'}
-            </span>
+          <Button variant="outline" className="mb-2 w-full justify-between">
+            <span className="truncate">{selectedSquad ? selectedSquad.name : 'Select Squad'}</span>
             <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </DropdownMenuTrigger>
@@ -133,20 +132,20 @@ export const SquadSwitcher = () => {
                 <DropdownMenuItem
                   key={squad.address}
                   onClick={() => handleSelectSquad(squad.address)}
-                  className="flex items-center justify-between group"
+                  className="group flex items-center justify-between"
                 >
-                  <div className="flex items-center flex-1 min-w-0">
+                  <div className="flex min-w-0 flex-1 items-center">
                     {selectedSquad?.address === squad.address && (
                       <Check className="mr-2 h-4 w-4 shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="font-medium truncate">{squad.name}</div>
-                      <div className="text-xs text-muted-foreground truncate">
+                      <div className="truncate font-medium">{squad.name}</div>
+                      <div className="truncate text-xs text-muted-foreground">
                         {squad.address.slice(0, 4)}...{squad.address.slice(-4)}
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                     <Button
                       size="sm"
                       variant="ghost"
@@ -184,9 +183,7 @@ export const SquadSwitcher = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Squad</DialogTitle>
-            <DialogDescription>
-              Save a squad for quick access
-            </DialogDescription>
+            <DialogDescription>Save a squad for quick access</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -213,12 +210,14 @@ export const SquadSwitcher = () => {
                 placeholder="Enter Solana address"
               />
             </div>
-            {error && (
-              <div className="text-sm text-destructive">{error}</div>
-            )}
+            {error && <div className="text-sm text-destructive">{error}</div>}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isValidating}>
+            <Button
+              variant="outline"
+              onClick={() => setIsAddDialogOpen(false)}
+              disabled={isValidating}
+            >
               Cancel
             </Button>
             <Button onClick={handleAddSquad} disabled={isValidating}>
@@ -233,9 +232,7 @@ export const SquadSwitcher = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Squad Name</DialogTitle>
-            <DialogDescription>
-              Update the name for this squad
-            </DialogDescription>
+            <DialogDescription>Update the name for this squad</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
@@ -250,9 +247,7 @@ export const SquadSwitcher = () => {
                 placeholder="Squad Name"
               />
             </div>
-            {error && (
-              <div className="text-sm text-destructive">{error}</div>
-            )}
+            {error && <div className="text-sm text-destructive">{error}</div>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>

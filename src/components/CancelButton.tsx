@@ -34,9 +34,9 @@ const CancelButton = ({
       walletModal.setVisible(true);
       throw 'Wallet not connected';
     }
-    
+
     const bigIntTransactionIndex = BigInt(transactionIndex);
-    
+
     if (!canCancel) {
       toast.error("You can only cancel approved proposals that haven't been executed.");
       return;
@@ -56,17 +56,17 @@ const CancelButton = ({
       const signature = await wallet.sendTransaction(transaction, connection, {
         skipPreflight: true,
       });
-      
+
       console.log('Transaction signature', signature);
       toast.loading('Confirming...', {
         id: 'transaction',
       });
-      
+
       const sent = await waitForConfirmation(connection, [signature]);
       if (!sent[0]) {
         throw `Transaction failed or unable to confirm. Check ${signature}`;
       }
-      
+
       await queryClient.invalidateQueries({ queryKey: ['transactions'] });
     } catch (error) {
       console.error('Failed to cancel proposal:', error);

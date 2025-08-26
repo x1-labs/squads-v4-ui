@@ -24,24 +24,34 @@ export function VaultDisplayer({}: VaultDisplayerProps) {
       <CardContent>
         <div className="space-y-4">
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Vault Address</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Vault Address</label>
             <div className="flex items-center gap-2">
-              <code className="text-sm font-mono bg-muted px-2 py-1 rounded flex-1 break-all">
+              <code className="flex-1 break-all rounded bg-muted px-2 py-1 font-mono text-sm">
                 {vaultAddress?.toBase58()}
               </code>
               <button
                 onClick={handleCopyVaultAddress}
-                className="p-1.5 hover:bg-muted rounded transition-colors flex-shrink-0"
+                className="flex-shrink-0 rounded p-1.5 transition-colors hover:bg-muted"
                 title="Copy vault address"
               >
-                <svg className="w-4 h-4 text-muted-foreground hover:text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                <svg
+                  className="h-4 w-4 text-muted-foreground hover:text-foreground"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
                 </svg>
               </button>
             </div>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Select Vault</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Select Vault</label>
             <VaultSelector />
           </div>
         </div>

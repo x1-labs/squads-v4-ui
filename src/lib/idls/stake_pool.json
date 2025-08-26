@@ -1,15 +1,11 @@
 {
   "version": "2.0.1",
   "name": "spl_stake_pool",
-  "docs": [
-    "SPL Stake Pool Program - A program for pooling stake accounts"
-  ],
+  "docs": ["SPL Stake Pool Program - A program for pooling stake accounts"],
   "instructions": [
     {
       "name": "initialize",
-      "docs": [
-        "Initializes a new StakePool"
-      ],
+      "docs": ["Initializes a new StakePool"],
       "accounts": [
         {
           "name": "stakePool",
@@ -191,9 +187,7 @@
     },
     {
       "name": "removeValidatorFromPool",
-      "docs": [
-        "(Staker only) Removes validator from the pool, deactivating its stake"
-      ],
+      "docs": ["(Staker only) Removes validator from the pool, deactivating its stake"],
       "accounts": [
         {
           "name": "stakePool",
@@ -311,9 +305,7 @@
     },
     {
       "name": "increaseValidatorStake",
-      "docs": [
-        "(Staker only) Increase stake on a validator from the reserve account"
-      ],
+      "docs": ["(Staker only) Increase stake on a validator from the reserve account"],
       "accounts": [
         {
           "name": "stakePool",
@@ -438,9 +430,7 @@
     },
     {
       "name": "updateValidatorListBalance",
-      "docs": [
-        "Updates balances of validator and transient stake accounts in the pool"
-      ],
+      "docs": ["Updates balances of validator and transient stake accounts in the pool"],
       "accounts": [
         {
           "name": "stakePool",
@@ -492,9 +482,7 @@
     },
     {
       "name": "updateStakePoolBalance",
-      "docs": [
-        "Updates total pool balance based on balances in the reserve and validator list"
-      ],
+      "docs": ["Updates total pool balance based on balances in the reserve and validator list"],
       "accounts": [
         {
           "name": "stakePool",
@@ -537,9 +525,7 @@
     },
     {
       "name": "cleanupRemovedValidatorEntries",
-      "docs": [
-        "Cleans up validator stake account entries marked as ReadyForRemoval"
-      ],
+      "docs": ["Cleans up validator stake account entries marked as ReadyForRemoval"],
       "accounts": [
         {
           "name": "stakePool",
@@ -557,9 +543,7 @@
     },
     {
       "name": "depositStake",
-      "docs": [
-        "Deposit some stake into the pool"
-      ],
+      "docs": ["Deposit some stake into the pool"],
       "accounts": [
         {
           "name": "stakePool",
@@ -643,9 +627,7 @@
     },
     {
       "name": "withdrawStake",
-      "docs": [
-        "Withdraw the token from the pool at the current ratio"
-      ],
+      "docs": ["Withdraw the token from the pool at the current ratio"],
       "accounts": [
         {
           "name": "stakePool",
@@ -723,9 +705,7 @@
     },
     {
       "name": "setManager",
-      "docs": [
-        "(Manager only) Update manager"
-      ],
+      "docs": ["(Manager only) Update manager"],
       "accounts": [
         {
           "name": "stakePool",
@@ -753,9 +733,7 @@
     },
     {
       "name": "setFee",
-      "docs": [
-        "(Manager only) Update fee"
-      ],
+      "docs": ["(Manager only) Update fee"],
       "accounts": [
         {
           "name": "stakePool",
@@ -780,9 +758,7 @@
     },
     {
       "name": "setStaker",
-      "docs": [
-        "(Manager or staker only) Update staker"
-      ],
+      "docs": ["(Manager or staker only) Update staker"],
       "accounts": [
         {
           "name": "stakePool",
@@ -805,9 +781,7 @@
     },
     {
       "name": "depositSol",
-      "docs": [
-        "Deposit SOL directly into the pool's reserve account"
-      ],
+      "docs": ["Deposit SOL directly into the pool's reserve account"],
       "accounts": [
         {
           "name": "stakePool",
@@ -876,9 +850,7 @@
     },
     {
       "name": "setFundingAuthority",
-      "docs": [
-        "(Manager only) Update SOL deposit, stake deposit, or SOL withdrawal authority"
-      ],
+      "docs": ["(Manager only) Update SOL deposit, stake deposit, or SOL withdrawal authority"],
       "accounts": [
         {
           "name": "stakePool",
@@ -909,9 +881,7 @@
     },
     {
       "name": "withdrawSol",
-      "docs": [
-        "Withdraw SOL directly from the pool's reserve account"
-      ],
+      "docs": ["Withdraw SOL directly from the pool's reserve account"],
       "accounts": [
         {
           "name": "stakePool",
@@ -990,9 +960,7 @@
     },
     {
       "name": "createTokenMetadata",
-      "docs": [
-        "Create token metadata for the stake-pool token"
-      ],
+      "docs": ["Create token metadata for the stake-pool token"],
       "accounts": [
         {
           "name": "stakePool",
@@ -1053,9 +1021,7 @@
     },
     {
       "name": "updateTokenMetadata",
-      "docs": [
-        "Update token metadata for the stake-pool token"
-      ],
+      "docs": ["Update token metadata for the stake-pool token"],
       "accounts": [
         {
           "name": "stakePool",
@@ -1101,9 +1067,7 @@
     },
     {
       "name": "increaseAdditionalValidatorStake",
-      "docs": [
-        "(Staker only) Increase stake on a validator again in an epoch"
-      ],
+      "docs": ["(Staker only) Increase stake on a validator again in an epoch"],
       "accounts": [
         {
           "name": "stakePool",
@@ -1194,9 +1158,7 @@
     },
     {
       "name": "decreaseAdditionalValidatorStake",
-      "docs": [
-        "(Staker only) Decrease active stake again from a validator"
-      ],
+      "docs": ["(Staker only) Decrease active stake again from a validator"],
       "accounts": [
         {
           "name": "stakePool",
@@ -1277,9 +1239,7 @@
     },
     {
       "name": "decreaseValidatorStakeWithReserve",
-      "docs": [
-        "(Staker only) Decrease active stake on a validator"
-      ],
+      "docs": ["(Staker only) Decrease active stake on a validator"],
       "accounts": [
         {
           "name": "stakePool",
@@ -1460,9 +1420,7 @@
     },
     {
       "name": "depositStakeWithSlippage",
-      "docs": [
-        "Deposit some stake into the pool with slippage constraint"
-      ],
+      "docs": ["Deposit some stake into the pool with slippage constraint"],
       "accounts": [
         {
           "name": "stakePool",
@@ -1551,9 +1509,7 @@
     },
     {
       "name": "withdrawStakeWithSlippage",
-      "docs": [
-        "Withdraw stake from the pool with slippage constraint"
-      ],
+      "docs": ["Withdraw stake from the pool with slippage constraint"],
       "accounts": [
         {
           "name": "stakePool",
@@ -1635,9 +1591,7 @@
     },
     {
       "name": "depositSolWithSlippage",
-      "docs": [
-        "Deposit SOL with slippage constraint"
-      ],
+      "docs": ["Deposit SOL with slippage constraint"],
       "accounts": [
         {
           "name": "stakePool",
@@ -1710,9 +1664,7 @@
     },
     {
       "name": "withdrawSolWithSlippage",
-      "docs": [
-        "Withdraw SOL with slippage constraint"
-      ],
+      "docs": ["Withdraw SOL with slippage constraint"],
       "accounts": [
         {
           "name": "stakePool",
@@ -1795,9 +1747,7 @@
     },
     {
       "name": "setMaxValidatorStake",
-      "docs": [
-        "(Manager only) Update the maximum stake per validator"
-      ],
+      "docs": ["(Manager only) Update the maximum stake per validator"],
       "accounts": [
         {
           "name": "stakePool",

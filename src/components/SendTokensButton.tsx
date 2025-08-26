@@ -160,23 +160,23 @@ const SendTokens = ({
     toast.loading('Confirming...', {
       id: 'transaction',
     });
-    
+
     const sent = await waitForConfirmation(connection, [signature]);
     console.log('Transaction confirmation status:', sent);
-    
+
     if (!sent || !sent[0]) {
       throw `Transaction failed: Unable to confirm transaction. Check explorer for signature: ${signature}`;
     }
-    
+
     // Check for errors in the transaction
     const status = sent[0];
     if (status.err) {
       console.error('Transaction error:', status.err);
-      
+
       // Extract the actual error message
       let errorMessage = '';
       let errorCode = '';
-      
+
       if (typeof status.err === 'string') {
         errorMessage = status.err;
         errorCode = status.err;
@@ -184,7 +184,7 @@ const SendTokens = ({
         errorMessage = JSON.stringify(status.err);
         errorCode = errorMessage;
       }
-      
+
       // Provide helpful context for common errors
       if (errorCode.includes('ProgramAccountNotFound') || errorCode === 'ProgramAccountNotFound') {
         throw `Transaction failed: The vault's token account for this mint doesn't exist. The vault needs to receive some of this token first before it can send it. Transaction: ${signature}`;
@@ -195,7 +195,7 @@ const SendTokens = ({
       if (errorCode.includes('AccountNotFound') || errorCode === 'AccountNotFound') {
         throw `Transaction failed: One of the required accounts was not found. This might mean the recipient's token account needs to be created. Transaction: ${signature}`;
       }
-      
+
       throw `Transaction failed: ${errorMessage || errorCode || 'Unknown error'}. Transaction: ${signature}`;
     }
     setAmount('');

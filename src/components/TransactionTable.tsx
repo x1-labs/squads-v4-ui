@@ -47,12 +47,24 @@ export default function TransactionTable({
           <TableCell colSpan={4} className="h-32">
             <div className="flex flex-col items-center justify-center space-y-3">
               <div className="rounded-full bg-muted p-3">
-                <svg className="h-6 w-6 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <svg
+                  className="h-6 w-6 text-muted-foreground"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
                 </svg>
               </div>
               <p className="text-sm text-muted-foreground">No transactions found</p>
-              <p className="text-xs text-muted-foreground/70">Create your first transaction to get started</p>
+              <p className="text-xs text-muted-foreground/70">
+                Create your first transaction to get started
+              </p>
             </div>
           </TableCell>
         </TableRow>
@@ -84,15 +96,17 @@ export default function TransactionTable({
             key={index}
             onClick={(e) => handleRowClick(transaction.transactionPda, e)}
             className={`cursor-pointer transition-colors ${
-              isGreyedOut 
-                ? 'opacity-60 hover:opacity-80 hover:bg-muted/30' 
-                : 'hover:bg-muted/50'
+              isGreyedOut ? 'opacity-60 hover:bg-muted/30 hover:opacity-80' : 'hover:bg-muted/50'
             } group`}
           >
-            <TableCell className={`font-mono text-sm ${isGreyedOut ? 'text-muted-foreground' : ''}`}>
-              <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full ${
-                isGreyedOut ? 'bg-muted/60' : 'bg-muted'
-              } text-xs font-semibold`}>
+            <TableCell
+              className={`font-mono text-sm ${isGreyedOut ? 'text-muted-foreground' : ''}`}
+            >
+              <span
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                  isGreyedOut ? 'bg-muted/60' : 'bg-muted'
+                } text-xs font-semibold`}
+              >
                 {Number(transaction.index)}
               </span>
             </TableCell>
@@ -104,7 +118,7 @@ export default function TransactionTable({
                   programId={programId}
                 />
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-muted-foreground">
+                  <span className="font-mono text-xs text-muted-foreground">
                     {formatAddress(transaction.transactionPda)}
                   </span>
                   <button
@@ -113,11 +127,16 @@ export default function TransactionTable({
                       navigator.clipboard.writeText(transaction.transactionPda);
                       toast.success('Address copied to clipboard');
                     }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
+                    className="rounded p-1 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
                     title="Copy address"
                   >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
                     </svg>
                   </button>
                 </div>
@@ -160,9 +179,7 @@ function ActionButtons({
 
   return (
     <div className="flex items-center justify-end gap-1">
-      {showReject && (
-        <ReviewButton transactionPda={transactionPda} />
-      )}
+      {showReject && <ReviewButton transactionPda={transactionPda} />}
       {showReject && (
         <RejectButton
           multisigPda={multisigPda}

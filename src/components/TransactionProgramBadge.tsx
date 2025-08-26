@@ -14,28 +14,36 @@ interface TransactionProgramBadgeProps {
 const analyzeTransactionType = (vaultTx: any): { name: string; id: string } | null => {
   try {
     if (!vaultTx.message || !vaultTx.message.instructions) return null;
-    
+
     const instructions = vaultTx.message.instructions;
     const accountKeys = vaultTx.message.accountKeys;
-    
+
     // Check each instruction
     for (const instruction of instructions) {
       const programIdKey = accountKeys[instruction.programIdIndex];
-      const programIdStr = programIdKey instanceof PublicKey 
-        ? programIdKey.toBase58() 
-        : typeof programIdKey === 'string' 
-          ? programIdKey 
-          : new PublicKey(programIdKey).toBase58();
-      
+      const programIdStr =
+        programIdKey instanceof PublicKey
+          ? programIdKey.toBase58()
+          : typeof programIdKey === 'string'
+            ? programIdKey
+            : new PublicKey(programIdKey).toBase58();
+
       // System Program Transfer (SOL transfer)
       if (programIdStr === '11111111111111111111111111111111') {
         const data = instruction.data;
         // System transfer instruction starts with 2 (u32 little-endian: 0x02000000)
-        if (data && data.length >= 4 && data[0] === 2 && data[1] === 0 && data[2] === 0 && data[3] === 0) {
+        if (
+          data &&
+          data.length >= 4 &&
+          data[0] === 2 &&
+          data[1] === 0 &&
+          data[2] === 0 &&
+          data[3] === 0
+        ) {
           return { name: 'SOL Transfer', id: programIdStr };
         }
       }
-      
+
       // SPL Token Transfer
       if (programIdStr === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') {
         const data = instruction.data;
@@ -44,7 +52,7 @@ const analyzeTransactionType = (vaultTx: any): { name: string; id: string } | nu
           return { name: 'SPL Token Transfer', id: programIdStr };
         }
       }
-      
+
       // Token-2022 Transfer
       if (programIdStr === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') {
         const data = instruction.data;
@@ -54,7 +62,7 @@ const analyzeTransactionType = (vaultTx: any): { name: string; id: string } | nu
         }
       }
     }
-    
+
     return null;
   } catch (error) {
     console.error('Error analyzing transaction type:', error);
@@ -74,8 +82,11 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
   useEffect(() => {
     const fetchProgramInfo = async () => {
       try {
-        const connection = new Connection(rpcUrl || 'https://api.mainnet-beta.solana.com', 'confirmed');
-        
+        const connection = new Connection(
+          rpcUrl || 'https://api.mainnet-beta.solana.com',
+          'confirmed'
+        );
+
         // Get the transaction PDA
         const [transactionPda] = multisig.getTransactionPda({
           multisigPda: new PublicKey(multisigPda),
@@ -89,23 +100,24 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
             connection as any,
             transactionPda
           );
-          
+
           if (vaultTx.message && vaultTx.message.instructions?.length > 0) {
             // Analyze transaction to determine type
             const txType = analyzeTransactionType(vaultTx);
-            
+
             if (txType) {
               setProgramInfo(txType);
             } else {
               // Fall back to first instruction's program ID
               const firstInstruction = vaultTx.message.instructions[0];
               const programIdKey = vaultTx.message.accountKeys[firstInstruction.programIdIndex];
-              const programIdStr = programIdKey instanceof PublicKey 
-                ? programIdKey.toBase58() 
-                : typeof programIdKey === 'string' 
-                  ? programIdKey 
-                  : new PublicKey(programIdKey).toBase58();
-              
+              const programIdStr =
+                programIdKey instanceof PublicKey
+                  ? programIdKey.toBase58()
+                  : typeof programIdKey === 'string'
+                    ? programIdKey
+                    : new PublicKey(programIdKey).toBase58();
+
               setProgramInfo({
                 name: getProgramName(programIdStr),
                 id: programIdStr,
@@ -128,10 +140,7 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
           } catch {
             // Try as Batch
             try {
-              await multisig.accounts.Batch.fromAccountAddress(
-                connection as any,
-                transactionPda
-              );
+              await multisig.accounts.Batch.fromAccountAddress(connection as any, transactionPda);
               setProgramInfo({
                 name: 'Batch Transaction',
                 id: programId,
@@ -158,27 +167,27 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
     if (idlEntry) {
       return idlEntry.name;
     }
-    
+
     // Fallback to known programs
     const knownPrograms: Record<string, string> = {
       '11111111111111111111111111111111': 'System',
-      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA': 'Token',
-      'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb': 'Token-2022',
-      'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL': 'ATA',
-      'ComputeBudget111111111111111111111111111111': 'Compute Budget',
-      'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr': 'Memo',
-      'Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo': 'Memo (Legacy)',
-      'AddressLookupTab1e1111111111111111111111111': 'Address Lookup',
-      'Vote111111111111111111111111111111111111111': 'Vote',
-      'Stake11111111111111111111111111111111111111': 'Stake',
-      'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4': 'Jupiter',
-      'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc': 'Orca Whirlpool',
+      TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA: 'Token',
+      TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb: 'Token-2022',
+      ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL: 'ATA',
+      ComputeBudget111111111111111111111111111111: 'Compute Budget',
+      MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr: 'Memo',
+      Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo: 'Memo (Legacy)',
+      AddressLookupTab1e1111111111111111111111111: 'Address Lookup',
+      Vote111111111111111111111111111111111111111: 'Vote',
+      Stake11111111111111111111111111111111111111: 'Stake',
+      JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4: 'Jupiter',
+      whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc: 'Orca Whirlpool',
       '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP': 'Orca V2',
-      'CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK': 'Raydium CLMM',
+      CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK: 'Raydium CLMM',
       '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8': 'Raydium AMM',
       [multisig.PROGRAM_ID.toBase58()]: 'Squads V4',
     };
-    
+
     return knownPrograms[programId] || 'Unknown Program';
   };
 
@@ -189,8 +198,9 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
   };
 
   const getBadgeStyles = (programName: string): string => {
-    let baseStyles = "inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset";
-    
+    let baseStyles =
+      'inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset';
+
     // Transfer types - use distinct styling
     if (programName === 'SOL Transfer') {
       return `${baseStyles} bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/20 font-semibold`;
@@ -198,7 +208,7 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
     if (programName === 'SPL Token Transfer' || programName === 'Token-2022 Transfer') {
       return `${baseStyles} bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-emerald-500/20 font-semibold`;
     }
-    
+
     if (programName === 'Config Transaction') {
       return `${baseStyles} bg-purple-500/10 text-purple-600 dark:text-purple-400 ring-purple-500/20`;
     }
@@ -229,7 +239,7 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
 
   if (loading) {
     return (
-      <span className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium bg-muted text-muted-foreground ring-1 ring-inset ring-border animate-pulse">
+      <span className="inline-flex animate-pulse items-center rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground ring-1 ring-inset ring-border">
         Loading...
       </span>
     );
@@ -240,19 +250,18 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
   }
 
   // Only show program ID if we don't have a meaningful name
-  const shouldShowId = programInfo.id && 
-    (programInfo.name === 'Unknown' || 
-     programInfo.name === 'Unknown Program' || 
-     programInfo.name === 'Error' ||
-     programInfo.name === 'Empty Transaction');
+  const shouldShowId =
+    programInfo.id &&
+    (programInfo.name === 'Unknown' ||
+      programInfo.name === 'Unknown Program' ||
+      programInfo.name === 'Error' ||
+      programInfo.name === 'Empty Transaction');
 
   return (
     <div className="flex items-center gap-2">
-      <span className={getBadgeStyles(programInfo.name)}>
-        {programInfo.name}
-      </span>
+      <span className={getBadgeStyles(programInfo.name)}>{programInfo.name}</span>
       {shouldShowId && (
-        <span className="text-xs text-muted-foreground font-mono">
+        <span className="font-mono text-xs text-muted-foreground">
           {formatProgramId(programInfo.id)}
         </span>
       )}

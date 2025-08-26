@@ -33,13 +33,13 @@ export class KinobiIdlParser {
     this.idl.program.instructions.forEach((instruction: any, index: number) => {
       const parsed = this.parseInstruction(instruction, index);
       this.instructions.set(parsed.name, parsed);
-      
+
       // Store by discriminator if available
       if (parsed.discriminator) {
         const discriminatorKey = parsed.discriminator.join(',');
         this.instructionsByDiscriminator.set(discriminatorKey, parsed);
       }
-      
+
       // Store by index for fallback
       this.instructionsByIndex.set(index, parsed);
     });
@@ -65,14 +65,14 @@ export class KinobiIdlParser {
       instruction.arguments.forEach((arg: any) => {
         args.push({
           name: arg.name,
-          type: arg.type
+          type: arg.type,
         });
       });
     }
 
     // Extract discriminator
     let discriminator: number[] | undefined;
-    
+
     // Handle different discriminator formats
     if (instruction.discriminator) {
       // Simple discriminator format
@@ -86,20 +86,20 @@ export class KinobiIdlParser {
       const fieldDiscriminator = instruction.discriminators.find(
         (d: any) => d.kind === 'fieldDiscriminatorNode'
       );
-      
+
       if (fieldDiscriminator && fieldDiscriminator.name) {
         // Find the argument with the discriminator name
         const discriminatorArg = instruction.arguments?.find(
           (arg: any) => arg.name === fieldDiscriminator.name
         );
-        
+
         if (discriminatorArg?.defaultValue?.number !== undefined) {
           // For single byte discriminators (like SPL Token)
           discriminator = [discriminatorArg.defaultValue.number];
         } else if (discriminatorArg?.defaultValue?.value !== undefined) {
           // For array discriminators
-          discriminator = Array.isArray(discriminatorArg.defaultValue.value) 
-            ? discriminatorArg.defaultValue.value 
+          discriminator = Array.isArray(discriminatorArg.defaultValue.value)
+            ? discriminatorArg.defaultValue.value
             : [discriminatorArg.defaultValue.value];
         }
       }
@@ -109,7 +109,7 @@ export class KinobiIdlParser {
       name: instruction.name,
       discriminator,
       accounts,
-      arguments: args
+      arguments: args,
     };
   }
 
@@ -125,14 +125,14 @@ export class KinobiIdlParser {
     const singleByteDiscriminator = [data[0]];
     const singleByteKey = singleByteDiscriminator.join(',');
     let instruction = this.instructionsByDiscriminator.get(singleByteKey);
-    
+
     if (instruction) {
       // For single-byte discriminator, the discriminator byte is at position 0
       // SPL Token marks discriminator as "omitted" meaning it's not part of the args to parse
       // but it IS present in the data, so we skip it and start parsing args at byte 1
       return {
         name: instruction.name,
-        data: this.parseInstructionData(instruction, data.slice(1))
+        data: this.parseInstructionData(instruction, data.slice(1)),
       };
     }
 
@@ -141,11 +141,11 @@ export class KinobiIdlParser {
       const discriminator = Array.from(data.slice(0, 8));
       const discriminatorKey = discriminator.join(',');
       instruction = this.instructionsByDiscriminator.get(discriminatorKey);
-      
+
       if (instruction) {
         return {
           name: instruction.name,
-          data: this.parseInstructionData(instruction, data.slice(8))
+          data: this.parseInstructionData(instruction, data.slice(8)),
         };
       }
     }
@@ -153,11 +153,11 @@ export class KinobiIdlParser {
     // Fallback: try to match by index if no discriminator match
     const index = data[0];
     instruction = this.instructionsByIndex.get(index);
-    
+
     if (instruction) {
       return {
         name: instruction.name,
-        data: this.parseInstructionData(instruction, data.slice(1))
+        data: this.parseInstructionData(instruction, data.slice(1)),
       };
     }
 
@@ -178,7 +178,7 @@ export class KinobiIdlParser {
 
     for (let i = 0; i < instruction.arguments.length; i++) {
       const arg = instruction.arguments[i];
-      
+
       // Check if this argument is omitted (like discriminator in SPL Token)
       const fullArg = fullInstruction?.arguments?.[i];
       if (fullArg?.defaultValueStrategy === 'omitted') {
@@ -239,24 +239,27 @@ export class KinobiIdlParser {
   private parseNumber(type: any, data: Buffer, offset: number): { value: any; bytesRead: number } {
     const format = type.format || 'u32';
     const endian = type.endian || 'le';
-    
+
     switch (format) {
       case 'u8':
         return { value: data[offset], bytesRead: 1 };
       case 'u16':
-        return { 
-          value: endian === 'le' ? data.readUInt16LE(offset) : data.readUInt16BE(offset), 
-          bytesRead: 2 
+        return {
+          value: endian === 'le' ? data.readUInt16LE(offset) : data.readUInt16BE(offset),
+          bytesRead: 2,
         };
       case 'u32':
-        return { 
-          value: endian === 'le' ? data.readUInt32LE(offset) : data.readUInt32BE(offset), 
-          bytesRead: 4 
+        return {
+          value: endian === 'le' ? data.readUInt32LE(offset) : data.readUInt32BE(offset),
+          bytesRead: 4,
         };
       case 'u64':
-        return { 
-          value: endian === 'le' ? data.readBigUInt64LE(offset).toString() : data.readBigUInt64BE(offset).toString(), 
-          bytesRead: 8 
+        return {
+          value:
+            endian === 'le'
+              ? data.readBigUInt64LE(offset).toString()
+              : data.readBigUInt64BE(offset).toString(),
+          bytesRead: 8,
         };
       default:
         return { value: 0, bytesRead: 1 };
@@ -271,7 +274,11 @@ export class KinobiIdlParser {
     return { value: 'Invalid PublicKey', bytesRead: 32 };
   }
 
-  private parseString(type: any, data: Buffer, offset: number): { value: string; bytesRead: number } {
+  private parseString(
+    type: any,
+    data: Buffer,
+    offset: number
+  ): { value: string; bytesRead: number } {
     // Assuming length-prefixed string (4-byte length)
     if (offset + 4 <= data.length) {
       const length = data.readUInt32LE(offset);
@@ -290,7 +297,7 @@ export class KinobiIdlParser {
     let hasValue = false;
     let prefixSize = 1;
     let currentOffset = offset;
-    
+
     if (type.prefix) {
       // Parse the prefix to determine if option has value
       const prefixResult = this.parseType(type.prefix, data, currentOffset);
@@ -302,19 +309,19 @@ export class KinobiIdlParser {
       hasValue = data[offset] !== 0;
       currentOffset += 1;
     }
-    
+
     if (!hasValue) {
       return { value: null, bytesRead: currentOffset - offset };
     }
-    
+
     const { value, bytesRead } = this.parseType(type.item, data, currentOffset);
-    return { value, bytesRead: (currentOffset - offset) + bytesRead };
+    return { value, bytesRead: currentOffset - offset + bytesRead };
   }
 
   private parseStruct(type: any, data: Buffer, offset: number): { value: any; bytesRead: number } {
     const result: any = {};
     let currentOffset = offset;
-    
+
     if (type.fields && Array.isArray(type.fields)) {
       for (const field of type.fields) {
         const { value, bytesRead } = this.parseType(field.type, data, currentOffset);
@@ -322,14 +329,14 @@ export class KinobiIdlParser {
         currentOffset += bytesRead;
       }
     }
-    
+
     return { value: result, bytesRead: currentOffset - offset };
   }
 
   private parseArray(type: any, data: Buffer, offset: number): { value: any[]; bytesRead: number } {
     const result: any[] = [];
     let currentOffset = offset;
-    
+
     // Determine array size
     let count = 0;
     if (type.count) {
@@ -342,21 +349,25 @@ export class KinobiIdlParser {
         currentOffset += prefixResult.bytesRead;
       }
     }
-    
+
     // Parse array elements
     for (let i = 0; i < count; i++) {
       const { value, bytesRead } = this.parseType(type.item, data, currentOffset);
       result.push(value);
       currentOffset += bytesRead;
     }
-    
+
     return { value: result, bytesRead: currentOffset - offset };
   }
 
-  private parseBytes(type: any, data: Buffer, offset: number): { value: string; bytesRead: number } {
+  private parseBytes(
+    type: any,
+    data: Buffer,
+    offset: number
+  ): { value: string; bytesRead: number } {
     let size = 0;
     let currentOffset = offset;
-    
+
     if (type.size) {
       if (typeof type.size === 'number') {
         size = type.size;
@@ -369,11 +380,11 @@ export class KinobiIdlParser {
         currentOffset += prefixResult.bytesRead;
       }
     }
-    
+
     const bytes = data.slice(currentOffset, currentOffset + size);
-    return { 
-      value: bytes.toString('hex'), 
-      bytesRead: (currentOffset - offset) + size 
+    return {
+      value: bytes.toString('hex'),
+      bytesRead: currentOffset - offset + size,
     };
   }
 

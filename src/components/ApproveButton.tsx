@@ -37,7 +37,7 @@ const ApproveButton = ({
     const actualProgramId = programId ? new PublicKey(programId) : multisig.PROGRAM_ID;
     // Get fresh blockhash
     const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-    
+
     const transaction = new Transaction();
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = wallet.publicKey;
@@ -68,7 +68,7 @@ const ApproveButton = ({
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
     transaction.add(approveProposalInstruction);
-    
+
     const signature = await wallet.sendTransaction(transaction, connection, {
       skipPreflight: true,
     });
@@ -76,7 +76,7 @@ const ApproveButton = ({
     toast.loading('Confirming...', {
       id: 'transaction',
     });
-    
+
     const sent = await waitForConfirmation(connection, [signature]);
     if (!sent[0]) {
       throw `Transaction failed or unable to confirm. Check ${signature}`;

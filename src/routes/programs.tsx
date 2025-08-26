@@ -29,7 +29,7 @@ const ProgramsPage = () => {
         <Suspense fallback={<div>Loading...</div>}>
           <div className="">
             <h1 className="mb-4 text-3xl font-bold">Program Manager</h1>
-            <div className="text-center py-8">
+            <div className="py-8 text-center">
               <p className="text-muted-foreground">
                 Please select a valid squad to manage programs.
               </p>

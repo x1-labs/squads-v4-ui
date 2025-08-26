@@ -13,7 +13,7 @@ import { Suspense } from 'react';
 const ConfigurationPage = () => {
   const { rpcUrl, multisigAddress, programId } = useMultisigData();
   const { data: multisigConfig } = useMultisig();
-  
+
   // Check if we have a valid multisig
   if (!multisigAddress || !multisigConfig) {
     return (
@@ -21,7 +21,7 @@ const ConfigurationPage = () => {
         <Suspense fallback={<div>Loading...</div>}>
           <div className="">
             <h1 className="mb-4 text-3xl font-bold">Multisig Configuration</h1>
-            <div className="text-center py-8">
+            <div className="py-8 text-center">
               <p className="text-muted-foreground">
                 Please select a valid squad to view configuration.
               </p>
@@ -31,29 +31,41 @@ const ConfigurationPage = () => {
       </ErrorBoundary>
     );
   }
-  
+
   // Check if this is a controlled multisig
-  const isControlled = multisigConfig?.configAuthority && 
+  const isControlled =
+    multisigConfig?.configAuthority &&
     multisigConfig.configAuthority.toBase58() !== '11111111111111111111111111111111';
-  
+
   return (
     <ErrorBoundary>
       <Suspense fallback={<div>Loading...</div>}>
         <div className="">
           <h1 className="mb-4 text-3xl font-bold">Multisig Configuration</h1>
-          
+
           {isControlled && (
-            <div className="mb-4 rounded-lg border border-warning/50 bg-warning/10 p-4">
+            <div className="border-warning/50 bg-warning/10 mb-4 rounded-lg border p-4">
               <div className="flex items-start gap-2">
-                <svg className="h-5 w-5 text-warning mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                <svg
+                  className="text-warning mt-0.5 h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
                 </svg>
                 <div className="flex-1">
-                  <p className="font-semibold text-warning">Controlled Multisig</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    This multisig is controlled by an external program. Configuration changes must be made through the controlling authority:
+                  <p className="text-warning font-semibold">Controlled Multisig</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    This multisig is controlled by an external program. Configuration changes must
+                    be made through the controlling authority:
                   </p>
-                  <p className="text-xs font-mono text-muted-foreground mt-2">
+                  <p className="mt-2 font-mono text-xs text-muted-foreground">
                     {multisigConfig?.configAuthority?.toBase58()}
                   </p>
                 </div>

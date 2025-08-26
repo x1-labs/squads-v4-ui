@@ -12,7 +12,7 @@ interface ViewDetailsButtonProps {
 export default function ViewDetailsButton({
   multisigPda,
   transactionIndex,
-  programId = multisig.PROGRAM_ID.toBase58()
+  programId = multisig.PROGRAM_ID.toBase58(),
 }: ViewDetailsButtonProps) {
   const navigate = useNavigate();
 
@@ -31,7 +31,7 @@ export default function ViewDetailsButton({
   return (
     <button
       onClick={handleClick}
-      className="h-8 px-3 text-sm bg-muted text-foreground rounded hover:bg-muted/80 transition-colors"
+      className="h-8 rounded bg-muted px-3 text-sm text-foreground transition-colors hover:bg-muted/80"
       title="View decoded transaction details"
     >
       Details

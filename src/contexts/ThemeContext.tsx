@@ -60,7 +60,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     // Save preference to localStorage
     localStorage.setItem('theme-preference', preference);
-    
+
     // Update theme based on preference
     if (preference === 'system') {
       setThemeState(getSystemTheme());
@@ -70,7 +70,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [preference]);
 
   const toggleTheme = () => {
-    setPreferenceState(prev => {
+    setPreferenceState((prev) => {
       if (prev === 'light') return 'dark';
       if (prev === 'dark') return 'light';
       // If system, toggle to opposite of current theme
@@ -90,7 +90,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     if (preference === 'system') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      
+
       const handleChange = (e: MediaQueryListEvent) => {
         setThemeState(e.matches ? 'dark' : 'light');
       };

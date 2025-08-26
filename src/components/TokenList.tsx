@@ -13,13 +13,13 @@ export function TokenList({ multisigPda }: TokenListProps) {
   const { vaultIndex, programId } = useMultisigData();
   const { data: solBalance } = useBalance();
   const { data: tokens = null } = useGetTokens();
-  
+
   // Format mint address for display
   const formatMint = (mint: string) => {
     if (mint.length <= 20) return mint;
     return `${mint.slice(0, 8)}...${mint.slice(-8)}`;
   };
-  
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -29,10 +29,10 @@ export function TokenList({ multisigPda }: TokenListProps) {
       <CardContent>
         {/* SOL Balance */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+          <div className="flex items-center justify-between rounded-lg bg-muted/30 p-3 transition-colors hover:bg-muted/50">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                <span className="text-white font-bold text-sm">SOL</span>
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500">
+                <span className="text-sm font-bold text-white">SOL</span>
               </div>
               <div>
                 <p className="font-medium">Solana</p>
@@ -43,20 +43,22 @@ export function TokenList({ multisigPda }: TokenListProps) {
             </div>
             <SendSol multisigPda={multisigPda} vaultIndex={vaultIndex} />
           </div>
-          
+
           {/* SPL Tokens */}
           {tokens && tokens.length > 0 && (
             <>
-              <div className="border-t border-border my-2" />
+              <div className="my-2 border-t border-border" />
               {tokens.map((token) => (
-                <div key={token.account.data.parsed.info.mint} 
-                     className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                <div
+                  key={token.account.data.parsed.info.mint}
+                  className="flex items-center justify-between rounded-lg bg-muted/30 p-3 transition-colors hover:bg-muted/50"
+                >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                      <span className="text-foreground font-bold text-xs">SPL</span>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                      <span className="text-xs font-bold text-foreground">SPL</span>
                     </div>
                     <div>
-                      <p className="font-medium font-mono text-sm">
+                      <p className="font-mono text-sm font-medium">
                         {formatMint(token.account.data.parsed.info.mint)}
                       </p>
                       <p className="text-sm text-muted-foreground">
@@ -76,10 +78,10 @@ export function TokenList({ multisigPda }: TokenListProps) {
               ))}
             </>
           )}
-          
+
           {/* Empty state */}
           {(!tokens || tokens.length === 0) && (!solBalance || solBalance === 0) && (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="py-8 text-center text-muted-foreground">
               <p className="text-sm">No assets in this vault</p>
             </div>
           )}

@@ -83,7 +83,7 @@ const RejectButton = ({
     const sent = await waitForConfirmation(connection, [signature], 30000);
     if (!sent || !sent[0]) {
       const txInfo = await connection.getTransaction(signature, {
-        maxSupportedTransactionVersion: 0
+        maxSupportedTransactionVersion: 0,
       });
       if (!txInfo) {
         throw `Transaction not found on chain. Signature: ${signature}`;

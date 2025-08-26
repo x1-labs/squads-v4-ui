@@ -21,11 +21,7 @@ class IdlManager {
 
   constructor() {
     // Initialize with known IDLs
-    this.addIdl(
-      'DDL3Xp6ie85DXgiPkXJ7abUyS2tGv4CGEod2DeQXQ941',
-      'Squads Multisig V4',
-      squadsV4Idl
-    );
+    this.addIdl('DDL3Xp6ie85DXgiPkXJ7abUyS2tGv4CGEod2DeQXQ941', 'Squads Multisig V4', squadsV4Idl);
 
     // Use the address from the IDL itself
     this.addIdl(
@@ -59,7 +55,7 @@ class IdlManager {
       programId,
       name,
       idl,
-      format: formatInfo.format
+      format: formatInfo.format,
     };
 
     // Create parser for Kinobi format
@@ -147,7 +143,7 @@ class IdlManager {
       const stored = localStorage.getItem('customIdls');
       if (stored) {
         const idls = JSON.parse(stored) as IdlEntry[];
-        idls.forEach(entry => {
+        idls.forEach((entry) => {
           // Recreate parser for Kinobi format IDLs
           if (entry.format === IdlFormat.KINOBI && entry.idl) {
             entry.parser = new KinobiIdlParser(entry.idl);
@@ -174,7 +170,7 @@ class IdlManager {
       ];
 
       const customIdls = Array.from(this.idls.values()).filter(
-        entry => !builtInIds.includes(entry.programId)
+        (entry) => !builtInIds.includes(entry.programId)
       );
 
       localStorage.setItem('customIdls', JSON.stringify(customIdls));
@@ -186,10 +182,7 @@ class IdlManager {
   /**
    * Fetch IDL from chain (if supported)
    */
-  async fetchIdlFromChain(
-    programId: string | PublicKey,
-    connection: any
-  ): Promise<any> {
+  async fetchIdlFromChain(programId: string | PublicKey, connection: any): Promise<any> {
     try {
       // This would need to be implemented based on how IDLs are stored on-chain
       // Some programs store their IDL in a PDA

@@ -29,9 +29,10 @@ const CreateTransaction = () => {
 
   const { connection, multisigAddress, vaultIndex, programId } = useMultisigData();
   const { data: multisigConfig } = useMultisig();
-  
+
   // Check if this is a controlled multisig
-  const isControlled = multisigConfig?.configAuthority && 
+  const isControlled =
+    multisigConfig?.configAuthority &&
     multisigConfig.configAuthority.toBase58() !== '11111111111111111111111111111111';
 
   const getSampleMessage = async () => {
@@ -83,23 +84,34 @@ const CreateTransaction = () => {
             Propose a transaction from a base58 encoded transaction message (not a transaction).
           </DialogDescription>
         </DialogHeader>
-        
+
         {isControlled && (
-          <div className="rounded-lg border border-warning/50 bg-warning/10 p-3">
+          <div className="border-warning/50 bg-warning/10 rounded-lg border p-3">
             <div className="flex items-start gap-2">
-              <svg className="h-4 w-4 text-warning mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              <svg
+                className="text-warning mt-0.5 h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
               </svg>
               <div className="flex-1">
-                <p className="text-sm font-medium text-warning">Controlled Multisig</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Configuration transactions are not supported for controlled multisigs. Only regular vault transactions can be created.
+                <p className="text-warning text-sm font-medium">Controlled Multisig</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Configuration transactions are not supported for controlled multisigs. Only
+                  regular vault transactions can be created.
                 </p>
               </div>
             </div>
           </div>
         )}
-        
+
         <div className={`flex items-center justify-between gap-2`}>
           <p>Using Vault Index:</p>
           <VaultSelector />
