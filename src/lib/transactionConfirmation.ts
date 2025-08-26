@@ -15,12 +15,12 @@ export async function waitForConfirmation(
           await connection.getSignatureStatuses(signatures);
         latestStatuses = response.value; // Store latest response
 
-        // Check if the signatures are confirmed
+        // Check if the signatures are confirmed or have errors
         if (
           latestStatuses.every(
             (status) =>
-              (!status?.err || Object.keys(status?.err).length === 0) &&
-              status?.confirmationStatus === 'confirmed'
+              status?.confirmationStatus === 'confirmed' ||
+              status?.confirmationStatus === 'finalized'
           )
         ) {
           return resolve(latestStatuses);
