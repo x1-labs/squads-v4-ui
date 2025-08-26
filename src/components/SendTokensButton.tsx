@@ -25,6 +25,7 @@ import { useMultisigData } from '~/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '../hooks/useAccess';
 import { waitForConfirmation } from '../lib/transactionConfirmation';
+import { formatError } from '@/lib/utils/errorHandler';
 
 type SendTokensProps = {
   tokenAccount: string;
@@ -127,6 +128,7 @@ const SendTokens = ({
       addressLookupTableAccounts: [],
       rentPayer: wallet.publicKey,
       vaultIndex: vaultIndex,
+      programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
     const proposalIx = multisig.instructions.proposalCreate({
       multisigPda: new PublicKey(multisigPda),
@@ -158,9 +160,43 @@ const SendTokens = ({
     toast.loading('Confirming...', {
       id: 'transaction',
     });
+    
     const sent = await waitForConfirmation(connection, [signature]);
-    if (!sent[0]) {
-      throw `Transaction failed or unable to confirm. Check ${signature}`;
+    console.log('Transaction confirmation status:', sent);
+    
+    if (!sent || !sent[0]) {
+      throw `Transaction failed: Unable to confirm transaction. Check explorer for signature: ${signature}`;
+    }
+    
+    // Check for errors in the transaction
+    const status = sent[0];
+    if (status.err) {
+      console.error('Transaction error:', status.err);
+      
+      // Extract the actual error message
+      let errorMessage = '';
+      let errorCode = '';
+      
+      if (typeof status.err === 'string') {
+        errorMessage = status.err;
+        errorCode = status.err;
+      } else if (typeof status.err === 'object') {
+        errorMessage = JSON.stringify(status.err);
+        errorCode = errorMessage;
+      }
+      
+      // Provide helpful context for common errors
+      if (errorCode.includes('ProgramAccountNotFound') || errorCode === 'ProgramAccountNotFound') {
+        throw `Transaction failed: The vault's token account for this mint doesn't exist. The vault needs to receive some of this token first before it can send it. Transaction: ${signature}`;
+      }
+      if (errorCode.includes('InsufficientFunds') || errorCode === 'InsufficientFunds') {
+        throw `Transaction failed: The vault has insufficient token balance to complete this transfer. Transaction: ${signature}`;
+      }
+      if (errorCode.includes('AccountNotFound') || errorCode === 'AccountNotFound') {
+        throw `Transaction failed: One of the required accounts was not found. This might mean the recipient's token account needs to be created. Transaction: ${signature}`;
+      }
+      
+      throw `Transaction failed: ${errorMessage || errorCode || 'Unknown error'}. Transaction: ${signature}`;
     }
     setAmount('');
     setRecipient('');
@@ -211,7 +247,7 @@ const SendTokens = ({
               id: 'transaction',
               loading: 'Loading...',
               success: 'Transfer proposed.',
-              error: (e) => `Failed to propose: ${e}`,
+              error: (e) => `Failed to propose: ${formatError(e)}`,
             })
           }
           disabled={!isPublickey(recipient) || amount.length < 1 || !isAmountValid}
