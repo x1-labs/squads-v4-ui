@@ -25,8 +25,25 @@ export default function TransactionsPage() {
     page = 1;
   }
   const { multisigAddress, programId } = useMultisigData();
-
   const { data } = useMultisig();
+  
+  // Check if we have a valid multisig
+  if (!multisigAddress || !data) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<div>Loading...</div>}>
+          <div className="">
+            <h1 className="text-3xl font-bold">Transactions</h1>
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">
+                Please select a valid squad to view transactions.
+              </p>
+            </div>
+          </div>
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
 
   const totalTransactions = Number(data ? data.transactionIndex : 0);
   const totalPages = Math.ceil(totalTransactions / TRANSACTIONS_PER_PAGE);

@@ -14,6 +14,24 @@ const ConfigurationPage = () => {
   const { rpcUrl, multisigAddress, programId } = useMultisigData();
   const { data: multisigConfig } = useMultisig();
   
+  // Check if we have a valid multisig
+  if (!multisigAddress || !multisigConfig) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<div>Loading...</div>}>
+          <div className="">
+            <h1 className="mb-4 text-3xl font-bold">Multisig Configuration</h1>
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">
+                Please select a valid squad to view configuration.
+              </p>
+            </div>
+          </div>
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+  
   // Check if this is a controlled multisig
   const isControlled = multisigConfig?.configAuthority && 
     multisigConfig.configAuthority.toBase58() !== '11111111111111111111111111111111';
