@@ -6,11 +6,12 @@ import { CheckCircle, Circle, XCircle, Clock } from 'lucide-react';
 interface ApprovalStatusProps {
   proposal: multisig.generated.Proposal | null;
   compact?: boolean;
+  isStale?: boolean;
 }
 
-export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({ proposal, compact = false }) => {
+export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({ proposal, compact = false, isStale = false }) => {
   const { data: multisigConfig } = useMultisig();
-  
+
   if (!proposal || !multisigConfig) {
     return null;
   }
@@ -21,20 +22,40 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({ proposal, compac
   const cancelledCount = proposal.cancelled.length;
   const status = proposal.status.__kind;
 
+  // Helper function to get status display text
+  const getStatusDisplay = () => {
+    // Don't show approval count for executed/cancelled/rejected as threshold may have changed
+    if (['Executed', 'Cancelled', 'Rejected'].includes(status)) {
+      return status;
+    }
+    if (isStale) {
+      return 'Stale';
+    }
+    return `${approvedCount}/${threshold}`;
+  };
+
+  // Check if status is finalized (no longer active)
+  const isFinalized = ['Executed', 'Cancelled', 'Rejected'].includes(status);
+
   // Calculate progress percentage
   const progressPercentage = (approvedCount / threshold) * 100;
 
   // Determine status color
   const getStatusColor = () => {
+    // If transaction is stale but not executed/cancelled, grey it out
+    if (isStale && status !== 'Executed' && status !== 'Cancelled') {
+      return 'text-muted-foreground bg-muted border-border';
+    }
+
     switch (status) {
       case 'Approved':
         return 'text-green-500 bg-green-500/10 border-green-500/20';
       case 'Rejected':
-        return 'text-destructive bg-destructive/10 border-destructive/20';
+        return 'text-muted-foreground bg-muted border-border';
       case 'Cancelled':
         return 'text-muted-foreground bg-muted border-border';
       case 'Executed':
-        return 'text-primary bg-primary/10 border-primary/20';
+        return 'text-muted-foreground bg-muted border-border';
       case 'Active':
       case 'Draft':
         if (approvedCount >= threshold) {
@@ -49,9 +70,11 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({ proposal, compac
   const getStatusIcon = () => {
     switch (status) {
       case 'Approved':
+        return <CheckCircle className="w-4 h-4" />;
       case 'Executed':
         return <CheckCircle className="w-4 h-4" />;
       case 'Rejected':
+        return <XCircle className="w-4 h-4" />;
       case 'Cancelled':
         return <XCircle className="w-4 h-4" />;
       case 'Active':
@@ -72,14 +95,10 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({ proposal, compac
         <div className={`flex items-center gap-1 px-2 py-1 rounded-md border ${getStatusColor()}`}>
           {getStatusIcon()}
           <span className="text-xs font-medium">
-            {/* Don't show approval count for executed/cancelled/rejected as threshold may have changed */}
-            {['Executed', 'Cancelled', 'Rejected'].includes(status) 
-              ? status 
-              : `${approvedCount}/${threshold}`
-            }
+            {getStatusDisplay()}
           </span>
         </div>
-        {rejectedCount > 0 && !['Executed', 'Cancelled', 'Rejected'].includes(status) && (
+        {rejectedCount > 0 && !isFinalized && (
           <span className="text-xs text-destructive">
             ({rejectedCount} rejected)
           </span>
@@ -89,14 +108,14 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({ proposal, compac
   }
 
   // Check if we should hide the progress bar
-  const hideProgressBar = ['Executed', 'Cancelled', 'Rejected'].includes(status);
+  const hideProgressBar = isFinalized;
 
   // Detailed view for transaction details page
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         {/* Only show approvals count for active proposals */}
-        {['Executed', 'Cancelled', 'Rejected'].includes(status) ? (
+        {isFinalized ? (
           <div className={`flex items-center gap-1 ${getStatusColor().split(' ')[0]}`}>
             {getStatusIcon()}
             <span className="text-sm font-medium capitalize">{status.toLowerCase()}</span>
@@ -120,13 +139,13 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({ proposal, compac
       {/* Progress bar - only show for active proposals */}
       {!hideProgressBar && (
         <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 relative">
-          <div 
+          <div
             className={`absolute top-0 left-0 h-full rounded-full transition-all duration-300 ${
               approvedCount >= threshold ? 'bg-green-500' : 'bg-yellow-400'
             }`}
-            style={{ 
+            style={{
               width: `${Math.min(progressPercentage, 100)}%`,
-              minWidth: approvedCount > 0 ? '1rem' : '0' 
+              minWidth: approvedCount > 0 ? '1rem' : '0'
             }}
           />
         </div>
@@ -139,20 +158,28 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({ proposal, compac
             <span className="text-xs text-muted-foreground block mb-1">Approved by:</span>
             <div className="flex flex-wrap gap-1">
               {proposal.approved.map((member, idx) => (
-                <span key={idx} className="text-xs bg-green-500/10 text-green-600 dark:text-green-400 px-2 py-1 rounded">
+                <span key={idx} className={`text-xs px-2 py-1 rounded ${
+                  isFinalized || isStale
+                    ? 'bg-muted text-muted-foreground'
+                    : 'bg-green-500/10 text-green-600 dark:text-green-400'
+                }`}>
                   {member.toBase58().slice(0, 4)}...{member.toBase58().slice(-4)}
                 </span>
               ))}
             </div>
           </div>
         )}
-        
+
         {rejectedCount > 0 && (
           <div>
             <span className="text-xs text-muted-foreground block mb-1">Rejected by:</span>
             <div className="flex flex-wrap gap-1">
               {proposal.rejected.map((member, idx) => (
-                <span key={idx} className="text-xs bg-destructive/10 text-destructive px-2 py-1 rounded">
+                <span key={idx} className={`text-xs px-2 py-1 rounded ${
+                  isFinalized || isStale
+                    ? 'bg-muted text-muted-foreground'
+                    : 'bg-destructive/10 text-destructive'
+                }`}>
                   {member.toBase58().slice(0, 4)}...{member.toBase58().slice(-4)}
                 </span>
               ))}

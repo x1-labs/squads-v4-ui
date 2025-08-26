@@ -37,7 +37,7 @@ export default function TransactionTable({
 }) {
   const navigate = useNavigate();
   const { data: multisigConfig } = useMultisig();
-  
+
   if (transactions.length === 0) {
     return (
       <TableBody>
@@ -57,7 +57,7 @@ export default function TransactionTable({
       </TableBody>
     );
   }
-  
+
   const handleRowClick = (transactionPda: string, e: React.MouseEvent) => {
     // Don't navigate if clicking on a button
     const target = e.target as HTMLElement;
@@ -66,7 +66,7 @@ export default function TransactionTable({
     }
     navigate(`/transactions/${transactionPda}`);
   };
-  
+
   return (
     <TableBody>
       {transactions.map((transaction, index) => {
@@ -76,9 +76,9 @@ export default function TransactionTable({
           false;
         const isExecuted = transaction.proposal?.status.__kind === 'Executed';
         const isCancelled = transaction.proposal?.status.__kind === 'Cancelled';
-        const isGreyedOut = isExecuted || isCancelled;
+        const isGreyedOut = isExecuted || isCancelled || stale;
         return (
-          <TableRow 
+          <TableRow
             key={index}
             onClick={(e) => handleRowClick(transaction.transactionPda, e)}
             className={`cursor-pointer transition-colors ${
@@ -105,7 +105,7 @@ export default function TransactionTable({
                   <span className="text-xs font-mono text-muted-foreground">
                     {formatAddress(transaction.transactionPda)}
                   </span>
-                  <button 
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
                       navigator.clipboard.writeText(transaction.transactionPda);
@@ -122,20 +122,12 @@ export default function TransactionTable({
               </div>
             </TableCell>
             <TableCell className={isGreyedOut ? 'text-muted-foreground' : ''}>
-              {stale ? (
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                    Stale
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <ApprovalStatus proposal={transaction.proposal} compact={true} />
-                </div>
-              )}
+              <div className="flex items-center gap-3">
+                <ApprovalStatus proposal={transaction.proposal} compact={true} isStale={stale} />
+              </div>
             </TableCell>
             <TableCell className="text-right">
-              {!stale && (
+              {(!stale || isExecuted || isCancelled) && (
                 <ActionButtons
                   multisigPda={multisigPda!}
                   transactionIndex={Number(transaction.index)}
@@ -161,7 +153,7 @@ function ActionButtons({
   const showReject = ['None', 'Draft', 'Active'].includes(proposalStatus);
   const showExecute = proposalStatus === 'Approved';
   const showCancel = proposalStatus === 'Approved';
-  
+
   return (
     <div className="flex items-center justify-end gap-1">
       {showReject && (
