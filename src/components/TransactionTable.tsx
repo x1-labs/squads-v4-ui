@@ -2,6 +2,7 @@ import * as multisig from '@sqds/multisig';
 import ExecuteButton from './ExecuteButton';
 import RejectButton from './RejectButton';
 import CancelButton from './CancelButton';
+import ReviewButton from './ReviewButton';
 import { TransactionProgramBadge } from './TransactionProgramBadge';
 import { ApprovalStatus } from './ApprovalStatus';
 import { TableBody, TableCell, TableRow } from './ui/table';
@@ -18,6 +19,7 @@ function formatAddress(address: string): string {
 interface ActionButtonsProps {
   multisigPda: string;
   transactionIndex: number;
+  transactionPda: string;
   proposalStatus: string;
   programId: string;
 }
@@ -131,6 +133,7 @@ export default function TransactionTable({
                 <ActionButtons
                   multisigPda={multisigPda!}
                   transactionIndex={Number(transaction.index)}
+                  transactionPda={transaction.transactionPda}
                   proposalStatus={transaction.proposal?.status.__kind || 'None'}
                   programId={programId ? programId : multisig.PROGRAM_ID.toBase58()}
                 />
@@ -146,6 +149,7 @@ export default function TransactionTable({
 function ActionButtons({
   multisigPda,
   transactionIndex,
+  transactionPda,
   proposalStatus,
   programId,
 }: ActionButtonsProps) {
@@ -156,6 +160,9 @@ function ActionButtons({
 
   return (
     <div className="flex items-center justify-end gap-1">
+      {showReject && (
+        <ReviewButton transactionPda={transactionPda} />
+      )}
       {showReject && (
         <RejectButton
           multisigPda={multisigPda}
