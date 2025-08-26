@@ -127,17 +127,12 @@ export class KinobiIdlParser {
     let instruction = this.instructionsByDiscriminator.get(singleByteKey);
     
     if (instruction) {
-      // For single-byte discriminator, data starts at byte 1
-      // But check if discriminator is marked as "omitted" in the arguments
-      const discriminatorArg = instruction.arguments.find(arg => arg.name === 'discriminator');
-      const startOffset = discriminatorArg && 
-        this.idl.program.instructions.find((i: any) => i.name === instruction!.name)
-          ?.arguments?.find((a: any) => a.name === 'discriminator')?.defaultValueStrategy === 'omitted' 
-        ? 0 : 1;
-      
+      // For single-byte discriminator, the discriminator byte is at position 0
+      // SPL Token marks discriminator as "omitted" meaning it's not part of the args to parse
+      // but it IS present in the data, so we skip it and start parsing args at byte 1
       return {
         name: instruction.name,
-        data: this.parseInstructionData(instruction, data.slice(startOffset))
+        data: this.parseInstructionData(instruction, data.slice(1))
       };
     }
 

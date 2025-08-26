@@ -8,6 +8,7 @@ export interface DecodedInstruction {
   programId: string;
   programName: string;
   instructionName: string;
+  humanReadable?: string;
   innerInstructions?: DecodedInstruction[];
   accounts: Array<{
     name?: string;
@@ -31,6 +32,161 @@ export interface DecodedTransaction {
 export class SimpleDecoder {
   private connection: Connection;
   private instructionCoders: Map<string, BorshInstructionCoder> = new Map();
+  
+  /**
+   * Format token amount with decimals
+   */
+  private formatTokenAmount(amount: string | number | bigint, decimals: number = 0): string {
+    const amountBigInt = typeof amount === 'bigint' ? amount : BigInt(amount.toString());
+    if (decimals === 0) {
+      return amountBigInt.toString();
+    }
+    
+    const divisor = BigInt(10 ** decimals);
+    const wholePart = amountBigInt / divisor;
+    const fractionalPart = amountBigInt % divisor;
+    
+    if (fractionalPart === BigInt(0)) {
+      return wholePart.toString();
+    }
+    
+    const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
+    // Remove trailing zeros
+    const trimmed = fractionalStr.replace(/0+$/, '');
+    return `${wholePart}.${trimmed}`;
+  }
+  
+  /**
+   * Format SOL amount (9 decimals)
+   */
+  private formatSolAmount(lamports: string | number | bigint): string {
+    return this.formatTokenAmount(lamports, 9);
+  }
+  
+  /**
+   * Truncate address for display
+   */
+  private truncateAddress(address: string): string {
+    if (address.length <= 10) return address;
+    return `${address.slice(0, 4)}...${address.slice(-4)}`;
+  }
+  
+  /**
+   * Generate human-readable message for token instructions
+   */
+  private generateTokenInstructionMessage(
+    instructionName: string,
+    args: any,
+    accountKeys: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>,
+    useTruncated: boolean = false
+  ): string | undefined {
+    const name = instructionName.toLowerCase();
+    
+    if (name === 'transfer' || name === 'transferchecked') {
+      const amount = args.amount || '0';
+      const decimals = args.decimals;
+      
+      // Format amount with decimals if available
+      // For basic transfer, decimals are not included in the instruction
+      let formattedAmount: string;
+      if (decimals !== undefined && decimals !== null) {
+        formattedAmount = this.formatTokenAmount(amount, decimals);
+      } else {
+        // For basic transfer without decimals, try common decimal places
+        // Most SPL tokens use 6 or 9 decimals
+        const amountStr = amount.toString();
+        
+        // Try 9 decimals first (most common for SPL tokens)
+        const with9Decimals = this.formatTokenAmount(amount, 9);
+        // Only show alternative if significantly different
+        if (amountStr.length > 10) {
+          const with6Decimals = this.formatTokenAmount(amount, 6);
+          formattedAmount = `${with9Decimals} (likely) or ${with6Decimals}`;
+        } else if (amountStr.length > 7) {
+          formattedAmount = with9Decimals;
+        } else {
+          // Very small amount, show raw
+          formattedAmount = `${amountStr} smallest units`;
+        }
+      }
+      
+      // Get account addresses - use full addresses for summary
+      const fromAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
+      const from = useTruncated ? this.truncateAddress(fromAddr) : fromAddr;
+      
+      const toIndex = name === 'transferchecked' ? 2 : 1;
+      const toAddr = accountKeys[toIndex]?.pubkey?.toBase58() || 'Unknown';
+      const to = useTruncated ? this.truncateAddress(toAddr) : toAddr;
+      
+      // Get mint address - for basic transfer, there's no mint in the accounts
+      let mint = 'tokens';
+      if (name === 'transferchecked' && accountKeys[1]?.pubkey) {
+        const mintAddr = accountKeys[1].pubkey.toBase58();
+        mint = useTruncated ? this.truncateAddress(mintAddr) : mintAddr;
+      }
+      
+      return `Transfer ${formattedAmount}\nToken: ${mint}\nFrom: ${from}\nTo: ${to}`;
+    }
+    
+    if (name === 'mintto' || name === 'minttochecked') {
+      const amount = args.amount || '0';
+      const decimals = args.decimals;
+      
+      const formattedAmount = (decimals !== undefined && decimals !== null)
+        ? this.formatTokenAmount(amount, decimals)
+        : `${amount} (raw)`;
+      
+      const mintAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
+      const mint = useTruncated ? this.truncateAddress(mintAddr) : mintAddr;
+      const toAddr = accountKeys[1]?.pubkey?.toBase58() || 'Unknown';
+      const to = useTruncated ? this.truncateAddress(toAddr) : toAddr;
+      
+      return `Mint ${formattedAmount}\nToken: ${mint}\nTo: ${to}`;
+    }
+    
+    if (name === 'burn' || name === 'burnchecked') {
+      const amount = args.amount || '0';
+      const decimals = args.decimals;
+      
+      const formattedAmount = (decimals !== undefined && decimals !== null)
+        ? this.formatTokenAmount(amount, decimals)
+        : `${amount} (raw)`;
+      
+      const accountAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
+      const account = useTruncated ? this.truncateAddress(accountAddr) : accountAddr;
+      const mintAddr = accountKeys[1]?.pubkey?.toBase58() || 'tokens';
+      const mint = useTruncated ? this.truncateAddress(mintAddr) : mintAddr;
+      
+      return `Burn ${formattedAmount}\nToken: ${mint}\nFrom: ${account}`;
+    }
+    
+    if (name === 'approve' || name === 'approvechecked') {
+      const amount = args.amount || '0';
+      const decimals = args.decimals;
+      
+      const formattedAmount = (decimals !== undefined && decimals !== null)
+        ? this.formatTokenAmount(amount, decimals)
+        : `${amount} (raw)`;
+      
+      const accountAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
+      const account = useTruncated ? this.truncateAddress(accountAddr) : accountAddr;
+      const delegateAddr = accountKeys[2]?.pubkey?.toBase58() || 'Unknown';
+      const delegate = useTruncated ? this.truncateAddress(delegateAddr) : delegateAddr;
+      
+      return `Approve ${formattedAmount} tokens\nDelegate: ${delegate}\nFrom: ${account}`;
+    }
+    
+    if (name === 'closeaccount') {
+      const accountAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
+      const account = useTruncated ? this.truncateAddress(accountAddr) : accountAddr;
+      const destAddr = accountKeys[1]?.pubkey?.toBase58() || 'Unknown';
+      const dest = useTruncated ? this.truncateAddress(destAddr) : destAddr;
+      
+      return `Close token account\nAccount: ${account}\nReturn rent to: ${dest}`;
+    }
+    
+    return undefined;
+  }
   
   constructor(connection: Connection) {
     this.connection = connection;
@@ -541,7 +697,15 @@ export class SimpleDecoder {
           const instruction = idlEntry.parser.getInstruction(decoded.name);
           const accountNames = instruction?.accounts?.map(acc => acc.name) || [];
           
-          return {
+          // Generate human-readable message for token transfers
+          let humanReadable: string | undefined;
+          if (programIdStr === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' || 
+              programIdStr === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') {
+            // Use full addresses for the summary display
+            humanReadable = this.generateTokenInstructionMessage(decoded.name, decoded.data, accountKeys, false);
+          }
+          
+          const result: DecodedInstruction = {
             programId: programIdStr,
             programName: this.getProgramName(programIdStr),
             instructionName: this.formatInstructionName(decoded.name),
@@ -554,6 +718,12 @@ export class SimpleDecoder {
             args: decoded.data || {},
             rawData: data.toString('hex').slice(0, 100)
           };
+          
+          if (humanReadable) {
+            result.humanReadable = humanReadable;
+          }
+          
+          return result;
         }
       } catch (error) {
         console.warn(`Kinobi parser failed for known program ${programIdStr}, falling back to hardcoded parsing:`, error);
@@ -632,6 +802,7 @@ export class SimpleDecoder {
   ): DecodedInstruction {
     const instructionType = data.readUInt32LE(0);
     let instructionName = 'Unknown System Instruction';
+    let humanReadable: string | undefined;
     let args: any = {};
     
     switch (instructionType) {
@@ -651,6 +822,11 @@ export class SimpleDecoder {
           args = {
             lamports: data.readBigUInt64LE(4).toString(),
           };
+          // Generate human-readable message with full addresses
+          const amount = this.formatSolAmount(args.lamports);
+          const from = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
+          const to = accountKeys[1]?.pubkey?.toBase58() || 'Unknown';
+          humanReadable = `Transfer ${amount} SOL\nFrom: ${from}\nTo: ${to}`;
         }
         break;
       case 3: // Assign
@@ -671,7 +847,7 @@ export class SimpleDecoder {
         break;
     }
     
-    return {
+    const result: DecodedInstruction = {
       programId: '11111111111111111111111111111111',
       programName: 'System Program',
       instructionName,
@@ -683,6 +859,12 @@ export class SimpleDecoder {
       })),
       args
     };
+    
+    if (humanReadable) {
+      result.humanReadable = humanReadable;
+    }
+    
+    return result;
   }
   
   /**
@@ -695,6 +877,7 @@ export class SimpleDecoder {
   ): DecodedInstruction {
     const instructionType = data[0];
     let instructionName = 'Unknown Token Instruction';
+    let humanReadable: string | undefined;
     let args: any = {};
     
     switch (instructionType) {
@@ -723,6 +906,11 @@ export class SimpleDecoder {
           args = {
             amount: data.readBigUInt64LE(1).toString(),
           };
+          // Generate human-readable message
+          // For basic transfer, we don't know decimals, so just show raw amount with full addresses
+          const from = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
+          const to = accountKeys[1]?.pubkey?.toBase58() || 'Unknown';
+          humanReadable = `Transfer ${args.amount} tokens (raw amount)\nFrom: ${from}\nTo: ${to}`;
         }
         break;
       case 4: // Approve
@@ -780,6 +968,12 @@ export class SimpleDecoder {
             amount: data.readBigUInt64LE(1).toString(),
             decimals: data[9]
           };
+          // Generate human-readable message with proper decimals and full addresses
+          const formattedAmount = this.formatTokenAmount(args.amount, args.decimals);
+          const from = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
+          const to = accountKeys[2]?.pubkey?.toBase58() || 'Unknown';
+          const mint = accountKeys[1]?.pubkey?.toBase58() || 'token';
+          humanReadable = `Transfer ${formattedAmount}\nToken: ${mint}\nFrom: ${from}\nTo: ${to}`;
         }
         break;
       case 13: // ApproveChecked
@@ -848,7 +1042,7 @@ export class SimpleDecoder {
     
     const isToken2022 = programId === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
     
-    return {
+    const result: DecodedInstruction = {
       programId,
       programName: isToken2022 ? 'Token-2022 Program' : 'Token Program',
       instructionName,
@@ -860,6 +1054,12 @@ export class SimpleDecoder {
       })),
       args
     };
+    
+    if (humanReadable) {
+      result.humanReadable = humanReadable;
+    }
+    
+    return result;
   }
   
   /**

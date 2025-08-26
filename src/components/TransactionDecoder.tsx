@@ -100,6 +100,11 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
             <h3 className="text-lg font-semibold text-foreground">
               {instruction.instructionName}
             </h3>
+            {instruction.humanReadable && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {instruction.humanReadable.split('\n')[0]}
+              </p>
+            )}
           </div>
           <button className="text-muted-foreground hover:text-foreground">
             {isExpanded ? '▼' : '▶'}
@@ -245,6 +250,45 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
           Decoded instructions and transaction information
         </p>
       </div>
+
+      {/* Transaction Summary - Show human-readable messages if available */}
+      {decodedTx.instructions.some(ix => ix.humanReadable) && (
+        <div className="bg-card border border-border rounded-lg p-4 mb-6">
+          <h3 className="font-semibold mb-4 text-foreground">Transaction Summary</h3>
+          <div className="space-y-3">
+            {decodedTx.instructions
+              .filter(ix => ix.humanReadable)
+              .map((ix, idx) => (
+                <div key={idx} className="bg-muted/30 rounded-lg p-4">
+                  <div className="text-sm space-y-1">
+                    {ix.humanReadable?.split('\n').map((line, lineIdx) => {
+                      const [label, ...valueParts] = line.split(':');
+                      const value = valueParts.join(':').trim();
+                      
+                      if (value) {
+                        // Line with label and value
+                        return (
+                          <div key={lineIdx} className="flex items-start gap-2">
+                            <span className="text-muted-foreground min-w-[60px]">{label}:</span>
+                            <code className="text-foreground font-mono text-xs break-all">{value}</code>
+                          </div>
+                        );
+                      } else {
+                        // First line (action and amount)
+                        return (
+                          <div key={lineIdx} className="font-semibold text-foreground mb-2">
+                            {label}
+                          </div>
+                        );
+                      }
+                    })}
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      )}
 
       {/* Transaction Overview */}
       <div className="bg-card border border-border rounded-lg p-4 mb-6">
