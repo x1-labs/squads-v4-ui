@@ -1,6 +1,4 @@
 {
-  "version": "0.1.0",
-  "name": "delegation_program",
   "address": "X1dpTaMXkdEHQwhUk5oidxK9RXer8WoUCinWTyRmVjQ",
   "metadata": {
     "name": "delegation_program",
@@ -10,13 +8,97 @@
   },
   "instructions": [
     {
-      "name": "admin_create_validator",
+      "name": "apply_validator",
+      "docs": [
+        "Apply for the delegation program",
+        "",
+        "Validators can self-register by calling this instruction.",
+        "On success the validator will be moved to the `ValidatorStatus::Pending` state"
+      ],
+      "discriminator": [176, 87, 141, 154, 249, 219, 197, 248],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
+              },
+              {
+                "kind": "account",
+                "path": "identity"
+              }
+            ]
+          }
+        },
+        {
+          "name": "identity",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "approve_validator",
+      "docs": [
+        "Approve a validator (admin only)",
+        "",
+        "On success the validator will be moved to the `ValidatorStatus::Approved` state"
+      ],
+      "discriminator": [185, 132, 52, 190, 111, 119, 13, 252],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
+              },
+              {
+                "kind": "account",
+                "path": "validator.identity",
+                "account": "ValidatorInfo"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_validator",
       "docs": [
         "Admin create validator (admin only)",
         "",
         "Create a new validator account with the specified status"
       ],
-      "discriminator": [91, 206, 236, 176, 171, 168, 219, 20],
+      "discriminator": [223, 156, 228, 103, 198, 99, 177, 99],
       "accounts": [
         {
           "name": "validator",
@@ -72,137 +154,6 @@
       ]
     },
     {
-      "name": "admin_remove",
-      "docs": [
-        "Remove a validator (admin only)",
-        "",
-        "On success the validator account will be deleted and lamports refunded to the admin"
-      ],
-      "discriminator": [20, 205, 213, 175, 146, 42, 27, 111],
-      "accounts": [
-        {
-          "name": "validator",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
-              },
-              {
-                "kind": "account",
-                "path": "validator.identity",
-                "account": "ValidatorInfo"
-              }
-            ]
-          }
-        },
-        {
-          "name": "admin",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "config",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
-                ]
-              }
-            ]
-          }
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "apply",
-      "docs": [
-        "Apply for the delegation program",
-        "",
-        "Validators can self-register by calling this instruction.",
-        "On success the validator will be moved to the `ValidatorStatus::Pending` state"
-      ],
-      "discriminator": [248, 243, 145, 24, 105, 50, 162, 225],
-      "accounts": [
-        {
-          "name": "validator",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
-              },
-              {
-                "kind": "account",
-                "path": "identity"
-              }
-            ]
-          }
-        },
-        {
-          "name": "identity",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "approve",
-      "docs": [
-        "Approve a validator (admin only)",
-        "",
-        "On success the validator will be moved to the `ValidatorStatus::Approved` state"
-      ],
-      "discriminator": [69, 74, 217, 36, 115, 117, 97, 76],
-      "accounts": [
-        {
-          "name": "validator",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
-              },
-              {
-                "kind": "account",
-                "path": "validator.identity",
-                "account": "ValidatorInfo"
-              }
-            ]
-          }
-        },
-        {
-          "name": "admin",
-          "signer": true
-        },
-        {
-          "name": "config",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
-                ]
-              }
-            ]
-          }
-        }
-      ],
-      "args": []
-    },
-    {
       "name": "initialize_config",
       "docs": ["Initialize the delegation config account with all criteria"],
       "discriminator": [208, 127, 21, 1, 194, 190, 196, 70],
@@ -243,13 +194,13 @@
       ]
     },
     {
-      "name": "reject",
+      "name": "reject_validator",
       "docs": [
         "Reject a validator (admin only)",
         "",
         "On success the validator will be moved to the `ValidatorStatus::Rejected` state"
       ],
-      "discriminator": [135, 7, 63, 85, 131, 114, 111, 224],
+      "discriminator": [163, 129, 205, 116, 160, 61, 120, 97],
       "accounts": [
         {
           "name": "validator",
@@ -289,13 +240,13 @@
       "args": []
     },
     {
-      "name": "rewrite",
+      "name": "remove_validator",
       "docs": [
-        "Rewrite a validator account to the provided state (admin only)",
+        "Remove a validator (admin only)",
         "",
-        "Bypass the normal workflow and set validator to any state"
+        "On success the validator account will be deleted and lamports refunded to the admin"
       ],
-      "discriminator": [19, 98, 114, 10, 240, 115, 13, 1],
+      "discriminator": [25, 96, 211, 155, 161, 14, 168, 188],
       "accounts": [
         {
           "name": "validator",
@@ -316,6 +267,7 @@
         },
         {
           "name": "admin",
+          "writable": true,
           "signer": true
         },
         {
@@ -332,16 +284,7 @@
           }
         }
       ],
-      "args": [
-        {
-          "name": "new_status",
-          "type": {
-            "defined": {
-              "name": "ValidatorStatus"
-            }
-          }
-        }
-      ]
+      "args": []
     },
     {
       "name": "transfer_authority",
@@ -455,9 +398,9 @@
       ]
     },
     {
-      "name": "update_validator_criteria_status",
+      "name": "update_validator_criteria",
       "docs": ["Update validator criteria status"],
-      "discriminator": [121, 214, 168, 200, 102, 122, 100, 61],
+      "discriminator": [242, 111, 245, 169, 247, 54, 56, 155],
       "accounts": [
         {
           "name": "validator",
@@ -509,14 +452,69 @@
       ]
     },
     {
-      "name": "withdraw",
+      "name": "update_validator_status",
+      "docs": [
+        "Rewrite a validator account to the provided state (admin only)",
+        "",
+        "Bypass the normal workflow and set validator to any state"
+      ],
+      "discriminator": [251, 40, 229, 66, 218, 176, 24, 229],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
+              },
+              {
+                "kind": "account",
+                "path": "validator.identity",
+                "account": "ValidatorInfo"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_status",
+          "type": {
+            "defined": {
+              "name": "ValidatorStatus"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "withdraw_validator",
       "docs": [
         "Withdraw from the delegation program",
         "",
         "Validators can remove themselves by calling this instruction.",
         "On success the validator account will be deleted and lamports refunded"
       ],
-      "discriminator": [183, 18, 70, 156, 148, 109, 161, 34],
+      "discriminator": [73, 175, 146, 162, 146, 174, 152, 16],
       "accounts": [
         {
           "name": "validator",

@@ -22,11 +22,11 @@ export const NoSquadSelected = () => {
   const handleEnterSquad = async () => {
     setError('');
     setIsValidating(true);
-
+    
     try {
       // Validate that the address is actually a squad
       const validation = await validateSquadAddress(connection, squadAddress);
-
+      
       if (!validation.isValid) {
         setError(validation.error || 'Invalid address');
         return;
@@ -45,8 +45,8 @@ export const NoSquadSelected = () => {
   };
 
   return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center">
-      <Card className="w-full max-w-md">
+    <div className="flex flex-col items-center justify-center min-h-[50vh]">
+      <Card className="max-w-md w-full">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4">
             <Users className="h-12 w-12 text-muted-foreground" />
@@ -73,7 +73,10 @@ export const NoSquadSelected = () => {
                   }
                 }}
               />
-              <Button onClick={handleEnterSquad} disabled={!squadAddress.trim() || isValidating}>
+              <Button 
+                onClick={handleEnterSquad}
+                disabled={!squadAddress.trim() || isValidating}
+              >
                 {isValidating ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
@@ -81,9 +84,11 @@ export const NoSquadSelected = () => {
                 )}
               </Button>
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
           </div>
-
+          
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t" />
@@ -93,7 +98,11 @@ export const NoSquadSelected = () => {
             </div>
           </div>
 
-          <Button onClick={() => navigate('/create')} className="w-full" variant="outline">
+          <Button 
+            onClick={() => navigate('/create')} 
+            className="w-full"
+            variant="outline"
+          >
             <Plus className="mr-2 h-4 w-4" />
             Create New Squad
           </Button>

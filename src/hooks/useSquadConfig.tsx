@@ -38,7 +38,7 @@ export const useSquadConfig = () => {
         ...squad,
         addedAt: Date.now(),
       };
-
+      
       // Check if squad already exists
       const existingIndex = config.squads.findIndex((s: SavedSquad) => s.address === squad.address);
       if (existingIndex >= 0) {
@@ -46,12 +46,12 @@ export const useSquadConfig = () => {
       } else {
         config.squads.push(newSquad);
       }
-
+      
       // If no squad is selected, select this one
       if (!config.selectedSquad) {
         config.selectedSquad = newSquad.address;
       }
-
+      
       saveSquadConfig(config);
       return config;
     },
@@ -64,12 +64,12 @@ export const useSquadConfig = () => {
     mutationFn: async (address: string) => {
       const config = getSquadConfig();
       config.squads = config.squads.filter((s: SavedSquad) => s.address !== address);
-
+      
       // If we removed the selected squad, select the first one or null
       if (config.selectedSquad === address) {
         config.selectedSquad = config.squads.length > 0 ? config.squads[0].address : null;
       }
-
+      
       saveSquadConfig(config);
       return config;
     },
@@ -93,16 +93,10 @@ export const useSquadConfig = () => {
   });
 
   const updateSquad = useMutation({
-    mutationFn: async ({
-      address,
-      updates,
-    }: {
-      address: string;
-      updates: Partial<Omit<SavedSquad, 'address' | 'addedAt'>>;
-    }) => {
+    mutationFn: async ({ address, updates }: { address: string; updates: Partial<Omit<SavedSquad, 'address' | 'addedAt'>> }) => {
       const config = getSquadConfig();
       const squadIndex = config.squads.findIndex((s: SavedSquad) => s.address === address);
-
+      
       if (squadIndex >= 0) {
         config.squads[squadIndex] = {
           ...config.squads[squadIndex],
@@ -110,7 +104,7 @@ export const useSquadConfig = () => {
         };
         saveSquadConfig(config);
       }
-
+      
       return config;
     },
     onSuccess: (config) => {
@@ -118,9 +112,7 @@ export const useSquadConfig = () => {
     },
   });
 
-  const selectedSquad = squadConfig.squads.find(
-    (s: SavedSquad) => s.address === squadConfig.selectedSquad
-  );
+  const selectedSquad = squadConfig.squads.find((s: SavedSquad) => s.address === squadConfig.selectedSquad);
 
   return {
     squads: squadConfig.squads,

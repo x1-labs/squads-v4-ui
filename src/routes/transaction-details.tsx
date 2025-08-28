@@ -12,9 +12,13 @@ import ApproveButton from '@/components/ApproveButton';
 import RejectButton from '@/components/RejectButton';
 import ExecuteButton from '@/components/ExecuteButton';
 import CancelButton from '@/components/CancelButton';
+import { getTokenMetadata, TokenMetadata } from '@/lib/token/tokenMetadata';
 
 // Analyze transaction to detect transfer types (same logic as TransactionProgramBadge)
-const analyzeTransactionType = (vaultTx: any): string | null => {
+const analyzeTransactionType = async (
+  vaultTx: any,
+  connection: Connection
+): Promise<{ type: string; tokenMetadata?: TokenMetadata } | null> => {
   try {
     if (!vaultTx.message || !vaultTx.message.instructions) return null;
 
@@ -31,7 +35,7 @@ const analyzeTransactionType = (vaultTx: any): string | null => {
             ? programIdKey
             : new PublicKey(programIdKey).toBase58();
 
-      // System Program Transfer (SOL transfer)
+      // System Program Transfer (XNT transfer)
       if (programIdStr === '11111111111111111111111111111111') {
         const data = instruction.data;
         // System transfer instruction starts with 2 (u32 little-endian: 0x02000000)
@@ -43,7 +47,7 @@ const analyzeTransactionType = (vaultTx: any): string | null => {
           data[2] === 0 &&
           data[3] === 0
         ) {
-          return 'SOL Transfer';
+          return { type: 'XNT Transfer' };
         }
       }
 
@@ -52,7 +56,28 @@ const analyzeTransactionType = (vaultTx: any): string | null => {
         const data = instruction.data;
         // Token transfer instruction is 3, transferChecked is 12
         if (data && data.length > 0 && (data[0] === 3 || data[0] === 12)) {
-          return 'SPL Token Transfer';
+          // Try to get the mint from the instruction accounts
+          let tokenMetadata: TokenMetadata | undefined;
+          try {
+            if (data[0] === 12 && instruction.accountIndexes?.length > 1) {
+              const mintIndex = instruction.accountIndexes[1];
+              const mintKey = accountKeys[mintIndex];
+              const mintAddress =
+                mintKey instanceof PublicKey
+                  ? mintKey.toBase58()
+                  : typeof mintKey === 'string'
+                    ? mintKey
+                    : new PublicKey(mintKey).toBase58();
+              tokenMetadata = await getTokenMetadata(mintAddress, connection);
+            }
+          } catch (error) {
+            console.debug('Could not fetch token metadata:', error);
+          }
+
+          const transferType = tokenMetadata?.symbol
+            ? `${tokenMetadata.symbol} Transfer`
+            : 'SPL Token Transfer';
+          return { type: transferType, tokenMetadata };
         }
       }
 
@@ -61,7 +86,28 @@ const analyzeTransactionType = (vaultTx: any): string | null => {
         const data = instruction.data;
         // Token transfer instruction is 3, transferChecked is 12
         if (data && data.length > 0 && (data[0] === 3 || data[0] === 12)) {
-          return 'Token-2022 Transfer';
+          // Try to get the mint from the instruction accounts
+          let tokenMetadata: TokenMetadata | undefined;
+          try {
+            if (data[0] === 12 && instruction.accountIndexes?.length > 1) {
+              const mintIndex = instruction.accountIndexes[1];
+              const mintKey = accountKeys[mintIndex];
+              const mintAddress =
+                mintKey instanceof PublicKey
+                  ? mintKey.toBase58()
+                  : typeof mintKey === 'string'
+                    ? mintKey
+                    : new PublicKey(mintKey).toBase58();
+              tokenMetadata = await getTokenMetadata(mintAddress, connection);
+            }
+          } catch (error) {
+            console.debug('Could not fetch token metadata:', error);
+          }
+
+          const transferType = tokenMetadata?.symbol
+            ? `${tokenMetadata.symbol} Transfer`
+            : 'Token-2022 Transfer';
+          return { type: transferType, tokenMetadata };
         }
       }
     }
@@ -82,13 +128,14 @@ export default function TransactionDetailsPage() {
 
   // Create connection with the configured RPC URL
   const connection = useMemo(() => {
-    return new Connection(rpcUrl || 'https://api.mainnet-beta.solana.com', 'confirmed');
+    return new Connection(rpcUrl || 'https://api.mainnet-beta.solana.com', 'finalized');
   }, [rpcUrl]);
 
   // Extract transaction index and proposal from the PDA
   const [transactionIndex, setTransactionIndex] = React.useState<bigint | null>(null);
   const [proposal, setProposal] = React.useState<multisig.generated.Proposal | null>(null);
   const [transactionType, setTransactionType] = React.useState<string>('Transaction');
+  const [tokenMetadata, setTokenMetadata] = React.useState<TokenMetadata | null>(null);
 
   React.useEffect(() => {
     const fetchTransactionDetails = async () => {
@@ -109,9 +156,12 @@ export default function TransactionDetailsPage() {
           setTransactionIndex(index);
 
           // Detect transaction type
-          const txType = analyzeTransactionType(vaultTx);
+          const txType = await analyzeTransactionType(vaultTx, connection);
           if (txType) {
-            setTransactionType(txType);
+            setTransactionType(txType.type);
+            if (txType.tokenMetadata) {
+              setTokenMetadata(txType.tokenMetadata);
+            }
           } else {
             setTransactionType('Transaction');
           }
@@ -238,7 +288,31 @@ export default function TransactionDetailsPage() {
             ← Back to Transactions
           </Link>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-foreground">{transactionType} Details</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              <span className="flex items-center gap-3">
+                {tokenMetadata && (
+                  <div className="flex items-center gap-2">
+                    {tokenMetadata.logoURI ? (
+                      <img
+                        src={tokenMetadata.logoURI}
+                        alt={tokenMetadata.symbol || 'Token'}
+                        className="h-8 w-8 rounded-full"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+                        <span className="text-xs font-bold">
+                          {tokenMetadata.symbol?.slice(0, 3) || 'TOK'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {transactionType} Details
+              </span>
+            </h1>
             {isStale && proposalStatus !== 'Executed' && proposalStatus !== 'Cancelled' && (
               <div className="text-warning bg-warning/10 border-warning/20 flex items-center gap-1 rounded-md border px-2 py-1">
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -338,6 +412,7 @@ export default function TransactionDetailsPage() {
             multisigPda={new PublicKey(multisigAddress)}
             transactionIndex={transactionIndex}
             programId={programId}
+            tokenMetadata={tokenMetadata}
           />
         ) : (
           <div className="p-8 text-center">

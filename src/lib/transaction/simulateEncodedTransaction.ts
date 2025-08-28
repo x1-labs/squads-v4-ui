@@ -26,7 +26,7 @@ export const simulateEncodedTransaction = async (
     const { value } = await connection.simulateTransaction(transaction, {
       sigVerify: false,
       replaceRecentBlockhash: true,
-      commitment: 'confirmed',
+      commitment: 'finalized',
       accounts: {
         encoding: 'base64',
         addresses: keys,

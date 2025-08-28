@@ -3,12 +3,14 @@ import * as multisig from '@sqds/multisig';
 import { BorshInstructionCoder } from '@coral-xyz/anchor';
 import { idlManager } from '../idls/idlManager';
 import { IdlFormat, isAnchorCompatible } from '../idls/idlFormats';
+import { InstructionType, InstructionData } from './instructionTypes';
 
 export interface DecodedInstruction {
   programId: string;
   programName: string;
   instructionName: string;
-  humanReadable?: string;
+  instructionType: InstructionType;
+  data?: InstructionData;
   innerInstructions?: DecodedInstruction[];
   accounts: Array<{
     name?: string;
@@ -57,138 +59,10 @@ export class SimpleDecoder {
   }
 
   /**
-   * Format SOL amount (9 decimals)
+   * Format XNT amount (9 decimals)
    */
   private formatSolAmount(lamports: string | number | bigint): string {
     return this.formatTokenAmount(lamports, 9);
-  }
-
-  /**
-   * Truncate address for display
-   */
-  private truncateAddress(address: string): string {
-    if (address.length <= 10) return address;
-    return `${address.slice(0, 4)}...${address.slice(-4)}`;
-  }
-
-  /**
-   * Generate human-readable message for token instructions
-   */
-  private generateTokenInstructionMessage(
-    instructionName: string,
-    args: any,
-    accountKeys: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>,
-    useTruncated: boolean = false
-  ): string | undefined {
-    const name = instructionName.toLowerCase();
-
-    if (name === 'transfer' || name === 'transferchecked') {
-      const amount = args.amount || '0';
-      const decimals = args.decimals;
-
-      // Format amount with decimals if available
-      // For basic transfer, decimals are not included in the instruction
-      let formattedAmount: string;
-      if (decimals !== undefined && decimals !== null) {
-        formattedAmount = this.formatTokenAmount(amount, decimals);
-      } else {
-        // For basic transfer without decimals, try common decimal places
-        // Most SPL tokens use 6 or 9 decimals
-        const amountStr = amount.toString();
-
-        // Try 9 decimals first (most common for SPL tokens)
-        const with9Decimals = this.formatTokenAmount(amount, 9);
-        // Only show alternative if significantly different
-        if (amountStr.length > 10) {
-          const with6Decimals = this.formatTokenAmount(amount, 6);
-          formattedAmount = `${with9Decimals} (likely) or ${with6Decimals}`;
-        } else if (amountStr.length > 7) {
-          formattedAmount = with9Decimals;
-        } else {
-          // Very small amount, show raw
-          formattedAmount = `${amountStr} smallest units`;
-        }
-      }
-
-      // Get account addresses - use full addresses for summary
-      const fromAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
-      const from = useTruncated ? this.truncateAddress(fromAddr) : fromAddr;
-
-      const toIndex = name === 'transferchecked' ? 2 : 1;
-      const toAddr = accountKeys[toIndex]?.pubkey?.toBase58() || 'Unknown';
-      const to = useTruncated ? this.truncateAddress(toAddr) : toAddr;
-
-      // Get mint address - for basic transfer, there's no mint in the accounts
-      let mint = 'tokens';
-      if (name === 'transferchecked' && accountKeys[1]?.pubkey) {
-        const mintAddr = accountKeys[1].pubkey.toBase58();
-        mint = useTruncated ? this.truncateAddress(mintAddr) : mintAddr;
-      }
-
-      return `Transfer ${formattedAmount}\nToken: ${mint}\nFrom: ${from}\nTo: ${to}`;
-    }
-
-    if (name === 'mintto' || name === 'minttochecked') {
-      const amount = args.amount || '0';
-      const decimals = args.decimals;
-
-      const formattedAmount =
-        decimals !== undefined && decimals !== null
-          ? this.formatTokenAmount(amount, decimals)
-          : `${amount} (raw)`;
-
-      const mintAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
-      const mint = useTruncated ? this.truncateAddress(mintAddr) : mintAddr;
-      const toAddr = accountKeys[1]?.pubkey?.toBase58() || 'Unknown';
-      const to = useTruncated ? this.truncateAddress(toAddr) : toAddr;
-
-      return `Mint ${formattedAmount}\nToken: ${mint}\nTo: ${to}`;
-    }
-
-    if (name === 'burn' || name === 'burnchecked') {
-      const amount = args.amount || '0';
-      const decimals = args.decimals;
-
-      const formattedAmount =
-        decimals !== undefined && decimals !== null
-          ? this.formatTokenAmount(amount, decimals)
-          : `${amount} (raw)`;
-
-      const accountAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
-      const account = useTruncated ? this.truncateAddress(accountAddr) : accountAddr;
-      const mintAddr = accountKeys[1]?.pubkey?.toBase58() || 'tokens';
-      const mint = useTruncated ? this.truncateAddress(mintAddr) : mintAddr;
-
-      return `Burn ${formattedAmount}\nToken: ${mint}\nFrom: ${account}`;
-    }
-
-    if (name === 'approve' || name === 'approvechecked') {
-      const amount = args.amount || '0';
-      const decimals = args.decimals;
-
-      const formattedAmount =
-        decimals !== undefined && decimals !== null
-          ? this.formatTokenAmount(amount, decimals)
-          : `${amount} (raw)`;
-
-      const accountAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
-      const account = useTruncated ? this.truncateAddress(accountAddr) : accountAddr;
-      const delegateAddr = accountKeys[2]?.pubkey?.toBase58() || 'Unknown';
-      const delegate = useTruncated ? this.truncateAddress(delegateAddr) : delegateAddr;
-
-      return `Approve ${formattedAmount} tokens\nDelegate: ${delegate}\nFrom: ${account}`;
-    }
-
-    if (name === 'closeaccount') {
-      const accountAddr = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
-      const account = useTruncated ? this.truncateAddress(accountAddr) : accountAddr;
-      const destAddr = accountKeys[1]?.pubkey?.toBase58() || 'Unknown';
-      const dest = useTruncated ? this.truncateAddress(destAddr) : destAddr;
-
-      return `Close token account\nAccount: ${account}\nReturn rent to: ${dest}`;
-    }
-
-    return undefined;
   }
 
   constructor(connection: Connection) {
@@ -606,6 +480,7 @@ export class SimpleDecoder {
             programId: programIdStr,
             programName: this.getProgramName(programIdStr),
             instructionName: this.formatInstructionName(decoded.name),
+            instructionType: InstructionType.UNKNOWN,
             accounts: accountKeys.map((key, i) => ({
               name: accountNames[i] || `Account ${i}`,
               pubkey: key.pubkey.toBase58(),
@@ -644,6 +519,7 @@ export class SimpleDecoder {
               programId: programIdStr,
               programName: this.getProgramName(programIdStr),
               instructionName: this.formatInstructionName(decoded.name || 'Unknown Instruction'),
+              instructionType: InstructionType.UNKNOWN,
               accounts: accountKeys.map((key, i) => ({
                 name: accountNames[i] || `Account ${i}`,
                 pubkey: key.pubkey.toBase58(),
@@ -703,25 +579,43 @@ export class SimpleDecoder {
           const instruction = idlEntry.parser.getInstruction(decoded.name);
           const accountNames = instruction?.accounts?.map((acc) => acc.name) || [];
 
-          // Generate human-readable message for token transfers
-          let humanReadable: string | undefined;
+          // Determine instruction type and create typed data for token transfers
+          let instructionTypeEnum = InstructionType.UNKNOWN;
+          let instructionData: InstructionData | undefined;
+
           if (
             programIdStr === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' ||
             programIdStr === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
           ) {
-            // Use full addresses for the summary display
-            humanReadable = this.generateTokenInstructionMessage(
-              decoded.name,
-              decoded.data,
-              accountKeys,
-              false
-            );
+            const name = decoded.name.toLowerCase();
+            if (name === 'transfer') {
+              instructionTypeEnum = InstructionType.SPL_TRANSFER;
+              instructionData = {
+                fromTokenAccount: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
+                toTokenAccount: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
+                authority: accountKeys[2]?.pubkey?.toBase58() || 'Unknown',
+                amount: BigInt(decoded.data.amount || 0),
+                decimals: 0, // Basic transfer doesn't have decimals
+              };
+            } else if (name === 'transferchecked') {
+              instructionTypeEnum = InstructionType.SPL_TRANSFER_CHECKED;
+              instructionData = {
+                mint: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
+                fromTokenAccount: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
+                toTokenAccount: accountKeys[2]?.pubkey?.toBase58() || 'Unknown',
+                authority: accountKeys[3]?.pubkey?.toBase58() || 'Unknown',
+                amount: BigInt(decoded.data.amount || 0),
+                decimals: decoded.data.decimals || 0,
+              };
+            }
           }
 
-          const result: DecodedInstruction = {
+          return {
             programId: programIdStr,
             programName: this.getProgramName(programIdStr),
             instructionName: this.formatInstructionName(decoded.name),
+            instructionType: instructionTypeEnum,
+            data: instructionData,
             accounts: accountKeys.map((key, i) => ({
               name: accountNames[i] || this.getTokenAccountName(data[0], i),
               pubkey: key.pubkey.toBase58(),
@@ -731,12 +625,6 @@ export class SimpleDecoder {
             args: decoded.data || {},
             rawData: data.toString('hex').slice(0, 100),
           };
-
-          if (humanReadable) {
-            result.humanReadable = humanReadable;
-          }
-
-          return result;
         }
       } catch (error) {
         console.warn(
@@ -801,6 +689,7 @@ export class SimpleDecoder {
       programId: programIdStr,
       programName: this.getProgramName(programIdStr),
       instructionName: 'Unknown Instruction',
+      instructionType: InstructionType.UNKNOWN,
       accounts: accountKeys.map((key, i) => ({
         name: `Account ${i}`,
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
@@ -822,8 +711,9 @@ export class SimpleDecoder {
   ): DecodedInstruction {
     const instructionType = data.readUInt32LE(0);
     let instructionName = 'Unknown System Instruction';
-    let humanReadable: string | undefined;
     let args: any = {};
+    let instructionTypeEnum = InstructionType.UNKNOWN;
+    let instructionData: InstructionData | undefined;
 
     switch (instructionType) {
       case 0: // CreateAccount
@@ -838,15 +728,18 @@ export class SimpleDecoder {
         break;
       case 2: // Transfer
         instructionName = 'Transfer';
+        instructionTypeEnum = InstructionType.XNT_TRANSFER;
         if (data.length >= 12) {
+          const lamports = data.readBigUInt64LE(4);
           args = {
-            lamports: data.readBigUInt64LE(4).toString(),
+            lamports: lamports.toString(),
           };
-          // Generate human-readable message with full addresses
-          const amount = this.formatSolAmount(args.lamports);
-          const from = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
-          const to = accountKeys[1]?.pubkey?.toBase58() || 'Unknown';
-          humanReadable = `Transfer ${amount} SOL\nFrom: ${from}\nTo: ${to}`;
+          // Create typed data for XNT transfer
+          instructionData = {
+            from: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
+            to: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
+            lamports,
+          };
         }
         break;
       case 3: // Assign
@@ -867,10 +760,12 @@ export class SimpleDecoder {
         break;
     }
 
-    const result: DecodedInstruction = {
+    return {
       programId: '11111111111111111111111111111111',
       programName: 'System Program',
       instructionName,
+      instructionType: instructionTypeEnum,
+      data: instructionData,
       accounts: accountKeys.map((key, i) => ({
         name: this.getSystemAccountName(instructionType, i),
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
@@ -879,12 +774,6 @@ export class SimpleDecoder {
       })),
       args,
     };
-
-    if (humanReadable) {
-      result.humanReadable = humanReadable;
-    }
-
-    return result;
   }
 
   /**
@@ -897,8 +786,9 @@ export class SimpleDecoder {
   ): DecodedInstruction {
     const instructionType = data[0];
     let instructionName = 'Unknown Token Instruction';
-    let humanReadable: string | undefined;
     let args: any = {};
+    let instructionTypeEnum = InstructionType.UNKNOWN;
+    let instructionData: InstructionData | undefined;
 
     switch (instructionType) {
       case 0: // InitializeMint
@@ -922,15 +812,21 @@ export class SimpleDecoder {
         break;
       case 3: // Transfer
         instructionName = 'Transfer';
+        instructionTypeEnum = InstructionType.SPL_TRANSFER;
         if (data.length >= 9) {
+          const amount = data.readBigUInt64LE(1);
           args = {
-            amount: data.readBigUInt64LE(1).toString(),
+            amount: amount.toString(),
           };
-          // Generate human-readable message
-          // For basic transfer, we don't know decimals, so just show raw amount with full addresses
-          const from = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
-          const to = accountKeys[1]?.pubkey?.toBase58() || 'Unknown';
-          humanReadable = `Transfer ${args.amount} tokens (raw amount)\nFrom: ${from}\nTo: ${to}`;
+          // Create typed data for SPL transfer
+          // For basic transfer: accounts are [source, dest, authority]
+          instructionData = {
+            fromTokenAccount: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
+            toTokenAccount: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
+            authority: accountKeys[2]?.pubkey?.toBase58() || 'Unknown',
+            amount,
+            decimals: 0, // Unknown for basic Transfer instruction
+          };
         }
         break;
       case 4: // Approve
@@ -985,17 +881,24 @@ export class SimpleDecoder {
         break;
       case 12: // TransferChecked
         instructionName = 'Transfer Checked';
+        instructionTypeEnum = InstructionType.SPL_TRANSFER_CHECKED;
         if (data.length >= 10) {
+          const amount = data.readBigUInt64LE(1);
+          const decimals = data[9];
           args = {
-            amount: data.readBigUInt64LE(1).toString(),
-            decimals: data[9],
+            amount: amount.toString(),
+            decimals,
           };
-          // Generate human-readable message with proper decimals and full addresses
-          const formattedAmount = this.formatTokenAmount(args.amount, args.decimals);
-          const from = accountKeys[0]?.pubkey?.toBase58() || 'Unknown';
-          const to = accountKeys[2]?.pubkey?.toBase58() || 'Unknown';
-          const mint = accountKeys[1]?.pubkey?.toBase58() || 'token';
-          humanReadable = `Transfer ${formattedAmount}\nToken: ${mint}\nFrom: ${from}\nTo: ${to}`;
+          // Create typed data for SPL TransferChecked
+          // For TransferChecked: accounts are [source_token_account, mint, dest_token_account, authority]
+          instructionData = {
+            mint: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
+            fromTokenAccount: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
+            toTokenAccount: accountKeys[2]?.pubkey?.toBase58() || 'Unknown',
+            authority: accountKeys[3]?.pubkey?.toBase58() || 'Unknown',
+            amount,
+            decimals,
+          };
         }
         break;
       case 13: // ApproveChecked
@@ -1064,10 +967,12 @@ export class SimpleDecoder {
 
     const isToken2022 = programId === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
 
-    const result: DecodedInstruction = {
+    return {
       programId,
       programName: isToken2022 ? 'Token-2022 Program' : 'Token Program',
       instructionName,
+      instructionType: instructionTypeEnum,
+      data: instructionData,
       accounts: accountKeys.map((key, i) => ({
         name: this.getTokenAccountName(instructionType, i),
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
@@ -1076,12 +981,6 @@ export class SimpleDecoder {
       })),
       args,
     };
-
-    if (humanReadable) {
-      result.humanReadable = humanReadable;
-    }
-
-    return result;
   }
 
   /**
@@ -1101,6 +1000,7 @@ export class SimpleDecoder {
           programId: programId.toBase58(),
           programName: 'Squads Multisig V4',
           instructionName: 'Config Transaction',
+          instructionType: InstructionType.UNKNOWN,
           accounts: [],
           args: {
             transactionIndex: transactionIndex.toString(),
@@ -1226,6 +1126,7 @@ export class SimpleDecoder {
           programId: programId.toBase58(),
           programName: 'Squads Multisig V4',
           instructionName: 'Batch Transaction',
+          instructionType: InstructionType.UNKNOWN,
           accounts: [],
           args: {
             transactionIndex: transactionIndex.toString(),
@@ -1363,6 +1264,7 @@ export class SimpleDecoder {
       programId,
       programName: 'Memo Program',
       instructionName: 'Memo',
+      instructionType: InstructionType.UNKNOWN,
       accounts: accountKeys.map((key, i) => ({
         name: `Signer ${i + 1}`,
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
@@ -1427,6 +1329,7 @@ export class SimpleDecoder {
       programId: 'ComputeBudget111111111111111111111111111111',
       programName: 'Compute Budget Program',
       instructionName,
+      instructionType: InstructionType.UNKNOWN,
       accounts: accountKeys.map((key, i) => ({
         name: `Account ${i}`,
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
@@ -1464,6 +1367,7 @@ export class SimpleDecoder {
       programId: 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
       programName: 'Associated Token Program',
       instructionName,
+      instructionType: InstructionType.UNKNOWN,
       accounts: accountKeys.map((key, i) => ({
         name: accountNames[i] || `Account ${i}`,
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
@@ -1517,6 +1421,7 @@ export class SimpleDecoder {
       programId: 'AddressLookupTab1e1111111111111111111111111',
       programName: 'Address Lookup Table Program',
       instructionName,
+      instructionType: InstructionType.UNKNOWN,
       accounts: accountKeys.map((key, i) => ({
         name: this.getAddressLookupTableAccountName(instructionType, i),
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',

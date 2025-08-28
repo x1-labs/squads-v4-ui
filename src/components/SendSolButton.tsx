@@ -145,14 +145,14 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
             }
           }}
         >
-          Send SOL
+          Send XNT
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Transfer SOL</DialogTitle>
+          <DialogTitle>Transfer XNT</DialogTitle>
           <DialogDescription>
-            Create a proposal to transfer SOL to another address.
+            Create a proposal to transfer XNT to another address.
           </DialogDescription>
         </DialogHeader>
         <Input placeholder="Recipient" type="text" onChange={(e) => setRecipient(e.target.value)} />

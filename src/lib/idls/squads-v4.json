@@ -975,7 +975,7 @@
         },
         {
           "name": "system_program",
-          "docs": ["In case `spending_limit.mint` is SOL."],
+          "docs": ["In case `spending_limit.mint` is XNT."],
           "optional": true
         },
         {
@@ -1480,7 +1480,7 @@
             "docs": [
               "The amount of tokens that can be spent in a period.",
               "This amount is in decimals of the mint,",
-              "so 1 SOL would be `1_000_000_000` and 1 USDC would be `1_000_000`."
+              "so 1 XNT would be `1_000_000_000` and 1 USDC would be `1_000_000`."
             ],
             "type": "u64"
           },
@@ -2155,7 +2155,7 @@
                 "docs": [
                   "The amount of tokens that can be spent in a period.",
                   "This amount is in decimals of the mint,",
-                  "so 1 SOL would be `1_000_000_000` and 1 USDC would be `1_000_000`."
+                  "so 1 XNT would be `1_000_000_000` and 1 USDC would be `1_000_000`."
                 ],
                 "type": "u64"
               },
@@ -2639,8 +2639,8 @@
             "name": "mint",
             "docs": [
               "The token mint the spending limit is for.",
-              "Pubkey::default() means SOL.",
-              "use NATIVE_MINT for Wrapped SOL."
+              "Pubkey::default() means XNT.",
+              "use NATIVE_MINT for Wrapped XNT."
             ],
             "type": "pubkey"
           },
@@ -2649,7 +2649,7 @@
             "docs": [
               "The amount of tokens that can be spent in a period.",
               "This amount is in decimals of the mint,",
-              "so 1 SOL would be `1_000_000_000` and 1 USDC would be `1_000_000`."
+              "so 1 XNT would be `1_000_000_000` and 1 USDC would be `1_000_000`."
             ],
             "type": "u64"
           },

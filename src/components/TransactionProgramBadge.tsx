@@ -3,6 +3,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { useRpcUrl } from '@/hooks/useSettings';
 import { idlManager } from '@/lib/idls/idlManager';
+import { getTokenMetadata, TokenMetadata } from '@/lib/token/tokenMetadata';
 
 interface TransactionProgramBadgeProps {
   multisigPda: string;
@@ -11,7 +12,10 @@ interface TransactionProgramBadgeProps {
 }
 
 // Analyze transaction to detect transfer types
-const analyzeTransactionType = (vaultTx: any): { name: string; id: string } | null => {
+const analyzeTransactionType = async (
+  vaultTx: any,
+  connection: Connection
+): Promise<{ name: string; id: string; tokenMetadata?: TokenMetadata } | null> => {
   try {
     if (!vaultTx.message || !vaultTx.message.instructions) return null;
 
@@ -28,7 +32,7 @@ const analyzeTransactionType = (vaultTx: any): { name: string; id: string } | nu
             ? programIdKey
             : new PublicKey(programIdKey).toBase58();
 
-      // System Program Transfer (SOL transfer)
+      // System Program Transfer (XNT transfer)
       if (programIdStr === '11111111111111111111111111111111') {
         const data = instruction.data;
         // System transfer instruction starts with 2 (u32 little-endian: 0x02000000)
@@ -40,7 +44,7 @@ const analyzeTransactionType = (vaultTx: any): { name: string; id: string } | nu
           data[2] === 0 &&
           data[3] === 0
         ) {
-          return { name: 'SOL Transfer', id: programIdStr };
+          return { name: 'XNT Transfer', id: programIdStr };
         }
       }
 
@@ -49,7 +53,31 @@ const analyzeTransactionType = (vaultTx: any): { name: string; id: string } | nu
         const data = instruction.data;
         // Token transfer instruction is 3, transferChecked is 12
         if (data && data.length > 0 && (data[0] === 3 || data[0] === 12)) {
-          return { name: 'SPL Token Transfer', id: programIdStr };
+          // Try to get the mint from the instruction accounts
+          // For SPL Token transfers, the mint is typically in the account keys
+          let tokenMetadata: TokenMetadata | undefined;
+          try {
+            // For transferChecked (12), the mint is the 2nd account
+            // For regular transfer (3), we need to derive it from the token account
+            if (data[0] === 12 && instruction.accountIndexes?.length > 1) {
+              const mintIndex = instruction.accountIndexes[1];
+              const mintKey = accountKeys[mintIndex];
+              const mintAddress =
+                mintKey instanceof PublicKey
+                  ? mintKey.toBase58()
+                  : typeof mintKey === 'string'
+                    ? mintKey
+                    : new PublicKey(mintKey).toBase58();
+              tokenMetadata = await getTokenMetadata(mintAddress, connection);
+            }
+          } catch (error) {
+            console.debug('Could not fetch token metadata:', error);
+          }
+
+          const transferName = tokenMetadata?.symbol
+            ? `${tokenMetadata.symbol} Transfer`
+            : 'SPL Token Transfer';
+          return { name: transferName, id: programIdStr, tokenMetadata };
         }
       }
 
@@ -58,7 +86,28 @@ const analyzeTransactionType = (vaultTx: any): { name: string; id: string } | nu
         const data = instruction.data;
         // Token transfer instruction is 3, transferChecked is 12
         if (data && data.length > 0 && (data[0] === 3 || data[0] === 12)) {
-          return { name: 'Token-2022 Transfer', id: programIdStr };
+          // Try to get the mint from the instruction accounts
+          let tokenMetadata: TokenMetadata | undefined;
+          try {
+            if (data[0] === 12 && instruction.accountIndexes?.length > 1) {
+              const mintIndex = instruction.accountIndexes[1];
+              const mintKey = accountKeys[mintIndex];
+              const mintAddress =
+                mintKey instanceof PublicKey
+                  ? mintKey.toBase58()
+                  : typeof mintKey === 'string'
+                    ? mintKey
+                    : new PublicKey(mintKey).toBase58();
+              tokenMetadata = await getTokenMetadata(mintAddress, connection);
+            }
+          } catch (error) {
+            console.debug('Could not fetch token metadata:', error);
+          }
+
+          const transferName = tokenMetadata?.symbol
+            ? `${tokenMetadata.symbol} Transfer`
+            : 'Token-2022 Transfer';
+          return { name: transferName, id: programIdStr, tokenMetadata };
         }
       }
     }
@@ -75,7 +124,11 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
   transactionIndex,
   programId = multisig.PROGRAM_ID.toBase58(),
 }) => {
-  const [programInfo, setProgramInfo] = useState<{ name: string; id: string } | null>(null);
+  const [programInfo, setProgramInfo] = useState<{
+    name: string;
+    id: string;
+    tokenMetadata?: TokenMetadata;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const { rpcUrl } = useRpcUrl();
 
@@ -84,7 +137,7 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
       try {
         const connection = new Connection(
           rpcUrl || 'https://api.mainnet-beta.solana.com',
-          'confirmed'
+          'finalized'
         );
 
         // Get the transaction PDA
@@ -103,7 +156,7 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
 
           if (vaultTx.message && vaultTx.message.instructions?.length > 0) {
             // Analyze transaction to determine type
-            const txType = analyzeTransactionType(vaultTx);
+            const txType = await analyzeTransactionType(vaultTx, connection);
 
             if (txType) {
               setProgramInfo(txType);
@@ -199,10 +252,10 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
 
   const getBadgeStyles = (programName: string): string => {
     let baseStyles =
-      'inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset';
+      'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset';
 
     // Transfer types - use distinct styling
-    if (programName === 'SOL Transfer') {
+    if (programName === 'XNT Transfer') {
       return `${baseStyles} bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/20 font-semibold`;
     }
     if (programName === 'SPL Token Transfer' || programName === 'Token-2022 Transfer') {
@@ -221,7 +274,11 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
     if (programName === 'System') {
       return `${baseStyles} bg-primary/10 text-primary ring-primary/20`;
     }
-    if (programName === 'Token' || programName === 'Token-2022') {
+    if (
+      programName === 'Token' ||
+      programName === 'Token-2022' ||
+      programName.includes('Transfer')
+    ) {
       return `${baseStyles} bg-green-500/10 text-green-600 dark:text-green-400 ring-green-500/20`;
     }
     if (programName === 'Memo' || programName === 'Memo (Legacy)') {
@@ -259,7 +316,30 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
 
   return (
     <div className="flex items-center gap-2">
-      <span className={getBadgeStyles(programInfo.name)}>{programInfo.name}</span>
+      <span className={getBadgeStyles(programInfo.name)}>
+        {/* Show token icon if available */}
+        {programInfo.tokenMetadata && (
+          <>
+            {programInfo.tokenMetadata.logoURI ? (
+              <img
+                src={programInfo.tokenMetadata.logoURI}
+                alt={programInfo.tokenMetadata.symbol || 'Token'}
+                className="mr-1 h-4 w-4 rounded-full"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            ) : (
+              <span className="bg-current/10 mr-1 inline-flex h-4 w-4 items-center justify-center rounded-full">
+                <span className="text-[8px] font-bold">
+                  {programInfo.tokenMetadata.symbol?.slice(0, 2) || 'TK'}
+                </span>
+              </span>
+            )}
+          </>
+        )}
+        {programInfo.name}
+      </span>
       {shouldShowId && (
         <span className="font-mono text-xs text-muted-foreground">
           {formatProgramId(programInfo.id)}

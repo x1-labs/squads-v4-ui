@@ -61,7 +61,7 @@ const MultisigLookup: React.FC<MultisigLookupProps> = ({ onUpdate }) => {
         const tx: VersionedTransactionResponse | null = await connection.getTransaction(
           signature.signature,
           {
-            commitment: 'confirmed',
+            commitment: 'finalized',
             maxSupportedTransactionVersion: 0,
           }
         );

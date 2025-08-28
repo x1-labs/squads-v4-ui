@@ -15,6 +15,7 @@ import { Dialog, DialogDescription, DialogHeader } from './ui/dialog';
 import { DialogTrigger } from './ui/dialog';
 import { DialogContent, DialogTitle } from './ui/dialog';
 import { useState } from 'react';
+import { AlertCircle } from 'lucide-react';
 import { Input } from './ui/input';
 import { range } from '@/lib/utils';
 import { useMultisigData } from '@/hooks/useMultisigData';
@@ -40,7 +41,11 @@ const ExecuteButton = ({
   programId,
 }: ExecuteButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
-  const closeDialog = () => setIsOpen(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const closeDialog = () => {
+    setIsOpen(false);
+    setErrorMessage(null);
+  };
   const wallet = useWallet();
   const walletModal = useWalletModal();
   const [priorityFeeLamports, setPriorityFeeLamports] = useState<number>(5000);
@@ -52,12 +57,17 @@ const ExecuteButton = ({
   const queryClient = useQueryClient();
 
   const executeTransaction = async () => {
+    // Clear any previous errors
+    setErrorMessage(null);
+
     if (!wallet.publicKey) {
       walletModal.setVisible(true);
-      throw 'Wallet not connected';
+      throw new Error('Wallet not connected');
     }
     const member = wallet.publicKey;
-    if (!wallet.signAllTransactions) return;
+    if (!wallet.signAllTransactions) {
+      throw new Error('Wallet does not support signing multiple transactions');
+    }
     let bigIntTransactionIndex = BigInt(transactionIndex);
 
     if (!isTransactionReady) {
@@ -191,23 +201,169 @@ const ExecuteButton = ({
     const signedTransactions = await wallet.signAllTransactions(transactions);
 
     let signatures = [];
-    for (const signedTx of signedTransactions) {
-      const signature = await connection.sendRawTransaction(signedTx.serialize(), {
-        skipPreflight: true,
-      });
-      signatures.push(signature);
-      console.log('Transaction signature', signature);
-      toast.loading('Confirming...', {
-        id: 'transaction',
-      });
+    let errors = [];
+
+    for (let i = 0; i < signedTransactions.length; i++) {
+      const signedTx = signedTransactions[i];
+      try {
+        // First simulate the transaction to catch errors early
+        const simulation = await connection.simulateTransaction(signedTx, {
+          commitment: 'processed',
+        });
+
+        if (simulation.value.err) {
+          console.error('Simulation error:', simulation.value.err);
+
+          // Parse the error logs for meaningful messages
+          const logs = simulation.value.logs || [];
+          const errorLog = logs.find(
+            (log) =>
+              log.includes('Error') ||
+              log.includes('failed') ||
+              log.includes('NotAuthorized') ||
+              log.includes('AnchorError')
+          );
+
+          if (errorLog) {
+            // Extract error details from Anchor errors
+            const anchorErrorMatch = errorLog.match(
+              /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.+?)(?:\.|$)/
+            );
+            if (anchorErrorMatch) {
+              throw new Error(`${anchorErrorMatch[3]} (Code: ${anchorErrorMatch[1]})`);
+            }
+
+            // Extract other error patterns
+            const notAuthorizedMatch = errorLog.match(
+              /NotAuthorized|Not authorized to perform this action/
+            );
+            if (notAuthorizedMatch) {
+              throw new Error(
+                'Not authorized to perform this action. You may not be a member of this multisig or lack the required permissions.'
+              );
+            }
+
+            throw new Error(errorLog);
+          }
+
+          throw new Error(`Transaction simulation failed: ${JSON.stringify(simulation.value.err)}`);
+        }
+
+        // If simulation passes, send the transaction
+        const signature = await connection.sendRawTransaction(signedTx.serialize(), {
+          skipPreflight: false,
+          preflightCommitment: 'processed',
+        });
+
+        signatures.push(signature);
+        console.log('Transaction signature', signature);
+
+        if (signedTransactions.length === 1) {
+          toast.loading('Confirming transaction...', {
+            id: 'transaction',
+          });
+        } else {
+          toast.loading(`Confirming transaction ${i + 1} of ${signedTransactions.length}...`, {
+            id: 'transaction',
+          });
+        }
+      } catch (error: any) {
+        console.error('Transaction error:', error);
+
+        // Check for common RPC errors
+        if (error.message?.includes('blockhash not found')) {
+          throw new Error('Transaction expired. Please try again.');
+        }
+
+        if (error.message?.includes('insufficient funds')) {
+          throw new Error('Insufficient funds for transaction fees.');
+        }
+
+        if (error.logs) {
+          // Parse logs for error messages
+          const errorLog = error.logs.find(
+            (log: string) =>
+              log.includes('Error') || log.includes('failed') || log.includes('NotAuthorized')
+          );
+
+          if (errorLog) {
+            const anchorErrorMatch = errorLog.match(
+              /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.+?)(?:\.|$)/
+            );
+            if (anchorErrorMatch) {
+              throw new Error(`${anchorErrorMatch[3]} (Code: ${anchorErrorMatch[1]})`);
+            }
+            throw new Error(errorLog);
+          }
+        }
+
+        // Re-throw with more context
+        throw error;
+      }
     }
-    const sent = await waitForConfirmation(connection, signatures);
-    console.log('sent', sent);
-    if (!sent.every((sent) => !!sent)) {
-      throw `Unable to confirm`;
+
+    if (signatures.length === 0) {
+      throw new Error('No transactions were sent successfully');
     }
+
+    const confirmations = await waitForConfirmation(connection, signatures);
+    console.log('Confirmation results:', confirmations);
+
+    // Check if any transactions failed
+    const failedTxs = confirmations.filter((status) => {
+      // A transaction failed if it has an error or if status is null
+      return !status || status.err !== null;
+    });
+
+    if (failedTxs.length > 0) {
+      // Parse the error from failed transactions
+      const errorMessages = failedTxs.map((status, idx) => {
+        if (!status) {
+          return `Transaction ${idx + 1} not found or expired`;
+        }
+        if (status.err) {
+          // Try to parse the error
+          if (typeof status.err === 'object' && status.err !== null) {
+            const errorStr = JSON.stringify(status.err);
+            // Check for common error types
+            if (errorStr.includes('InstructionError')) {
+              return `Transaction ${idx + 1} failed with instruction error`;
+            }
+            return `Transaction ${idx + 1} failed: ${errorStr}`;
+          }
+          return `Transaction ${idx + 1} failed with error`;
+        }
+        return `Transaction ${idx + 1} failed`;
+      });
+
+      throw new Error(errorMessages.join('; '));
+    }
+
+    // All transactions succeeded
     closeDialog();
-    await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+
+    // Invalidate all relevant queries to refresh data
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+      queryClient.invalidateQueries({ queryKey: ['multisig'] }),
+      queryClient.invalidateQueries({ queryKey: ['proposal'] }),
+      queryClient.invalidateQueries({ queryKey: ['transaction-details'] }),
+    ]);
+
+    // Force a page reload after a short delay to ensure all data is fresh
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
+
+    // Return success result
+    return {
+      success: true,
+      signatures,
+      message:
+        signatures.length === 1
+          ? 'Transaction executed successfully!'
+          : `All ${signatures.length} transactions executed successfully!`,
+    };
   };
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -225,6 +381,19 @@ const ExecuteButton = ({
             Select custom priority fees and compute unit limits and execute transaction.
           </DialogDescription>
         </DialogHeader>
+        {/* Error Display */}
+        {errorMessage && (
+          <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-destructive" />
+              <div className="text-sm text-destructive">
+                <div className="mb-1 font-semibold">Transaction Failed</div>
+                <div className="break-words">{errorMessage}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <h3>Priority Fee in lamports</h3>
         <Input
           placeholder="Priority Fee"
@@ -240,14 +409,42 @@ const ExecuteButton = ({
         />
         <Button
           disabled={!isTransactionReady}
-          onClick={() =>
-            toast.promise(executeTransaction, {
-              id: 'transaction',
-              loading: 'Loading...',
-              success: 'Transaction executed.',
-              error: 'Failed to execute. Check console for info.',
-            })
-          }
+          onClick={async () => {
+            try {
+              await toast.promise(executeTransaction, {
+                id: 'transaction',
+                loading: 'Preparing transaction...',
+                success: (result) => {
+                  // Handle the success result properly
+                  if (result?.message) {
+                    console.log('Execution successful:', result.signatures);
+                    return result.message;
+                  }
+                  return 'Transaction executed successfully!';
+                },
+                error: (error) => {
+                  // Extract the error message
+                  const errorMessage = error?.message || error?.toString() || 'Transaction failed';
+
+                  // Set error in dialog for persistent display
+                  setErrorMessage(errorMessage);
+
+                  // Log full error for debugging
+                  console.error('Full error details:', error);
+
+                  // Return a formatted error message for the toast
+                  if (errorMessage.length > 200) {
+                    // Truncate very long errors but keep the important parts
+                    return errorMessage.substring(0, 200) + '...';
+                  }
+                  return errorMessage;
+                },
+              });
+            } catch (error) {
+              // Catch any errors that might escape the promise
+              console.error('Uncaught error:', error);
+            }
+          }}
           className="mr-2"
         >
           Execute

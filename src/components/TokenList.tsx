@@ -4,6 +4,9 @@ import SendTokens from './SendTokensButton';
 import SendSol from './SendSolButton';
 import { useMultisigData } from '~/hooks/useMultisigData';
 import { useBalance, useGetTokens } from '~/hooks/useServices';
+import { useEffect, useState } from 'react';
+import { getTokenMetadata, TokenMetadata } from '~/lib/token/tokenMetadata';
+import { useConnection } from '@solana/wallet-adapter-react';
 
 type TokenListProps = {
   multisigPda: string;
@@ -13,6 +16,37 @@ export function TokenList({ multisigPda }: TokenListProps) {
   const { vaultIndex, programId } = useMultisigData();
   const { data: solBalance } = useBalance();
   const { data: tokens = null } = useGetTokens();
+  const { connection } = useConnection();
+  const [tokenMetadata, setTokenMetadata] = useState<Map<string, TokenMetadata>>(new Map());
+  const [loadingMetadata, setLoadingMetadata] = useState(false);
+
+  // Fetch token metadata when tokens change
+  useEffect(() => {
+    async function fetchMetadata() {
+      if (!tokens || tokens.length === 0) return;
+
+      setLoadingMetadata(true);
+      const metadata = new Map<string, TokenMetadata>();
+
+      try {
+        // Fetch metadata for each token in parallel
+        const promises = tokens.map(async (token) => {
+          const mint = token.account.data.parsed.info.mint;
+          const data = await getTokenMetadata(mint, connection);
+          metadata.set(mint, data);
+        });
+
+        await Promise.all(promises);
+        setTokenMetadata(metadata);
+      } catch (error) {
+        console.error('Failed to fetch token metadata:', error);
+      } finally {
+        setLoadingMetadata(false);
+      }
+    }
+
+    fetchMetadata();
+  }, [tokens, connection]);
 
   // Format mint address for display
   const formatMint = (mint: string) => {
@@ -27,17 +61,17 @@ export function TokenList({ multisigPda }: TokenListProps) {
         <CardDescription>Vault holdings</CardDescription>
       </CardHeader>
       <CardContent>
-        {/* SOL Balance */}
+        {/* XNT Balance */}
         <div className="space-y-3">
           <div className="flex items-center justify-between rounded-lg bg-muted/30 p-3 transition-colors hover:bg-muted/50">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500">
-                <span className="text-sm font-bold text-white">SOL</span>
+                <span className="text-sm font-bold text-white">XNT</span>
               </div>
               <div>
-                <p className="font-medium">Solana</p>
+                <p className="font-medium">XNT</p>
                 <p className="text-sm text-muted-foreground">
-                  {((solBalance || 0) / LAMPORTS_PER_SOL).toFixed(4)} SOL
+                  {((solBalance || 0) / LAMPORTS_PER_SOL).toFixed(4)} XNT
                 </p>
               </div>
             </div>
@@ -48,34 +82,64 @@ export function TokenList({ multisigPda }: TokenListProps) {
           {tokens && tokens.length > 0 && (
             <>
               <div className="my-2 border-t border-border" />
-              {tokens.map((token) => (
-                <div
-                  key={token.account.data.parsed.info.mint}
-                  className="flex items-center justify-between rounded-lg bg-muted/30 p-3 transition-colors hover:bg-muted/50"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                      <span className="text-xs font-bold text-foreground">SPL</span>
+              {tokens.map((token) => {
+                const mint = token.account.data.parsed.info.mint;
+                const metadata = tokenMetadata.get(mint);
+                const isLoading = loadingMetadata && !metadata;
+
+                return (
+                  <div
+                    key={mint}
+                    className="flex items-center justify-between rounded-lg bg-muted/30 p-3 transition-colors hover:bg-muted/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-muted">
+                        {metadata?.logoURI ? (
+                          <img
+                            src={metadata.logoURI}
+                            alt={metadata.symbol || 'Token'}
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              e.currentTarget.parentElement!.innerHTML = `<span class="text-xs font-bold text-foreground">${metadata.symbol || 'SPL'}</span>`;
+                            }}
+                          />
+                        ) : (
+                          <span className="text-xs font-bold text-foreground">
+                            {metadata?.symbol || 'SPL'}
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium">
+                          {isLoading ? (
+                            <span className="text-muted-foreground">Loading...</span>
+                          ) : (
+                            metadata?.name || metadata?.symbol || formatMint(mint)
+                          )}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {token.account.data.parsed.info.tokenAmount.uiAmount}{' '}
+                          {metadata?.symbol || 'tokens'}
+                        </p>
+                        {metadata && !metadata.name && (
+                          <p className="font-mono text-xs text-muted-foreground">
+                            {formatMint(mint)}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-mono text-sm font-medium">
-                        {formatMint(token.account.data.parsed.info.mint)}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {token.account.data.parsed.info.tokenAmount.uiAmount} tokens
-                      </p>
-                    </div>
+                    <SendTokens
+                      mint={mint}
+                      tokenAccount={token.pubkey.toBase58()}
+                      decimals={token.account.data.parsed.info.tokenAmount.decimals}
+                      multisigPda={multisigPda}
+                      vaultIndex={vaultIndex}
+                      programId={programId.toBase58()}
+                    />
                   </div>
-                  <SendTokens
-                    mint={token.account.data.parsed.info.mint}
-                    tokenAccount={token.pubkey.toBase58()}
-                    decimals={token.account.data.parsed.info.tokenAmount.decimals}
-                    multisigPda={multisigPda}
-                    vaultIndex={vaultIndex}
-                    programId={programId.toBase58()}
-                  />
-                </div>
-              ))}
+                );
+              })}
             </>
           )}
 

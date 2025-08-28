@@ -4,7 +4,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useState } from 'react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import * as multisig from '@sqds/multisig';
-import { Connection, PublicKey, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
+import { PublicKey, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import { toast } from 'sonner';
 import { useMultisig } from '../hooks/useServices';
 import invariant from 'invariant';
@@ -93,7 +93,6 @@ const ChangeThresholdInput = ({ multisigPda, transactionIndex }: ChangeThreshold
     }).compileToV0Message();
 
     const transaction = new VersionedTransaction(message);
-
     const signature = await wallet.sendTransaction(transaction, connection, {
       skipPreflight: true,
     });

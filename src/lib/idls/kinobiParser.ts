@@ -2,6 +2,7 @@ import { PublicKey } from '@solana/web3.js';
 
 export interface KinobiInstruction {
   name: string;
+  type?: string;
   discriminator?: number[];
   accounts: Array<{
     name: string;
@@ -34,13 +35,11 @@ export class KinobiIdlParser {
       const parsed = this.parseInstruction(instruction, index);
       this.instructions.set(parsed.name, parsed);
 
-      // Store by discriminator if available
       if (parsed.discriminator) {
         const discriminatorKey = parsed.discriminator.join(',');
         this.instructionsByDiscriminator.set(discriminatorKey, parsed);
       }
 
-      // Store by index for fallback
       this.instructionsByIndex.set(index, parsed);
     });
   }
@@ -70,12 +69,9 @@ export class KinobiIdlParser {
       });
     }
 
-    // Extract discriminator
     let discriminator: number[] | undefined;
 
-    // Handle different discriminator formats
     if (instruction.discriminator) {
-      // Simple discriminator format
       if (Array.isArray(instruction.discriminator)) {
         discriminator = instruction.discriminator;
       } else if (instruction.discriminator.value) {

@@ -86,7 +86,7 @@ export default function CreateSquadForm({}: {}) {
       const delayMs = 1000;
       for (let attempt = 0; attempt <= maxAttempts && !sent; attempt++) {
         const status = await connection.getSignatureStatus(signature);
-        if (status?.value?.confirmationStatus === 'confirmed') {
+        if (status?.value?.confirmationStatus === 'finalized') {
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           sent = true;
         } else {

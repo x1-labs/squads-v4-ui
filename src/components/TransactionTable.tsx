@@ -90,7 +90,8 @@ export default function TransactionTable({
           false;
         const isExecuted = transaction.proposal?.status.__kind === 'Executed';
         const isCancelled = transaction.proposal?.status.__kind === 'Cancelled';
-        const isGreyedOut = isExecuted || isCancelled || stale;
+        const isRejected = transaction.proposal?.status.__kind === 'Rejected';
+        const isGreyedOut = isExecuted || isCancelled || stale || isRejected;
         return (
           <TableRow
             key={index}

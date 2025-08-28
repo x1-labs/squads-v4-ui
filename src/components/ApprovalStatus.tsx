@@ -26,9 +26,7 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({
   const cancelledCount = proposal.cancelled.length;
   const status = proposal.status.__kind;
 
-  // Helper function to get status display text
   const getStatusDisplay = () => {
-    // Don't show approval count for executed/cancelled/rejected as threshold may have changed
     if (['Executed', 'Cancelled', 'Rejected'].includes(status)) {
       return status;
     }
@@ -38,13 +36,9 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({
     return `${approvedCount}/${threshold}`;
   };
 
-  // Check if status is finalized (no longer active)
   const isFinalized = ['Executed', 'Cancelled', 'Rejected'].includes(status);
-
-  // Calculate progress percentage
   const progressPercentage = (approvedCount / threshold) * 100;
 
-  // Determine status color
   const getStatusColor = () => {
     // If transaction is stale but not executed/cancelled, grey it out
     if (isStale && status !== 'Executed' && status !== 'Cancelled') {
@@ -107,9 +101,6 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({
     );
   }
 
-  // Check if we should hide the progress bar
-  const hideProgressBar = isFinalized;
-
   // Detailed view for transaction details page
   return (
     <div className="space-y-3">
@@ -137,7 +128,7 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({
       </div>
 
       {/* Progress bar - only show for active proposals */}
-      {!hideProgressBar && (
+      {!isFinalized && (
         <div className="relative h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
           <div
             className={`absolute left-0 top-0 h-full rounded-full transition-all duration-300 ${

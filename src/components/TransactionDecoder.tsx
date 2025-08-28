@@ -6,12 +6,15 @@ import {
   DecodedInstruction,
 } from '../lib/transaction/simpleDecoder';
 import * as multisig from '@sqds/multisig';
+import { TokenMetadata } from '../lib/token/tokenMetadata';
+import { InstructionDisplay } from './instructions';
 
 interface TransactionDecoderProps {
   connection: Connection;
   multisigPda: PublicKey;
   transactionIndex: bigint;
   programId?: PublicKey;
+  tokenMetadata?: TokenMetadata | null;
 }
 
 export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
@@ -19,6 +22,7 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
   multisigPda,
   transactionIndex,
   programId = multisig.PROGRAM_ID,
+  tokenMetadata,
 }) => {
   const [decodedTx, setDecodedTx] = useState<DecodedTransaction | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,11 +106,6 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
               </span>
             </div>
             <h3 className="text-lg font-semibold text-foreground">{instruction.instructionName}</h3>
-            {instruction.humanReadable && (
-              <p className="mt-1 text-sm text-muted-foreground">
-                {instruction.humanReadable.split('\n')[0]}
-              </p>
-            )}
           </div>
           <button className="text-muted-foreground hover:text-foreground">
             {isExpanded ? '▼' : '▶'}
@@ -259,40 +258,20 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
         </p>
       </div>
 
-      {/* Transaction Summary - Show human-readable messages if available */}
-      {decodedTx.instructions.some((ix) => ix.humanReadable) && (
+      {/* Transaction Summary - Show typed instruction displays */}
+      {decodedTx.instructions.some((ix) => ix.data) && (
         <div className="mb-6 rounded-lg border border-border bg-card p-4">
           <h3 className="mb-4 font-semibold text-foreground">Transaction Summary</h3>
           <div className="space-y-3">
             {decodedTx.instructions
-              .filter((ix) => ix.humanReadable)
+              .filter((ix) => ix.data)
               .map((ix, idx) => (
                 <div key={idx} className="rounded-lg bg-muted/30 p-4">
-                  <div className="space-y-1 text-sm">
-                    {ix.humanReadable?.split('\n').map((line, lineIdx) => {
-                      const [label, ...valueParts] = line.split(':');
-                      const value = valueParts.join(':').trim();
-
-                      if (value) {
-                        // Line with label and value
-                        return (
-                          <div key={lineIdx} className="flex items-start gap-2">
-                            <span className="min-w-[60px] text-muted-foreground">{label}:</span>
-                            <code className="break-all font-mono text-xs text-foreground">
-                              {value}
-                            </code>
-                          </div>
-                        );
-                      } else {
-                        // First line (action and amount)
-                        return (
-                          <div key={lineIdx} className="mb-2 font-semibold text-foreground">
-                            {label}
-                          </div>
-                        );
-                      }
-                    })}
-                  </div>
+                  <InstructionDisplay
+                    instruction={ix}
+                    tokenMetadata={tokenMetadata}
+                    connection={connection}
+                  />
                 </div>
               ))}
           </div>
