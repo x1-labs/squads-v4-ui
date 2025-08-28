@@ -3,6 +3,7 @@ export interface SavedSquad {
   name: string;
   network?: 'mainnet' | 'devnet' | 'testnet';
   addedAt: number;
+  fromEnv: boolean;
 }
 
 export interface SquadConfig {
