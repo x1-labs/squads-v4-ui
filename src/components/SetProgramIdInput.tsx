@@ -26,7 +26,7 @@ const SetProgramIdInput = () => {
     <div>
       <Input
         onChange={(e) => setProgramIdState(e.target.value.trim())}
-        placeholder={storedProgramId || 'SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf'}
+        placeholder={storedProgramId || 'DDL3Xp6ie85DXgiPkXJ7abUyS2tGv4CGEod2DeQXQ941'}
         value={programId} // Sync input state with stored value
         className=""
       />

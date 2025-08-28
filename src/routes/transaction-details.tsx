@@ -128,7 +128,7 @@ export default function TransactionDetailsPage() {
 
   // Create connection with the configured RPC URL
   const connection = useMemo(() => {
-    return new Connection(rpcUrl || 'https://api.mainnet-beta.solana.com', 'finalized');
+    return new Connection(rpcUrl || 'https://rpc.testnet.x1.xyz', 'finalized');
   }, [rpcUrl]);
 
   // Extract transaction index and proposal from the PDA

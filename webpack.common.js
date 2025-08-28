@@ -2,6 +2,10 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 const webpack = require('webpack');
+const dotenv = require('dotenv');
+
+// Load .env file
+dotenv.config();
 
 module.exports = {
   entry: './src/index.tsx',
@@ -59,6 +63,20 @@ module.exports = {
     new webpack.ProvidePlugin({
       process: 'process/browser',
       Buffer: ['buffer', 'Buffer'],
+    }),
+    new webpack.DefinePlugin({
+      'process.env.APP_RPC_URL': JSON.stringify(process.env.APP_RPC_URL || ''),
+      'process.env.APP_PROGRAM_ID': JSON.stringify(process.env.APP_PROGRAM_ID || ''),
+      'process.env.APP_EXPLORER_URL': JSON.stringify(process.env.APP_EXPLORER_URL || ''),
+      // Pass through all APP_SAVED_SQUAD_ environment variables as a JSON object
+      'process.env.APP_SAVED_SQUADS': JSON.stringify(
+        Object.keys(process.env)
+          .filter(key => key.startsWith('APP_SAVED_SQUAD_'))
+          .reduce((acc, key) => {
+            acc[key] = process.env[key];
+            return acc;
+          }, {})
+      ),
     }),
   ],
 };

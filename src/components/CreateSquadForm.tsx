@@ -279,7 +279,7 @@ export default function CreateSquadForm({}: {}) {
                     className="h-4 w-4 hover:text-stone-500"
                   />
                   <Link
-                    to={`https://explorer.solana.com/address/${res.multisig}`}
+                    to={`https://explorer.x1.com/address/${res.multisig}`}
                     target="_blank"
                     rel="noreferrer"
                   >

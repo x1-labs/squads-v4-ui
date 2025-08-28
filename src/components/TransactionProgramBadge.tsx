@@ -136,7 +136,7 @@ export const TransactionProgramBadge: React.FC<TransactionProgramBadgeProps> = (
     const fetchProgramInfo = async () => {
       try {
         const connection = new Connection(
-          rpcUrl || 'https://api.mainnet-beta.solana.com',
+          rpcUrl || 'https://rpc.testnet.x1.xyz',
           'finalized'
         );
 

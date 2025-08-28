@@ -25,7 +25,7 @@ class IdlManager {
 
     // Use the address from the IDL itself
     this.addIdl(
-      'X1dpTaMXkdEHQwhUk5oidxK9RXer8WoUCinWTyRmVjQ', // The actual deployed program ID
+      'X1DPvnLXekvd6EtDsPVqahzhziKx3Zj1z8WkD93xebg', // The actual deployed program ID
       'Delegation Program',
       delegationProgramIdl
     );
@@ -89,9 +89,8 @@ class IdlManager {
   removeIdl(programId: string): boolean {
     // Don't allow removing built-in IDLs
     const builtInIds = [
-      'SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf',
       'DDL3Xp6ie85DXgiPkXJ7abUyS2tGv4CGEod2DeQXQ941',
-      'X1dpTaMXkdEHQwhUk5oidxK9RXer8WoUCinWTyRmVjQ',
+      'X1DPvnLXekvd6EtDsPVqahzhziKx3Zj1z8WkD93xebg',
       'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
     ];
 
@@ -163,9 +162,8 @@ class IdlManager {
     try {
       // Filter out built-in IDLs
       const builtInIds = [
-        'SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf',
         'DDL3Xp6ie85DXgiPkXJ7abUyS2tGv4CGEod2DeQXQ941',
-        'X1dpTaMXkdEHQwhUk5oidxK9RXer8WoUCinWTyRmVjQ',
+        'X1DPvnLXekvd6EtDsPVqahzhziKx3Zj1z8WkD93xebg',
         'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
       ];
 

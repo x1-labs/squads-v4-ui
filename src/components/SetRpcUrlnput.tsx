@@ -33,7 +33,7 @@ const SetRpcUrlInput = ({ onUpdate }: { onUpdate?: () => void }) => {
     <div>
       <Input
         onChange={(e) => setRpcUrlState(e.target.value.trim())}
-        placeholder={storedRpcUrl || 'https://api.mainnet-beta.solana.com'}
+        placeholder={storedRpcUrl || 'https://rpc.testnet.x1.xyz'}
         value={rpcUrl} // Sync input state with stored value
         className=""
       />
