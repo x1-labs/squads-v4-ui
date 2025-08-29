@@ -6,6 +6,8 @@ import { ApprovalStatus } from '@/components/ApprovalStatus';
 import { useRpcUrl } from '@/hooks/useSettings';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useMultisig } from '@/hooks/useServices';
+import { useMultisigAddress } from '@/hooks/useMultisigAddress';
+import { useSquadConfig } from '@/hooks/useSquadConfig';
 import * as multisig from '@sqds/multisig';
 import { Button } from '@/components/ui/button';
 import ApproveButton from '@/components/ApproveButton';
@@ -21,150 +23,162 @@ export default function TransactionDetailsPage() {
   const { transactionPda } = useParams<{ transactionPda: string }>();
   const navigate = useNavigate();
   const { rpcUrl } = useRpcUrl();
-  const { multisigAddress, programId } = useMultisigData();
+  const { programId } = useMultisigData();
+  const { multisigAddress, setMultisigAddress } = useMultisigAddress();
   const { data: multisigConfig } = useMultisig();
+  const { selectSquad, addSquad } = useSquadConfig();
 
   // Create connection with the configured RPC URL
   const connection = useMemo(() => {
     return new Connection(rpcUrl || 'https://rpc.testnet.x1.xyz', 'finalized');
   }, [rpcUrl]);
 
-  // Extract transaction index and proposal from the PDA
   const [transactionIndex, setTransactionIndex] = React.useState<bigint | null>(null);
   const [proposal, setProposal] = React.useState<multisig.generated.Proposal | null>(null);
-  const [transactionType, setTransactionType] = React.useState<'vault' | 'config' | 'unknown'>(
-    'unknown'
-  );
   const [tags, setTags] = React.useState<TransactionTag[]>([]);
+  const [isLoading, setIsLoading] = React.useState<boolean>(true);
+
+  // Helper function to set up squad
+  const setupSquad = (multisigPubkey: PublicKey) => {
+    const squadAddr = multisigPubkey.toBase58();
+
+    // Add to saved squads if not already there and select it
+    addSquad.mutate({
+      address: squadAddr,
+      name: `Squad ${squadAddr.slice(0, 4)}...${squadAddr.slice(-4)}`,
+    });
+    selectSquad.mutate(squadAddr);
+    setMultisigAddress.mutate(squadAddr);
+
+    return multisigPubkey;
+  };
+
+  // Helper function to extract tags
+  const extractTagsForTransaction = async (multisigPubkey: PublicKey, index: bigint) => {
+    try {
+      const decoder = new SimpleDecoder(connection);
+      const decoded = await decoder.decodeVaultTransaction(multisigPubkey, index, programId);
+      if (!decoded.error && decoded.instructions.length > 0) {
+        const extractedTags = extractTransactionTags(decoded);
+        setTags(extractedTags.tags);
+      }
+    } catch (err) {
+      console.debug('Failed to extract tags', err);
+    }
+  };
+
+  // Helper function to fetch proposal
+  const fetchProposal = async (multisigPubkey: PublicKey, index: bigint) => {
+    const [proposalPda] = multisig.getProposalPda({
+      multisigPda: multisigPubkey,
+      transactionIndex: index,
+      programId: programId,
+    });
+
+    try {
+      const proposalData = await multisig.accounts.Proposal.fromAccountAddress(
+        connection as any,
+        proposalPda
+      );
+      setProposal(proposalData);
+    } catch (err) {
+      console.log('No proposal found for transaction');
+    }
+  };
+
+  // Try to fetch as VaultTransaction
+  const tryFetchVaultTransaction = async (transactionPubkey: PublicKey): Promise<boolean> => {
+    try {
+      const vaultTx = await multisig.accounts.VaultTransaction.fromAccountAddress(
+        connection as any,
+        transactionPubkey
+      );
+      const index = BigInt(vaultTx.index.toString());
+      setTransactionIndex(index);
+
+      const multisigPubkey = setupSquad(vaultTx.multisig);
+      await extractTagsForTransaction(multisigPubkey, index);
+      await fetchProposal(multisigPubkey, index);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // Try to fetch as ConfigTransaction
+  const tryFetchConfigTransaction = async (transactionPubkey: PublicKey): Promise<boolean> => {
+    try {
+      const configTx = await multisig.accounts.ConfigTransaction.fromAccountAddress(
+        connection as any,
+        transactionPubkey
+      );
+      const index = BigInt(configTx.index.toString());
+      setTransactionIndex(index);
+
+      const multisigPubkey = setupSquad(configTx.multisig);
+      await extractTagsForTransaction(multisigPubkey, index);
+      await fetchProposal(multisigPubkey, index);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // Try to fetch as Batch
+  const tryFetchBatch = async (transactionPubkey: PublicKey): Promise<boolean> => {
+    try {
+      const batch = await multisig.accounts.Batch.fromAccountAddress(
+        connection as any,
+        transactionPubkey
+      );
+      const index = BigInt(batch.index.toString());
+      setTransactionIndex(index);
+
+      const multisigPubkey = setupSquad(batch.multisig);
+      await fetchProposal(multisigPubkey, index);
+      // Note: Batch transactions don't have tags extracted
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   React.useEffect(() => {
     const fetchTransactionDetails = async () => {
-      if (!transactionPda || !multisigAddress || !programId) return;
+      if (!transactionPda || !programId) return;
 
       try {
-        // Try to fetch the transaction to get its index
+        // Try to fetch the transaction to get its index and multisig
         const transactionPubkey = new PublicKey(transactionPda);
-        const multisigPubkey = new PublicKey(multisigAddress);
 
-        // Try to fetch as VaultTransaction first
-        try {
-          const vaultTx = await multisig.accounts.VaultTransaction.fromAccountAddress(
-            connection as any,
-            transactionPubkey
-          );
-          const index = BigInt(vaultTx.index.toString());
-          setTransactionIndex(index);
-          setTransactionType('vault');
+        // Try each transaction type in order
+        const success =
+          (await tryFetchVaultTransaction(transactionPubkey)) ||
+          (await tryFetchConfigTransaction(transactionPubkey)) ||
+          (await tryFetchBatch(transactionPubkey));
 
-          // Extract tags
-          try {
-            const decoder = new SimpleDecoder(connection);
-            const decoded = await decoder.decodeVaultTransaction(multisigPubkey, index, programId);
-            if (!decoded.error && decoded.instructions.length > 0) {
-              const extractedTags = extractTransactionTags(decoded);
-              setTags(extractedTags.tags);
-            }
-          } catch (err) {
-            console.debug('Failed to extract tags', err);
-          }
-
-          // Fetch the proposal
-          const [proposalPda] = multisig.getProposalPda({
-            multisigPda: multisigPubkey,
-            transactionIndex: index,
-            programId: programId,
-          });
-
-          try {
-            const proposalData = await multisig.accounts.Proposal.fromAccountAddress(
-              connection as any,
-              proposalPda
-            );
-            setProposal(proposalData);
-          } catch (err) {
-            console.log('No proposal found for transaction');
-          }
-        } catch {
-          // Try as ConfigTransaction
-          try {
-            const configTx = await multisig.accounts.ConfigTransaction.fromAccountAddress(
-              connection as any,
-              transactionPubkey
-            );
-            const index = BigInt(configTx.index.toString());
-            setTransactionIndex(index);
-            setTransactionType('config');
-
-            // Extract tags
-            try {
-              const decoder = new SimpleDecoder(connection);
-              const decoded = await decoder.decodeVaultTransaction(
-                multisigPubkey,
-                index,
-                programId
-              );
-              if (!decoded.error && decoded.instructions.length > 0) {
-                const extractedTags = extractTransactionTags(decoded);
-                setTags(extractedTags.tags);
-              }
-            } catch (err) {
-              console.debug('Failed to extract tags', err);
-            }
-
-            // Fetch the proposal
-            const [proposalPda] = multisig.getProposalPda({
-              multisigPda: multisigPubkey,
-              transactionIndex: index,
-              programId: programId,
-            });
-
-            try {
-              const proposalData = await multisig.accounts.Proposal.fromAccountAddress(
-                connection as any,
-                proposalPda
-              );
-              setProposal(proposalData);
-            } catch (err) {
-              console.log('No proposal found for transaction');
-            }
-          } catch {
-            // Try as Batch
-            try {
-              const batch = await multisig.accounts.Batch.fromAccountAddress(
-                connection as any,
-                transactionPubkey
-              );
-              const index = BigInt(batch.index.toString());
-              setTransactionIndex(index);
-
-              // Fetch the proposal
-              const [proposalPda] = multisig.getProposalPda({
-                multisigPda: multisigPubkey,
-                transactionIndex: index,
-                programId: programId,
-              });
-
-              try {
-                const proposalData = await multisig.accounts.Proposal.fromAccountAddress(
-                  connection as any,
-                  proposalPda
-                );
-                setProposal(proposalData);
-              } catch (err) {
-                console.log('No proposal found for transaction');
-              }
-            } catch (error) {
-              console.error('Failed to fetch transaction details:', error);
-            }
-          }
+        if (!success) {
+          console.error('Failed to fetch transaction details: Unknown transaction type');
         }
       } catch (error) {
         console.error('Error fetching transaction:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchTransactionDetails();
-  }, [transactionPda, connection, multisigAddress, programId]);
+  }, [transactionPda, connection, programId]);
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="text-center">
+          <p className="mb-4 text-muted-foreground">Loading transaction details...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!transactionPda) {
     return (
@@ -174,7 +188,7 @@ export default function TransactionDetailsPage() {
           <p className="mb-4 text-muted-foreground">
             The requested transaction could not be found.
           </p>
-          <Button onClick={() => navigate('/transactions')}>Back to Transactions</Button>
+          <Button onClick={() => navigate(`/transactions`)}>Back to Transactions</Button>
         </div>
       </div>
     );

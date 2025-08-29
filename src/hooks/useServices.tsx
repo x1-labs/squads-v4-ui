@@ -75,7 +75,48 @@ export const useGetTokens = () => {
   });
 };
 
-// Transactions
+// Optimized version - doesn't extract tags, uses parallel fetching
+async function fetchTransactionDataFast(
+  connection: Connection,
+  multisigPda: PublicKey,
+  index: bigint,
+  programId: PublicKey
+) {
+  const transactionPda = multisig.getTransactionPda({
+    multisigPda,
+    index,
+    programId,
+  });
+  const proposalPda = multisig.getProposalPda({
+    multisigPda,
+    transactionIndex: index,
+    programId,
+  });
+
+  // Fetch proposal and transaction type in parallel
+  const [proposal, transactionType] = await Promise.all([
+    // Fetch proposal
+    multisig.accounts.Proposal.fromAccountAddress(connection as any, proposalPda[0]).catch(
+      () => null
+    ),
+
+    // Determine transaction type (try vault first, then config)
+    multisig.accounts.VaultTransaction.fromAccountAddress(connection as any, transactionPda[0])
+      .then(() => 'vault' as const)
+      .catch(() =>
+        multisig.accounts.ConfigTransaction.fromAccountAddress(connection as any, transactionPda[0])
+          .then(() => 'config' as const)
+          .catch(() => 'unknown' as const)
+      ),
+  ]);
+
+  // Don't extract tags on list load - too slow
+  const tags: TransactionTag[] = [];
+
+  return { transactionPda, proposal, index, transactionType, tags };
+}
+
+// Original function kept for compatibility
 async function fetchTransactionData(
   connection: Connection,
   multisigPda: PublicKey,
@@ -152,14 +193,15 @@ export const useTransactions = (startIndex: number, endIndex: number) => {
       if (!multisigAddress) return null;
       try {
         const multisigPda = new PublicKey(multisigAddress);
-        const results: any[] = [];
-
+        // Create all fetch promises in parallel
+        const promises: Promise<any>[] = [];
         for (let i = 0; i <= startIndex - endIndex; i++) {
           const index = BigInt(startIndex - i);
-          const transaction = await fetchTransactionData(connection, multisigPda, index, programId);
-          results.push(transaction);
+          promises.push(fetchTransactionDataFast(connection, multisigPda, index, programId));
         }
 
+        // Wait for all to complete
+        const results = await Promise.all(promises);
         return results;
       } catch (error) {
         return null;
