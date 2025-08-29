@@ -110,17 +110,6 @@ export const SplTransferSummary: React.FC<InstructionSummaryProps> = ({
               <AddressWithButtons address={toOwner || toTokenAccount} label="To" />
             </div>
 
-            {/* Token account details - only show if we have owner info */}
-            {(fromOwner || toOwner) && (
-              <div className="mt-2 space-y-1.5 border-t border-border/50 pt-2">
-                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Token Account Details
-                </div>
-                {fromOwner && <AddressWithButtons address={fromTokenAccount} label="Source" />}
-                {toOwner && <AddressWithButtons address={toTokenAccount} label="Dest" />}
-              </div>
-            )}
-
             {/* Token mint */}
             {mintAddress && (
               <div className="mt-2 border-t border-border/50 pt-2">
