@@ -15,6 +15,7 @@ import {
   PublicKey,
   SystemProgram,
   TransactionMessage,
+  TransactionInstruction,
   VersionedTransaction,
 } from '@solana/web3.js';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
@@ -25,6 +26,7 @@ import { useMultisigData } from '~/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '../hooks/useAccess';
 import { waitForConfirmation } from '../lib/transactionConfirmation';
+import { addMemoToInstructions } from '../lib/utils/memoInstruction';
 
 type SendSolProps = {
   multisigPda: string;
@@ -38,6 +40,7 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
   const walletModal = useWalletModal();
   const [amount, setAmount] = useState<string>('');
   const [recipient, setRecipient] = useState('');
+  const [memo, setMemo] = useState('');
   const { connection, programId } = useMultisigData();
   const queryClient = useQueryClient();
   const parsedAmount = parseFloat(amount);
@@ -61,6 +64,10 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
       lamports: parsedAmount * LAMPORTS_PER_SOL,
     });
 
+    // Create instructions array and add memo if provided
+    const instructions: TransactionInstruction[] = [transferInstruction];
+    addMemoToInstructions(instructions, memo, vaultAddress);
+
     const multisigInfo = await multisig.accounts.Multisig.fromAccountAddress(
       // @ts-ignore
       connection,
@@ -70,7 +77,7 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
     const blockhash = (await connection.getLatestBlockhash()).blockhash;
 
     const transferMessage = new TransactionMessage({
-      instructions: [transferInstruction],
+      instructions,
       payerKey: new PublicKey(vaultAddress),
       recentBlockhash: blockhash,
     });
@@ -126,6 +133,7 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
     }
     setAmount('');
     setRecipient('');
+    setMemo('');
     closeDialog();
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
   };
@@ -160,6 +168,16 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
         <Input placeholder="Amount" type="number" onChange={(e) => setAmount(e.target.value)} />
         {!isAmountValid && amount.length > 0 && (
           <p className="text-xs text-red-500">Invalid amount</p>
+        )}
+        <Input
+          placeholder="Memo (optional)"
+          type="text"
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          maxLength={200}
+        />
+        {memo.length > 0 && (
+          <p className="text-xs text-muted-foreground">{memo.length}/200 characters</p>
         )}
         <Button
           onClick={() =>

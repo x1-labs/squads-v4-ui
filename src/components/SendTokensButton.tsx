@@ -16,7 +16,12 @@ import {
 } from '@solana/spl-token';
 import * as multisig from '@sqds/multisig';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { PublicKey, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
+import {
+  PublicKey,
+  TransactionMessage,
+  VersionedTransaction,
+  TransactionInstruction,
+} from '@solana/web3.js';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { Input } from './ui/input';
 import { toast } from 'sonner';
@@ -26,6 +31,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '../hooks/useAccess';
 import { waitForConfirmation } from '../lib/transactionConfirmation';
 import { formatError } from '@/lib/utils/errorHandler';
+import { addMemoToInstructions } from '../lib/utils/memoInstruction';
 
 type SendTokensProps = {
   tokenAccount: string;
@@ -48,6 +54,7 @@ const SendTokens = ({
   const walletModal = useWalletModal();
   const [amount, setAmount] = useState<string>('');
   const [recipient, setRecipient] = useState('');
+  const [memo, setMemo] = useState('');
 
   const { connection } = useMultisigData();
 
@@ -101,6 +108,13 @@ const SendTokens = ({
       TOKEN_PROGRAM
     );
 
+    // Create instructions array and add memo if provided
+    const instructions: TransactionInstruction[] = [
+      createRecipientATAInstruction,
+      transferInstruction,
+    ];
+    addMemoToInstructions(instructions, memo, new PublicKey(vaultAddress));
+
     const multisigInfo = await multisig.accounts.Multisig.fromAccountAddress(
       // @ts-ignore
       connection,
@@ -110,7 +124,7 @@ const SendTokens = ({
     const blockhash = (await connection.getLatestBlockhash()).blockhash;
 
     const transferMessage = new TransactionMessage({
-      instructions: [createRecipientATAInstruction, transferInstruction],
+      instructions,
       payerKey: new PublicKey(vaultAddress),
       recentBlockhash: blockhash,
     });
@@ -200,6 +214,7 @@ const SendTokens = ({
     }
     setAmount('');
     setRecipient('');
+    setMemo('');
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
     closeDialog();
   };
@@ -240,6 +255,16 @@ const SendTokens = ({
         />
         {!isAmountValid && amount.length > 0 && (
           <p className="text-xs text-red-500">Invalid amount</p>
+        )}
+        <Input
+          placeholder="Memo (optional)"
+          type="text"
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          maxLength={200}
+        />
+        {memo.length > 0 && (
+          <p className="text-xs text-muted-foreground">{memo.length}/200 characters</p>
         )}
         <Button
           onClick={() =>

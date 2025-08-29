@@ -6,6 +6,7 @@
 import { registry } from './lib/registry';
 import { XntTransferSummary } from './components/instructions/summaries/XntTransferSummary';
 import { SplTransferSummary } from './components/instructions/summaries/SplTransferSummary';
+import { MemoSummary } from './components/instructions/summaries/MemoSummary';
 
 // Import IDLs
 import squadsV4Idl from './lib/idls/squads-v4.json';
@@ -135,6 +136,23 @@ registry.register({
     },
     ClaimRewards: {
       tags: { label: 'Claim Rewards', color: 'purple', variant: 'subtle' },
+    },
+  },
+});
+
+// ============================================
+// Memo Program
+// ============================================
+registry.register({
+  programId: [
+    'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr', // Memo Program
+    'Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo', // Legacy Memo Program
+  ],
+  name: 'Memo Program',
+  instructions: {
+    Memo: {
+      summary: MemoSummary,
+      tags: { label: 'Memo', color: 'blue', variant: 'subtle' },
     },
   },
 });

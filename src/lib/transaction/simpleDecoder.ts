@@ -433,8 +433,6 @@ export class SimpleDecoder {
             }
 
             const formattedName = this.formatInstructionName(decoded.name || 'UnknownInstruction');
-            console.log('nick', decoded.name, formattedName);
-
             return {
               programId: programIdStr,
               programName: this.getProgramName(programIdStr),
