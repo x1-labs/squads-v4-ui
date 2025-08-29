@@ -215,17 +215,6 @@ export default function TransactionDetailsPage() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-foreground">Transaction Details</h1>
-              {transactionType !== 'unknown' && (
-                <span
-                  className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${
-                    transactionType === 'vault'
-                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                      : 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
-                  }`}
-                >
-                  {transactionType === 'vault' ? 'Vault Transaction' : 'Config Transaction'}
-                </span>
-              )}
               {isStale && proposalStatus !== 'Executed' && proposalStatus !== 'Cancelled' && (
                 <div className="text-warning bg-warning/10 border-warning/20 flex items-center gap-1 rounded-md border px-2 py-1">
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
