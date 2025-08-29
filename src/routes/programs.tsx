@@ -8,8 +8,10 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Suspense, useState } from 'react';
 import { useProgram } from '../hooks/useProgram';
 import CreateProgramUpgradeInput from '../components/CreateProgramUpgradeInput';
+import { useMultisigData } from '@/hooks/useMultisigData';
 
 const ProgramsPage = () => {
+  const { multisigAddress } = useMultisigData();
   const { data: multisigConfig } = useMultisig();
 
   // State for program ID input and validation
@@ -19,6 +21,24 @@ const ProgramsPage = () => {
 
   // Only use the hook when we have a validated program ID
   const { data: programInfos } = useProgram(validatedProgramId);
+
+  // Check if we have a valid multisig
+  if (!multisigAddress || !multisigConfig) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<div>Loading...</div>}>
+          <div className="">
+            <h1 className="mb-4 text-3xl font-bold">Program Manager</h1>
+            <div className="py-8 text-center">
+              <p className="text-muted-foreground">
+                Please select a valid squad to manage programs.
+              </p>
+            </div>
+          </div>
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
 
   // Validate the program ID
   const validateProgramId = () => {

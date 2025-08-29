@@ -2,7 +2,7 @@ import * as multisig from '@sqds/multisig';
 // top level
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 
-const DEFAULT_RPC_URL = 'https://api.mainnet-beta.solana.com'; // Default fallback
+const DEFAULT_RPC_URL = process.env.APP_RPC_URL || 'https://rpc.testnet.x1.xyz'; // Default fallback
 
 const getRpcUrl = () => {
   if (typeof document !== 'undefined') {
@@ -32,7 +32,7 @@ export const useRpcUrl = () => {
   return { rpcUrl, setRpcUrl };
 };
 
-const DEFAULT_PROGRAM_ID = multisig.PROGRAM_ID.toBase58();
+const DEFAULT_PROGRAM_ID = process.env.APP_PROGRAM_ID || "DDL3Xp6ie85DXgiPkXJ7abUyS2tGv4CGEod2DeQXQ941";
 
 const getProgramId = () => {
   if (typeof window !== 'undefined') {
@@ -62,7 +62,7 @@ export const useProgramId = () => {
 };
 
 // explorer url
-const DEFAULT_EXPLORER_URL = 'https://explorer.solana.com';
+const DEFAULT_EXPLORER_URL = process.env.APP_EXPLORER_URL || 'https://explorer.x1.com';
 const getExplorerUrl = () => {
   if (typeof window !== 'undefined') {
     return localStorage.getItem('x-explorer-url') || DEFAULT_EXPLORER_URL;

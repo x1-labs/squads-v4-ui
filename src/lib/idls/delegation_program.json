@@ -1,0 +1,945 @@
+{
+  "address": "X1dpTaMXkdEHQwhUk5oidxK9RXer8WoUCinWTyRmVjQ",
+  "metadata": {
+    "name": "delegation_program",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "X1 Labs Delegation Program - On-chain governance and metadata"
+  },
+  "instructions": [
+    {
+      "name": "apply_validator",
+      "docs": [
+        "Apply for the delegation program",
+        "",
+        "Validators can self-register by calling this instruction.",
+        "On success the validator will be moved to the `ValidatorStatus::Pending` state"
+      ],
+      "discriminator": [176, 87, 141, 154, 249, 219, 197, 248],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
+              },
+              {
+                "kind": "account",
+                "path": "identity"
+              }
+            ]
+          }
+        },
+        {
+          "name": "identity",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "approve_validator",
+      "docs": [
+        "Approve a validator (admin only)",
+        "",
+        "On success the validator will be moved to the `ValidatorStatus::Approved` state"
+      ],
+      "discriminator": [185, 132, 52, 190, 111, 119, 13, 252],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
+              },
+              {
+                "kind": "account",
+                "path": "validator.identity",
+                "account": "ValidatorInfo"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_validator",
+      "docs": [
+        "Admin create validator (admin only)",
+        "",
+        "Create a new validator account with the specified status"
+      ],
+      "discriminator": [223, 156, 228, 103, 198, 99, 177, 99],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
+              },
+              {
+                "kind": "account",
+                "path": "identity"
+              }
+            ]
+          }
+        },
+        {
+          "name": "identity"
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "status",
+          "type": {
+            "defined": {
+              "name": "ValidatorStatus"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize_config",
+      "docs": ["Initialize the delegation config account with all criteria"],
+      "discriminator": [208, 127, 21, 1, 194, 190, 196, 70],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "admin_authority",
+          "type": "pubkey"
+        },
+        {
+          "name": "bot_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "reject_validator",
+      "docs": [
+        "Reject a validator (admin only)",
+        "",
+        "On success the validator will be moved to the `ValidatorStatus::Rejected` state"
+      ],
+      "discriminator": [163, 129, 205, 116, 160, 61, 120, 97],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
+              },
+              {
+                "kind": "account",
+                "path": "validator.identity",
+                "account": "ValidatorInfo"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "remove_validator",
+      "docs": [
+        "Remove a validator (admin only)",
+        "",
+        "On success the validator account will be deleted and lamports refunded to the admin"
+      ],
+      "discriminator": [25, 96, 211, 155, 161, 14, 168, 188],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
+              },
+              {
+                "kind": "account",
+                "path": "validator.identity",
+                "account": "ValidatorInfo"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "transfer_authority",
+      "docs": [
+        "Transfer admin authority to a new account",
+        "",
+        "This is an irreversible operation. The current admin transfers",
+        "control to a new admin authority."
+      ],
+      "discriminator": [48, 169, 76, 72, 229, 180, 55, 161],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "docs": ["The current admin authority that must sign this transaction"],
+          "signer": true,
+          "relations": ["config"]
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "update_bot_authority",
+      "docs": [
+        "Update bot authority",
+        "",
+        "This allows the admin to update the bot authority that can update validator criteria status"
+      ],
+      "discriminator": [109, 185, 206, 131, 96, 208, 252, 197],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "docs": ["The current admin authority that must sign this transaction"],
+          "signer": true,
+          "relations": ["config"]
+        }
+      ],
+      "args": [
+        {
+          "name": "new_bot_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "update_config",
+      "docs": ["Update delegation config parameters - all fields are optional"],
+      "discriminator": [29, 158, 252, 191, 10, 83, 219, 99],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": ["config"]
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "UpdateConfigParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "update_validator_criteria",
+      "docs": ["Update validator criteria status"],
+      "discriminator": [242, 111, 245, 169, 247, 54, 56, 155],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
+              },
+              {
+                "kind": "account",
+                "path": "validator.identity",
+                "account": "ValidatorInfo"
+              }
+            ]
+          }
+        },
+        {
+          "name": "bot",
+          "docs": ["The bot authority that must match the config bot_authority"],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "failing_criteria",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "DelegationCriterion"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "update_validator_status",
+      "docs": [
+        "Rewrite a validator account to the provided state (admin only)",
+        "",
+        "Bypass the normal workflow and set validator to any state"
+      ],
+      "discriminator": [251, 40, 229, 66, 218, 176, 24, 229],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
+              },
+              {
+                "kind": "account",
+                "path": "validator.identity",
+                "account": "ValidatorInfo"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100, 101, 108, 101, 103, 97, 116, 105, 111, 110, 95, 99, 111, 110, 102, 105, 103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "new_status",
+          "type": {
+            "defined": {
+              "name": "ValidatorStatus"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "withdraw_validator",
+      "docs": [
+        "Withdraw from the delegation program",
+        "",
+        "Validators can remove themselves by calling this instruction.",
+        "On success the validator account will be deleted and lamports refunded"
+      ],
+      "discriminator": [73, 175, 146, 162, 146, 174, 152, 16],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [118, 97, 108, 105, 100, 97, 116, 111, 114]
+              },
+              {
+                "kind": "account",
+                "path": "validator.identity",
+                "account": "ValidatorInfo"
+              }
+            ]
+          }
+        },
+        {
+          "name": "identity",
+          "signer": true
+        },
+        {
+          "name": "refundee",
+          "writable": true
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "DelegationConfig",
+      "discriminator": [14, 156, 133, 17, 100, 34, 0, 49]
+    },
+    {
+      "name": "ValidatorInfo",
+      "discriminator": [121, 15, 32, 151, 174, 70, 186, 250]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotAuthorized",
+      "msg": "Not authorized to perform this action"
+    },
+    {
+      "code": 6001,
+      "name": "AlreadyInitialized",
+      "msg": "Account is already initialized"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidAccount",
+      "msg": "Invalid account provided"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidCommissionPercent",
+      "msg": "Commission percentage must be between 0 and 100"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidStakePercent",
+      "msg": "Stake percentage must be between 0 and 100"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidSkipRateMargin",
+      "msg": "Skip rate margin must be between 0 and 100"
+    },
+    {
+      "code": 6006,
+      "name": "ValidatorNotFound",
+      "msg": "Validator not found in the list"
+    },
+    {
+      "code": 6007,
+      "name": "ValidatorAlreadyExists",
+      "msg": "Validator already exists in the list"
+    },
+    {
+      "code": 6008,
+      "name": "TooManyValidators",
+      "msg": "Too many validators in the list"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidValidatorStatus",
+      "msg": "Invalid validator status"
+    },
+    {
+      "code": 6010,
+      "name": "SystemPaused",
+      "msg": "System is currently paused"
+    },
+    {
+      "code": 6011,
+      "name": "InvalidStakeAmount",
+      "msg": "Invalid stake amount"
+    },
+    {
+      "code": 6012,
+      "name": "ValidatorNotEligible",
+      "msg": "Validator is not eligible for delegation"
+    },
+    {
+      "code": 6013,
+      "name": "InsufficientFunds",
+      "msg": "Insufficient funds"
+    },
+    {
+      "code": 6014,
+      "name": "InvalidEpoch",
+      "msg": "Invalid epoch"
+    },
+    {
+      "code": 6015,
+      "name": "ArithmeticOverflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidConfigParameter",
+      "msg": "Invalid configuration parameter"
+    }
+  ],
+  "types": [
+    {
+      "name": "DelegationConfig",
+      "docs": ["Global delegation configuration parameters"],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "docs": ["Version of this account structure"],
+            "type": "u8"
+          },
+          {
+            "name": "authority",
+            "docs": ["Authority that can update this config"],
+            "type": "pubkey"
+          },
+          {
+            "name": "max_commission_percent",
+            "docs": ["Maximum commission percentage allowed (0-100)"],
+            "type": "u8"
+          },
+          {
+            "name": "min_self_stake",
+            "docs": ["Minimum self-stake required from validators (in lamports)"],
+            "type": "u64"
+          },
+          {
+            "name": "max_total_stake",
+            "docs": ["Maximum total stake per validator (in lamports)"],
+            "type": "u64"
+          },
+          {
+            "name": "max_validator_stake_pct",
+            "docs": ["Maximum percentage of total network stake a validator can have (0-100)"],
+            "type": "u8"
+          },
+          {
+            "name": "skip_rate_tolerance_pct",
+            "docs": ["Skip rate tolerance percentage above cluster average (0-100)"],
+            "type": "u8"
+          },
+          {
+            "name": "vote_credits_threshold_pct",
+            "docs": ["Vote credits threshold as percentage of cluster average (0-100)"],
+            "type": "u8"
+          },
+          {
+            "name": "min_validator_version",
+            "docs": ["Minimum Validator version required (packed as major.minor.patch)"],
+            "type": "u32"
+          },
+          {
+            "name": "reserve_stake_pct",
+            "docs": ["Reserve stake percentage to maintain (0-100)"],
+            "type": "u8"
+          },
+          {
+            "name": "max_validators",
+            "docs": ["Maximum number of validators to delegate to"],
+            "type": "u32"
+          },
+          {
+            "name": "emergency_pause",
+            "docs": ["Emergency pause flag"],
+            "type": "bool"
+          },
+          {
+            "name": "last_updated_epoch",
+            "docs": ["Last epoch when this config was updated"],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "docs": ["Bump seed for PDA generation"],
+            "type": "u8"
+          },
+          {
+            "name": "stake_matching_cap",
+            "docs": ["Maximum stake to match 1:1 with external stake (in lamports)"],
+            "type": "u64"
+          },
+          {
+            "name": "base_allocation_weight",
+            "docs": ["Percentage of available stake (after reserve) for base allocation (0-100)"],
+            "type": "u8"
+          },
+          {
+            "name": "match_allocation_weight",
+            "docs": ["Percentage of available stake (after reserve) for match allocation (0-100)"],
+            "type": "u8"
+          },
+          {
+            "name": "min_stake_adjustment_pct",
+            "docs": ["Minimum stake adjustment percentage required to trigger rebalancing (0-100)"],
+            "type": "u8"
+          },
+          {
+            "name": "bot_authority",
+            "docs": ["Bot authority that can update validator criteria status (added in v3)"],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DelegationCriterion",
+      "docs": ["Delegation criteria that a validator can fail"],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "MaxCommission"
+          },
+          {
+            "name": "MinSelfStake"
+          },
+          {
+            "name": "MaxTotalStake"
+          },
+          {
+            "name": "MinVoteCredits"
+          },
+          {
+            "name": "MaxSkipRate"
+          },
+          {
+            "name": "MinValidatorVersion"
+          },
+          {
+            "name": "Delinquent"
+          },
+          {
+            "name": "NoVersionInfo"
+          },
+          {
+            "name": "NotValidator"
+          },
+          {
+            "name": "MaxTotalStakePercent"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UpdateConfigParams",
+      "docs": ["Parameters for updating delegation config - all fields are optional"],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "max_commission_percent",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "min_self_stake",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "max_total_stake",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "max_validator_stake_pct",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "skip_rate_tolerance_pct",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "vote_credits_threshold_pct",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "min_validator_version",
+            "type": {
+              "option": "u32"
+            }
+          },
+          {
+            "name": "reserve_stake_pct",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "max_validators",
+            "type": {
+              "option": "u32"
+            }
+          },
+          {
+            "name": "emergency_pause",
+            "type": {
+              "option": "bool"
+            }
+          },
+          {
+            "name": "stake_matching_cap",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "base_allocation_weight",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "match_allocation_weight",
+            "type": {
+              "option": "u8"
+            }
+          },
+          {
+            "name": "min_stake_adjustment_pct",
+            "type": {
+              "option": "u8"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ValidatorInfo",
+      "docs": ["Information about a single validator in the delegation program"],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "identity",
+            "docs": ["The validator's identity account public key (used for PDA derivation)"],
+            "type": "pubkey"
+          },
+          {
+            "name": "status",
+            "docs": ["Current status of the validator"],
+            "type": {
+              "defined": {
+                "name": "ValidatorStatus"
+              }
+            }
+          },
+          {
+            "name": "last_updated_epoch",
+            "docs": ["Last epoch when this validator's information was updated"],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "docs": ["Bump seed for PDA generation"],
+            "type": "u8"
+          },
+          {
+            "name": "failing_criteria",
+            "docs": ["Vector of criteria this validator is currently failing"],
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "DelegationCriterion"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ValidatorStatus",
+      "docs": ["Validator status in the delegation program"],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pending"
+          },
+          {
+            "name": "Approved"
+          },
+          {
+            "name": "Rejected"
+          }
+        ]
+      }
+    }
+  ]
+}

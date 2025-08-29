@@ -8,6 +8,7 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
     "baseUrl": "src",
     "paths": {
       "~/*": [
@@ -21,11 +22,16 @@
       ],
       "@/lib/*": [
         "lib/*"
+      ],
+      "@/types/*": [
+        "types/*"
       ]
     }
   },
   "include": [
-    "**/*.ts"
+    "**/*.ts",
+    "**/*.tsx",
+    "src/**/*"
   ],
   "exclude": [
     "node_modules",

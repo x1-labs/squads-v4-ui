@@ -11,16 +11,12 @@ const SetRpcUrlInput = ({ onUpdate }: { onUpdate?: () => void }) => {
   const [rpcUrl, setRpcUrlState] = useState(storedRpcUrl || '');
 
   const isValidUrl = (url: string) => {
-    const urlPattern = new RegExp(
-      '^(https?:\\/\\/)?' + // validate protocol
-        '((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|' + // domain name
-        '((\\d{1,3}\\.){3}\\d{1,3}))' + // OR ip (v4) address
-        '(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*' + // port and path
-        '(\\?[;&a-z\\d%_.~+=-]*)?' + // query string
-        '(\\#[-a-z\\d_]*)?$',
-      'i'
-    );
-    return !!urlPattern.test(url);
+    try {
+      const parsed = new URL(url);
+      return ['http:', 'https:'].includes(parsed.protocol);
+    } catch {
+      return false;
+    }
   };
 
   const onSubmit = async () => {
@@ -37,7 +33,7 @@ const SetRpcUrlInput = ({ onUpdate }: { onUpdate?: () => void }) => {
     <div>
       <Input
         onChange={(e) => setRpcUrlState(e.target.value.trim())}
-        placeholder={storedRpcUrl || 'https://api.mainnet-beta.solana.com'}
+        placeholder={storedRpcUrl || 'https://rpc.testnet.x1.xyz'}
         value={rpcUrl} // Sync input state with stored value
         className=""
       />

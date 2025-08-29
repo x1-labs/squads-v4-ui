@@ -4,6 +4,9 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { useMultisigData } from './useMultisigData';
 import { useMultisigAddress } from './useMultisigAddress';
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { SimpleDecoder } from '@/lib/transaction/simpleDecoder';
+import { extractTransactionTags } from '@/lib/instructions/extractor';
+import { TransactionTag } from '@/lib/instructions/types';
 
 // load multisig
 export const useMultisig = () => {
@@ -16,10 +19,16 @@ export const useMultisig = () => {
       if (!multisigAddress) return null;
       try {
         const multisigPubkey = new PublicKey(multisigAddress);
+        // First check if the account exists
+        const accountInfo = await connection.getAccountInfo(multisigPubkey);
+        if (!accountInfo) {
+          console.log('No account found at address:', multisigAddress);
+          return null;
+        }
         // @ts-ignore
         return multisig.accounts.Multisig.fromAccountAddress(connection, multisigPubkey);
       } catch (error) {
-        console.error(error);
+        console.error('Error fetching multisig:', error);
         return null;
       }
     },
@@ -92,7 +101,43 @@ async function fetchTransactionData(
     proposal = null;
   }
 
-  return { transactionPda, proposal, index };
+  // Detect transaction type
+  let transactionType: 'vault' | 'config' | 'unknown' = 'unknown';
+  try {
+    // Try to fetch as VaultTransaction first
+    await multisig.accounts.VaultTransaction.fromAccountAddress(
+      connection as any,
+      transactionPda[0]
+    );
+    transactionType = 'vault';
+  } catch {
+    // Try as ConfigTransaction
+    try {
+      await multisig.accounts.ConfigTransaction.fromAccountAddress(
+        connection as any,
+        transactionPda[0]
+      );
+      transactionType = 'config';
+    } catch {
+      // Leave as unknown
+    }
+  }
+
+  // Extract tags by decoding the transaction
+  let tags: TransactionTag[] = [];
+  try {
+    const decoder = new SimpleDecoder(connection);
+    const decoded = await decoder.decodeVaultTransaction(multisigPda, index, programId);
+
+    if (!decoded.error && decoded.instructions.length > 0) {
+      const extractedTags = extractTransactionTags(decoded);
+      tags = extractedTags.tags;
+    }
+  } catch (error) {
+    console.debug('Failed to extract tags for transaction', index, error);
+  }
+
+  return { transactionPda, proposal, index, transactionType, tags };
 }
 
 export const useTransactions = (startIndex: number, endIndex: number) => {

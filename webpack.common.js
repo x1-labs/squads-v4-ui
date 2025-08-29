@@ -2,6 +2,10 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 const webpack = require('webpack');
+const dotenv = require('dotenv');
+
+// Load .env file
+dotenv.config();
 
 module.exports = {
   entry: './src/index.tsx',
@@ -14,7 +18,7 @@ module.exports = {
     pathinfo: false,
   },
   resolve: {
-    extensions: ['.tsx', '.ts', '.js'],
+    extensions: ['.tsx', '.ts', '.js', '.json', '.mjs'],
     plugins: [new TsconfigPathsPlugin()],
     fallback: {
       assert: require.resolve('assert/'),
@@ -22,10 +26,17 @@ module.exports = {
       events: require.resolve('events/'),
       process: require.resolve('process/browser'),
       buffer: require.resolve('buffer/'),
+      crypto: require.resolve('crypto-browserify'),
+      stream: require.resolve('stream-browserify'),
+      vm: require.resolve('vm-browserify'),
     },
     alias: {
       react: path.resolve(__dirname, 'node_modules/react'),
       'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
+      'dayjs/plugin/relativeTime': path.resolve(__dirname, 'node_modules/dayjs/plugin/relativeTime.js'),
+      'dayjs/plugin/utc': path.resolve(__dirname, 'node_modules/dayjs/plugin/utc.js'),
+      'process/browser': path.resolve(__dirname, 'node_modules/process/browser.js'),
+      '@/types': path.resolve(__dirname, 'src/types'),
     },
   },
   module: {
@@ -52,6 +63,20 @@ module.exports = {
     new webpack.ProvidePlugin({
       process: 'process/browser',
       Buffer: ['buffer', 'Buffer'],
+    }),
+    new webpack.DefinePlugin({
+      'process.env.APP_RPC_URL': JSON.stringify(process.env.APP_RPC_URL || ''),
+      'process.env.APP_PROGRAM_ID': JSON.stringify(process.env.APP_PROGRAM_ID || ''),
+      'process.env.APP_EXPLORER_URL': JSON.stringify(process.env.APP_EXPLORER_URL || ''),
+      // Pass through all APP_SAVED_SQUAD_ environment variables as a JSON object
+      'process.env.APP_SAVED_SQUADS': JSON.stringify(
+        Object.keys(process.env)
+          .filter(key => key.startsWith('APP_SAVED_SQUAD_'))
+          .reduce((acc, key) => {
+            acc[key] = process.env[key];
+            return acc;
+          }, {})
+      ),
     }),
   ],
 };

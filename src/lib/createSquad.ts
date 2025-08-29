@@ -28,8 +28,8 @@ export async function createMultisig(
       programId: programId ? new web3.PublicKey(programId) : multisig.PROGRAM_ID,
     });
 
-      const programConfigInfo = await multisig.accounts.ProgramConfig.fromAccountAddress(
-          // @ts-ignore
+    const programConfigInfo = await multisig.accounts.ProgramConfig.fromAccountAddress(
+      // @ts-ignore
       connection,
       programConfig
     );

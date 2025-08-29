@@ -17,7 +17,7 @@ import { isPublickey } from '@/lib/isPublickey';
 import { ValidationRules, useSquadForm } from '@/lib/hooks/useSquadForm';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useMultisigAddress } from '@/hooks/useMultisigAddress';
-import {Link} from "react-router-dom";
+import { Link } from 'react-router-dom';
 
 interface MemberAddresses {
   count: number;
@@ -86,7 +86,7 @@ export default function CreateSquadForm({}: {}) {
       const delayMs = 1000;
       for (let attempt = 0; attempt <= maxAttempts && !sent; attempt++) {
         const status = await connection.getSignatureStatus(signature);
-        if (status?.value?.confirmationStatus === 'confirmed') {
+        if (status?.value?.confirmationStatus === 'finalized') {
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           sent = true;
         } else {
@@ -107,7 +107,7 @@ export default function CreateSquadForm({}: {}) {
 
   return (
     <>
-      <div className="grid grid-cols-8 gap-4 mb-6">
+      <div className="mb-6 grid grid-cols-8 gap-4">
         <div className="col-span-6 flex-col space-y-2">
           <label htmlFor="members" className="font-medium">
             Members <span className="text-red-600">*</span>
@@ -153,7 +153,7 @@ export default function CreateSquadForm({}: {}) {
                         ),
                       });
                     }}
-                    className="absolute inset-y-3 right-2 w-4 h-4 text-zinc-400 hover:text-zinc-600"
+                    className="absolute inset-y-3 right-2 h-4 w-4 text-zinc-400 hover:text-zinc-600"
                   />
                 )}
               </div>
@@ -195,13 +195,13 @@ export default function CreateSquadForm({}: {}) {
           ))}
           <button
             onClick={(e) => handleAddMember(e)}
-            className="mt-2 flex gap-1 items-center text-zinc-400 hover:text-zinc-600"
+            className="mt-2 flex items-center gap-1 text-zinc-400 hover:text-zinc-600"
           >
             <PlusCircleIcon className="w-4" />
             <p className="text-sm">Add Address</p>
           </button>
           {formState.errors.members && (
-            <div className="mt-1.5 text-red-500 text-xs">{formState.errors.members}</div>
+            <div className="mt-1.5 text-xs text-red-500">{formState.errors.members}</div>
           )}
         </div>
         <div className="col-span-4 flex-col space-y-2">
@@ -216,7 +216,7 @@ export default function CreateSquadForm({}: {}) {
             className=""
           />
           {formState.errors.threshold && (
-            <div className="mt-1.5 text-red-500 text-xs">{formState.errors.threshold}</div>
+            <div className="mt-1.5 text-xs text-red-500">{formState.errors.threshold}</div>
           )}
         </div>
         <div className="col-span-4 flex-col space-y-2">
@@ -231,7 +231,7 @@ export default function CreateSquadForm({}: {}) {
             className=""
           />
           {formState.errors.rentCollector && (
-            <div className="mt-1.5 text-red-500 text-xs">{formState.errors.rentCollector}</div>
+            <div className="mt-1.5 text-xs text-red-500">{formState.errors.rentCollector}</div>
           )}
         </div>
         <div className="col-span-4 flex-col space-y-2">
@@ -246,7 +246,7 @@ export default function CreateSquadForm({}: {}) {
             className=""
           />
           {formState.errors.configAuthority && (
-            <div className="mt-1.5 text-red-500 text-xs">{formState.errors.configAuthority}</div>
+            <div className="mt-1.5 text-xs text-red-500">{formState.errors.configAuthority}</div>
           )}
         </div>
       </div>
@@ -257,9 +257,9 @@ export default function CreateSquadForm({}: {}) {
             duration: 10000,
             loading: 'Building Transaction...',
             success: (res) => (
-              <div className="w-full flex items-center justify-between">
-                <div className="flex gap-4 items-center">
-                  <CheckSquare className="w-4 h-4 text-green-600" />
+              <div className="flex w-full items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <CheckSquare className="h-4 w-4 text-green-600" />
                   <div className="flex flex-col space-y-0.5">
                     <p className="font-semibold">
                       Squad Created:{' '}
@@ -270,20 +270,20 @@ export default function CreateSquadForm({}: {}) {
                     <p className="font-light">Your new Squad has been set as active.</p>
                   </div>
                 </div>
-                <div className="flex gap-2 items-center">
+                <div className="flex items-center gap-2">
                   <Copy
                     onClick={() => {
                       navigator.clipboard.writeText(res.multisig);
                       toast.success('Copied address!');
                     }}
-                    className="w-4 h-4 hover:text-stone-500"
+                    className="h-4 w-4 hover:text-stone-500"
                   />
                   <Link
-                    to={`https://explorer.solana.com/address/${res.multisig}`}
+                    to={`https://explorer.x1.com/address/${res.multisig}`}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    <ExternalLink className="w-4 h-4 hover:text-stone-500" />
+                    <ExternalLink className="h-4 w-4 hover:text-stone-500" />
                   </Link>
                 </div>
               </div>
