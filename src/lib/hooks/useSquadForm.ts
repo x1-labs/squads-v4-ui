@@ -1,5 +1,5 @@
-'use client';
-import { useCallback, useState } from 'react';
+"use client";
+import { useCallback, useState } from "react";
 
 type SubmitHandler<T> = () => Promise<T>;
 
@@ -20,7 +20,10 @@ export interface FormState {
   isLoading: boolean;
 }
 
-export function useSquadForm<T>(initialValues: FormValues, validationRules: ValidationRules) {
+export function useSquadForm<T>(
+  initialValues: FormValues,
+  validationRules: ValidationRules
+) {
   const [formState, setFormState] = useState<FormState>({
     values: initialValues,
     errors: {},
@@ -50,7 +53,7 @@ export function useSquadForm<T>(initialValues: FormValues, validationRules: Vali
       const error = await validateField(field, value);
 
       setFormState((prev) => {
-        const newErrors = { ...prev.errors, [field]: error || '' };
+        const newErrors = { ...prev.errors, [field]: error || "" };
         const isValid = Object.values(newErrors).every((err) => !err);
 
         return {
@@ -66,7 +69,7 @@ export function useSquadForm<T>(initialValues: FormValues, validationRules: Vali
 
   const handleAddMember = (e: any) => {
     e.preventDefault();
-    handleChange('members', {
+    handleChange("members", {
       count: formState.values.members.count + 1,
       memberData: [
         ...formState.values.members.memberData,
