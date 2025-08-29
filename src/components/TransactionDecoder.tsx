@@ -6,8 +6,8 @@ import {
   DecodedInstruction,
 } from '../lib/transaction/simpleDecoder';
 import * as multisig from '@sqds/multisig';
-import { formatXNT, formatTokenAmount, shortenAddress } from '../lib/utils/formatters';
-import { InstructionType } from '../lib/transaction/instructionTypes';
+import { formatInstructionValue } from '../lib/utils/formatters';
+import { getInstructionSummaryComponent } from '../lib/instructions/registry';
 
 interface TransactionDecoderProps {
   connection: Connection;
@@ -70,67 +70,15 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
     setExpandedInstructions(newExpanded);
   };
 
-  const formatValue = (value: any, key?: string): string => {
-    if (value === null || value === undefined) return 'null';
-    if (typeof value === 'object') {
-      if (Array.isArray(value)) {
-        // Special handling for actions array in config transactions
-        if (key === 'actions') {
-          return JSON.stringify(value, null, 2);
-        }
-        // For other arrays, show a summary if small, otherwise just count
-        if (value.length <= 3) {
-          return JSON.stringify(value, null, 2);
-        }
-        return `[${value.length} items]\n${JSON.stringify(value, null, 2)}`;
-      }
-      return JSON.stringify(value, null, 2);
-    }
-    return String(value);
-  };
+  const getInstructionSummary = (instruction: DecodedInstruction): React.ReactNode | null => {
+    // Look up the summary component in the registry
+    const SummaryComponent = getInstructionSummaryComponent(
+      instruction.programId,
+      instruction.instructionName
+    );
 
-  const getTransferSummary = (instruction: DecodedInstruction): string | null => {
-    // XNT Transfer - check both instructionType and System Program Transfer
-    if (
-      instruction.instructionType === InstructionType.XNT_TRANSFER ||
-      (instruction.programId === '11111111111111111111111111111111' &&
-        instruction.instructionName === 'Transfer')
-    ) {
-      // Try to get data from instruction.data first
-      if (instruction.data) {
-        const data = instruction.data as any;
-        if (data.amount && data.from && data.to) {
-          const amount = formatXNT(data.amount);
-          const from = shortenAddress(data.from);
-          const to = shortenAddress(data.to);
-          return `Transfer ${amount} from ${from} to ${to}`;
-        }
-      }
-
-      // Fallback to args if data is not complete
-      if (instruction.args?.lamports !== undefined) {
-        const amount = formatXNT(instruction.args.lamports);
-        const from = instruction.accounts?.[0]?.pubkey
-          ? shortenAddress(instruction.accounts[0].pubkey)
-          : 'Unknown';
-        const to = instruction.accounts?.[1]?.pubkey
-          ? shortenAddress(instruction.accounts[1].pubkey)
-          : 'Unknown';
-        return `Transfer ${amount} from ${from} to ${to}`;
-      }
-    }
-
-    // SPL Token Transfer
-    if (
-      instruction.instructionType === InstructionType.SPL_TRANSFER ||
-      instruction.instructionType === InstructionType.SPL_TRANSFER_CHECKED
-    ) {
-      const data = instruction.data as any;
-      if (!data.amount || !data.fromTokenAccount || !data.toTokenAccount) return null;
-      const amount = formatTokenAmount(data.amount, data.decimals || 0);
-      const from = shortenAddress(data.fromTokenAccount);
-      const to = shortenAddress(data.toTokenAccount);
-      return `Transfer ${amount} tokens from ${from} to ${to}`;
+    if (SummaryComponent) {
+      return <SummaryComponent instruction={instruction} connection={connection} />;
     }
 
     return null;
@@ -138,7 +86,7 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
 
   const renderInstruction = (instruction: DecodedInstruction, index: number) => {
     const isExpanded = expandedInstructions.has(index);
-    const transferSummary = getTransferSummary(instruction);
+    const instructionSummary = getInstructionSummary(instruction);
 
     return (
       <div key={index} className="mb-4 rounded-lg border border-border bg-muted/50 p-4">
@@ -156,9 +104,9 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
               </span>
             </div>
             <h3 className="text-lg font-semibold text-foreground">{instruction.instructionName}</h3>
-            {transferSummary && (
-              <div className="mt-2 rounded bg-blue-500/10 px-3 py-2 text-sm text-blue-600 dark:text-blue-400">
-                <span className="font-medium">Summary:</span> {transferSummary}
+            {instructionSummary && (
+              <div className="mt-3 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
+                {instructionSummary}
               </div>
             )}
           </div>
@@ -186,7 +134,7 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
                     <div key={key} className="flex flex-col">
                       <span className="text-sm font-medium text-foreground">{key}:</span>
                       <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-muted p-2 text-xs">
-                        {formatValue(value, key)}
+                        {formatInstructionValue(value, key)}
                       </pre>
                     </div>
                   ))}

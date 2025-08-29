@@ -67,3 +67,25 @@ export function shortenAddress(address: string, chars = 4): string {
   if (!address || address.length <= chars * 2 + 3) return address;
   return `${address.slice(0, chars)}...${address.slice(-chars)}`;
 }
+
+/**
+ * Format instruction argument values for display
+ */
+export function formatInstructionValue(value: any, key?: string): string {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value === 'object') {
+    if (Array.isArray(value)) {
+      // Special handling for actions array in config transactions
+      if (key === 'actions') {
+        return JSON.stringify(value, null, 2);
+      }
+      // For other arrays, show a summary if small, otherwise just count
+      if (value.length <= 3) {
+        return JSON.stringify(value, null, 2);
+      }
+      return `[${value.length} items]\n${JSON.stringify(value, null, 2)}`;
+    }
+    return JSON.stringify(value, null, 2);
+  }
+  return String(value);
+}
