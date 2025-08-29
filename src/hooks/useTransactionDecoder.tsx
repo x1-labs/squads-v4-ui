@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Connection, PublicKey } from '@solana/web3.js';
-import { SimpleDecoder, DecodedTransaction } from '../lib/transaction/simpleDecoder';
+import { SimpleDecoder, DecodedTransaction } from '@/lib/transaction/simpleDecoder';
 import * as multisig from '@sqds/multisig';
 
 export interface UseTransactionDecoderOptions {

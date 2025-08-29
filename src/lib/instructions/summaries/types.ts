@@ -1,6 +1,6 @@
 import React from 'react';
 import { Connection } from '@solana/web3.js';
-import { DecodedInstruction } from '../transaction/simpleDecoder';
+import { DecodedInstruction } from '@/lib/transaction/simpleDecoder';
 
 /**
  * Standard interface for instruction summary components

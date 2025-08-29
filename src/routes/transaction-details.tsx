@@ -13,8 +13,8 @@ import RejectButton from '@/components/RejectButton';
 import ExecuteButton from '@/components/ExecuteButton';
 import CancelButton from '@/components/CancelButton';
 import { SimpleDecoder } from '@/lib/transaction/simpleDecoder';
-import { extractTransactionTags } from '@/lib/tags/extractor';
-import { TransactionTag } from '@/lib/tags/types';
+import { extractTransactionTags } from '@/lib/instructions/tags/extractor';
+import { TransactionTag } from '@/lib/instructions/tags/types';
 import { TransactionTagList } from '@/components/TransactionTag';
 
 export default function TransactionDetailsPage() {

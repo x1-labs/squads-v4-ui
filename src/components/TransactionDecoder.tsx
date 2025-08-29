@@ -7,7 +7,7 @@ import {
 } from '../lib/transaction/simpleDecoder';
 import * as multisig from '@sqds/multisig';
 import { formatInstructionValue } from '../lib/utils/formatters';
-import { getInstructionSummaryComponent } from '../lib/instructions/registry';
+import { getInstructionSummaryComponent } from '@/lib/instructions/summaries/registry';
 
 interface TransactionDecoderProps {
   connection: Connection;

@@ -1,12 +1,4 @@
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Table, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Pagination,
   PaginationContent,
@@ -97,9 +89,7 @@ export default function TransactionsPage() {
                 <TableHeader>
                   <TableRow className="border-b border-border hover:bg-transparent">
                     <TableHead className="w-20 font-semibold text-foreground">Index</TableHead>
-                    <TableHead className="font-semibold text-foreground">
-                      Proposal
-                    </TableHead>
+                    <TableHead className="font-semibold text-foreground">Proposal</TableHead>
                     <TableHead className="font-semibold text-foreground">Status</TableHead>
                     <TableHead className="text-right font-semibold text-foreground">
                       Actions

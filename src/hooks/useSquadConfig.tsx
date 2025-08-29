@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
-import { SavedSquad, SquadConfig } from '../types/squad';
-import { mergeEnvSquadsWithSaved, isEnvSquad } from '../lib/envSquads';
+import { SavedSquad, SquadConfig } from '@/types/squad';
+import { mergeEnvSquadsWithSaved, isEnvSquad } from '@/lib/envSquads';
 
 const SQUADS_STORAGE_KEY = 'x-squads-config';
 

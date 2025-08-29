@@ -1,4 +1,4 @@
-import { DecodedInstruction } from '../transaction/simpleDecoder';
+import { DecodedInstruction } from '@/lib/transaction/simpleDecoder';
 
 /**
  * Represents a tag that can be attached to a transaction

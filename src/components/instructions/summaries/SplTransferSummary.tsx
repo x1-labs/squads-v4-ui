@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { PublicKey } from '@solana/web3.js';
-import { InstructionSummaryProps } from '../types';
-import { formatTokenAmount } from '../../utils/formatters';
-import { AddressWithButtons } from '../../../components/AddressWithButtons';
-import { getTokenMetadata, TokenMetadata } from '../../token/tokenMetadata';
+import { InstructionSummaryProps } from '@/lib/instructions/summaries/types';
+import { formatTokenAmount } from '@/lib/utils/formatters';
+import { AddressWithButtons } from '@/components/AddressWithButtons';
+import { getTokenMetadata, TokenMetadata } from '@/lib/token/tokenMetadata';
 
 /**
  * Summary component for SPL Token transfers

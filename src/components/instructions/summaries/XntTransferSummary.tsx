@@ -1,7 +1,7 @@
 import React from 'react';
-import { InstructionSummaryProps } from '../types';
-import { formatXNT } from '../../utils/formatters';
-import { AddressWithButtons } from '../../../components/AddressWithButtons';
+import { InstructionSummaryProps } from '@/lib/instructions/summaries/types';
+import { formatXNT } from '@/lib/utils/formatters';
+import { AddressWithButtons } from '@/components/AddressWithButtons';
 
 /**
  * Summary component for XNT (native SOL) transfers

@@ -1,6 +1,6 @@
 import { InstructionRegistry, InstructionSummaryComponent } from './types';
-import { XntTransferSummary } from './summaries/XntTransferSummary';
-import { SplTransferSummary } from './summaries/SplTransferSummary';
+import { XntTransferSummary } from '@/components/instructions/summaries/XntTransferSummary';
+import { SplTransferSummary } from '@/components/instructions/summaries/SplTransferSummary';
 
 /**
  * Registry mapping program IDs and instruction names to their summary components

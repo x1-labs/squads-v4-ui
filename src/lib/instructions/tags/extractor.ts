@@ -1,4 +1,4 @@
-import { DecodedInstruction, DecodedTransaction } from '../transaction/simpleDecoder';
+import { DecodedTransaction } from '@/lib/transaction/simpleDecoder';
 import { TransactionTag, TransactionTags } from './types';
 import { tagRegistry } from './registry';
 

@@ -4,9 +4,9 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { useMultisigData } from './useMultisigData';
 import { useMultisigAddress } from './useMultisigAddress';
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import { SimpleDecoder } from '../lib/transaction/simpleDecoder';
-import { extractTransactionTags } from '../lib/tags/extractor';
-import { TransactionTag } from '../lib/tags/types';
+import { SimpleDecoder } from '@/lib/transaction/simpleDecoder';
+import { extractTransactionTags } from '@/lib/instructions/tags/extractor';
+import { TransactionTag } from '@/lib/instructions/tags/types';
 
 // load multisig
 export const useMultisig = () => {
