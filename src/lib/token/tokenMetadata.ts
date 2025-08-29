@@ -32,9 +32,11 @@ export async function getTokenMetadata(
   }
 
   try {
+    // Always prefer the RPC URL from localStorage over the connection's endpoint
+    // because the wallet adapter connection might have a different RPC
     const rpcUrl =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('x-rpc-url') || connection.rpcEndpoint
+      typeof window !== 'undefined' && localStorage.getItem('x-rpc-url')
+        ? localStorage.getItem('x-rpc-url')!
         : connection.rpcEndpoint;
 
     const umi = createUmi(rpcUrl);

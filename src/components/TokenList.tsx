@@ -1,12 +1,12 @@
-import { LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { LAMPORTS_PER_SOL, Connection } from '@solana/web3.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import SendTokens from './SendTokensButton';
 import SendSol from './SendSolButton';
 import { useMultisigData } from '~/hooks/useMultisigData';
 import { useBalance, useGetTokens } from '~/hooks/useServices';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { getTokenMetadata, TokenMetadata } from '~/lib/token/tokenMetadata';
-import { useConnection } from '@solana/wallet-adapter-react';
+import { useRpcUrl } from '~/hooks/useSettings';
 
 type TokenListProps = {
   multisigPda: string;
@@ -16,7 +16,11 @@ export function TokenList({ multisigPda }: TokenListProps) {
   const { vaultIndex, programId } = useMultisigData();
   const { data: solBalance } = useBalance();
   const { data: tokens = null } = useGetTokens();
-  const { connection } = useConnection();
+  const { rpcUrl } = useRpcUrl();
+  const connection = useMemo(
+    () => new Connection(rpcUrl || 'https://rpc.testnet.x1.xyz'),
+    [rpcUrl]
+  );
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, TokenMetadata>>(new Map());
   const [loadingMetadata, setLoadingMetadata] = useState(false);
 
