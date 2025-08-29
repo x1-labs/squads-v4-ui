@@ -110,8 +110,20 @@ async function fetchTransactionDataFast(
       ),
   ]);
 
-  // Don't extract tags on list load - too slow
-  const tags: TransactionTag[] = [];
+  // Extract tags efficiently - only decode if vault transaction
+  let tags: TransactionTag[] = [];
+  if (transactionType === 'vault' || transactionType === 'config') {
+    try {
+      const decoder = new SimpleDecoder(connection);
+      const decoded = await decoder.decodeVaultTransaction(multisigPda, index, programId);
+      if (!decoded.error && decoded.instructions.length > 0) {
+        const extractedTags = extractTransactionTags(decoded);
+        tags = extractedTags.tags;
+      }
+    } catch (error) {
+      console.debug('Failed to extract tags for transaction', index, error);
+    }
+  }
 
   return { transactionPda, proposal, index, transactionType, tags };
 }
