@@ -40,7 +40,21 @@ The following steps will guide you to build, verify, and host the application.
    yarn install --frozen-lockfile
    ```
 
-3. Build the application:
+3. Configure environment variables (optional):
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Edit `.env` to customize the following variables:
+   - `APP_RPC_URL`: Solana RPC endpoint (default: `https://rpc.testnet.x1.xyz`)
+   - `APP_PROGRAM_ID`: Squads program ID (default: `DDL3Xp6ie85DXgiPkXJ7abUyS2tGv4CGEod2DeQXQ941`)
+   - `APP_EXPLORER_URL`: Solana explorer URL (default: `https://explorer.x1.com`)
+   - `APP_SAVED_SQUAD_*`: Pre-configured saved squads (see .env.example for format)
+
+   Note: These values can also be configured at runtime through the app's settings page.
+
+4. Build the application:
 
    ```bash
    yarn build
@@ -48,7 +62,7 @@ The following steps will guide you to build, verify, and host the application.
 
    A `dist/` directory will be created containing the static files.
 
-4. Generate a hash of the build:
+5. Generate a hash of the build:
    ```bash
    ./scripts/generate-hash.sh
    ```
