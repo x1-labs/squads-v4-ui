@@ -98,7 +98,29 @@ async function fetchTransactionData(
     proposal = null;
   }
 
-  return { transactionPda, proposal, index };
+  // Detect transaction type
+  let transactionType: 'vault' | 'config' | 'unknown' = 'unknown';
+  try {
+    // Try to fetch as VaultTransaction first
+    await multisig.accounts.VaultTransaction.fromAccountAddress(
+      connection as any,
+      transactionPda[0]
+    );
+    transactionType = 'vault';
+  } catch {
+    // Try as ConfigTransaction
+    try {
+      await multisig.accounts.ConfigTransaction.fromAccountAddress(
+        connection as any,
+        transactionPda[0]
+      );
+      transactionType = 'config';
+    } catch {
+      // Leave as unknown
+    }
+  }
+
+  return { transactionPda, proposal, index, transactionType };
 }
 
 export const useTransactions = (startIndex: number, endIndex: number) => {

@@ -1,4 +1,4 @@
-import { Connection, PublicKey, VersionedTransaction } from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { BorshInstructionCoder } from '@coral-xyz/anchor';
 import { idlManager } from '../idls/idlManager';
@@ -34,36 +34,6 @@ export interface DecodedTransaction {
 export class SimpleDecoder {
   private connection: Connection;
   private instructionCoders: Map<string, BorshInstructionCoder> = new Map();
-
-  /**
-   * Format token amount with decimals
-   */
-  private formatTokenAmount(amount: string | number | bigint, decimals: number = 0): string {
-    const amountBigInt = typeof amount === 'bigint' ? amount : BigInt(amount.toString());
-    if (decimals === 0) {
-      return amountBigInt.toString();
-    }
-
-    const divisor = BigInt(10 ** decimals);
-    const wholePart = amountBigInt / divisor;
-    const fractionalPart = amountBigInt % divisor;
-
-    if (fractionalPart === BigInt(0)) {
-      return wholePart.toString();
-    }
-
-    const fractionalStr = fractionalPart.toString().padStart(decimals, '0');
-    // Remove trailing zeros
-    const trimmed = fractionalStr.replace(/0+$/, '');
-    return `${wholePart}.${trimmed}`;
-  }
-
-  /**
-   * Format XNT amount (9 decimals)
-   */
-  private formatSolAmount(lamports: string | number | bigint): string {
-    return this.formatTokenAmount(lamports, 9);
-  }
 
   constructor(connection: Connection) {
     this.connection = connection;
@@ -390,61 +360,6 @@ export class SimpleDecoder {
         instructions: [],
         signers: [],
         error: 'Failed to decode vault transaction message',
-      };
-    }
-  }
-
-  /**
-   * Decode a transaction message buffer
-   */
-  public async decodeTransactionMessage(message: Buffer | Uint8Array): Promise<DecodedTransaction> {
-    try {
-      const tx = VersionedTransaction.deserialize(message);
-      const instructions: DecodedInstruction[] = [];
-
-      // Parse each instruction
-      for (let i = 0; i < tx.message.compiledInstructions.length; i++) {
-        const compiledIx = tx.message.compiledInstructions[i];
-        const programId = tx.message.staticAccountKeys[compiledIx.programIdIndex];
-
-        // Get account keys for this instruction
-        const accountKeys = compiledIx.accountKeyIndexes.map((index: number) => {
-          const pubkey = tx.message.staticAccountKeys[index];
-          return {
-            pubkey,
-            isSigner: index < tx.message.header.numRequiredSignatures,
-            isWritable:
-              index <
-                tx.message.header.numRequiredSignatures -
-                  tx.message.header.numReadonlySignedAccounts ||
-              (index >= tx.message.header.numRequiredSignatures &&
-                index <
-                  tx.message.staticAccountKeys.length -
-                    tx.message.header.numReadonlyUnsignedAccounts),
-          };
-        });
-
-        // Parse the instruction
-        const instructionData = Buffer.from(compiledIx.data);
-        const decoded = this.parseInstruction(programId, instructionData, accountKeys);
-
-        instructions.push(decoded);
-      }
-
-      return {
-        instructions,
-        signers: tx.message.staticAccountKeys
-          .slice(0, tx.message.header.numRequiredSignatures)
-          .map((key) => key.toBase58()),
-        feePayer: tx.message.staticAccountKeys[0]?.toBase58(),
-        recentBlockhash: tx.message.recentBlockhash,
-      };
-    } catch (error) {
-      console.error('Error parsing transaction message:', error);
-      return {
-        instructions: [],
-        signers: [],
-        error: 'Failed to parse transaction message',
       };
     }
   }
@@ -1140,27 +1055,6 @@ export class SimpleDecoder {
       ],
       signers: [batch.creator?.toBase58?.() || 'Unknown'],
     };
-  }
-
-  /**
-   * Extract buffer from various message formats
-   */
-  private extractBuffer(message: any): Buffer | Uint8Array | null {
-    if (!message) return null;
-
-    if (message.buffer || message.data) {
-      return message.buffer || message.data;
-    }
-
-    if (Buffer.isBuffer(message) || message instanceof Uint8Array) {
-      return message;
-    }
-
-    try {
-      return Buffer.from(message);
-    } catch {
-      return null;
-    }
   }
 
   /**

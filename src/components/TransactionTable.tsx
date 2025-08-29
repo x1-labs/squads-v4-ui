@@ -3,7 +3,6 @@ import ExecuteButton from './ExecuteButton';
 import RejectButton from './RejectButton';
 import CancelButton from './CancelButton';
 import ReviewButton from './ReviewButton';
-import { TransactionProgramBadge } from './TransactionProgramBadge';
 import { ApprovalStatus } from './ApprovalStatus';
 import { TableBody, TableCell, TableRow } from './ui/table';
 import { useNavigate } from 'react-router-dom';
@@ -34,6 +33,7 @@ export default function TransactionTable({
     transactionPda: string;
     proposal: multisig.generated.Proposal | null;
     index: bigint;
+    transactionType?: 'vault' | 'config' | 'unknown';
   }[];
   programId?: string;
 }) {
@@ -112,12 +112,7 @@ export default function TransactionTable({
               </span>
             </TableCell>
             <TableCell className={isGreyedOut ? 'text-muted-foreground' : ''}>
-              <div className="space-y-2">
-                <TransactionProgramBadge
-                  multisigPda={multisigPda}
-                  transactionIndex={transaction.index}
-                  programId={programId}
-                />
+              <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs text-muted-foreground">
                     {formatAddress(transaction.transactionPda)}
@@ -141,6 +136,23 @@ export default function TransactionTable({
                     </svg>
                   </button>
                 </div>
+                {transaction.transactionType && (
+                  <span
+                    className={`inline-flex w-fit items-center rounded px-1.5 py-0.5 text-xs font-medium ${
+                      transaction.transactionType === 'vault'
+                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                        : transaction.transactionType === 'config'
+                          ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                          : 'bg-gray-500/10 text-gray-600 dark:text-gray-400'
+                    }`}
+                  >
+                    {transaction.transactionType === 'vault'
+                      ? 'Vault'
+                      : transaction.transactionType === 'config'
+                        ? 'Config'
+                        : 'Unknown'}
+                  </span>
+                )}
               </div>
             </TableCell>
             <TableCell className={isGreyedOut ? 'text-muted-foreground' : ''}>

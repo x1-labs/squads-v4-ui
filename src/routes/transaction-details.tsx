@@ -12,112 +12,6 @@ import ApproveButton from '@/components/ApproveButton';
 import RejectButton from '@/components/RejectButton';
 import ExecuteButton from '@/components/ExecuteButton';
 import CancelButton from '@/components/CancelButton';
-import { getTokenMetadata, TokenMetadata } from '@/lib/token/tokenMetadata';
-
-// Analyze transaction to detect transfer types (same logic as TransactionProgramBadge)
-const analyzeTransactionType = async (
-  vaultTx: any,
-  connection: Connection
-): Promise<{ type: string; tokenMetadata?: TokenMetadata } | null> => {
-  try {
-    if (!vaultTx.message || !vaultTx.message.instructions) return null;
-
-    const instructions = vaultTx.message.instructions;
-    const accountKeys = vaultTx.message.accountKeys;
-
-    // Check each instruction
-    for (const instruction of instructions) {
-      const programIdKey = accountKeys[instruction.programIdIndex];
-      const programIdStr =
-        programIdKey instanceof PublicKey
-          ? programIdKey.toBase58()
-          : typeof programIdKey === 'string'
-            ? programIdKey
-            : new PublicKey(programIdKey).toBase58();
-
-      // System Program Transfer (XNT transfer)
-      if (programIdStr === '11111111111111111111111111111111') {
-        const data = instruction.data;
-        // System transfer instruction starts with 2 (u32 little-endian: 0x02000000)
-        if (
-          data &&
-          data.length >= 4 &&
-          data[0] === 2 &&
-          data[1] === 0 &&
-          data[2] === 0 &&
-          data[3] === 0
-        ) {
-          return { type: 'XNT Transfer' };
-        }
-      }
-
-      // SPL Token Transfer
-      if (programIdStr === 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA') {
-        const data = instruction.data;
-        // Token transfer instruction is 3, transferChecked is 12
-        if (data && data.length > 0 && (data[0] === 3 || data[0] === 12)) {
-          // Try to get the mint from the instruction accounts
-          let tokenMetadata: TokenMetadata | undefined;
-          try {
-            if (data[0] === 12 && instruction.accountIndexes?.length > 1) {
-              const mintIndex = instruction.accountIndexes[1];
-              const mintKey = accountKeys[mintIndex];
-              const mintAddress =
-                mintKey instanceof PublicKey
-                  ? mintKey.toBase58()
-                  : typeof mintKey === 'string'
-                    ? mintKey
-                    : new PublicKey(mintKey).toBase58();
-              tokenMetadata = await getTokenMetadata(mintAddress, connection);
-            }
-          } catch (error) {
-            console.debug('Could not fetch token metadata:', error);
-          }
-
-          const transferType = tokenMetadata?.symbol
-            ? `${tokenMetadata.symbol} Transfer`
-            : 'SPL Token Transfer';
-          return { type: transferType, tokenMetadata };
-        }
-      }
-
-      // Token-2022 Transfer
-      if (programIdStr === 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb') {
-        const data = instruction.data;
-        // Token transfer instruction is 3, transferChecked is 12
-        if (data && data.length > 0 && (data[0] === 3 || data[0] === 12)) {
-          // Try to get the mint from the instruction accounts
-          let tokenMetadata: TokenMetadata | undefined;
-          try {
-            if (data[0] === 12 && instruction.accountIndexes?.length > 1) {
-              const mintIndex = instruction.accountIndexes[1];
-              const mintKey = accountKeys[mintIndex];
-              const mintAddress =
-                mintKey instanceof PublicKey
-                  ? mintKey.toBase58()
-                  : typeof mintKey === 'string'
-                    ? mintKey
-                    : new PublicKey(mintKey).toBase58();
-              tokenMetadata = await getTokenMetadata(mintAddress, connection);
-            }
-          } catch (error) {
-            console.debug('Could not fetch token metadata:', error);
-          }
-
-          const transferType = tokenMetadata?.symbol
-            ? `${tokenMetadata.symbol} Transfer`
-            : 'Token-2022 Transfer';
-          return { type: transferType, tokenMetadata };
-        }
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Error analyzing transaction type:', error);
-    return null;
-  }
-};
 
 export default function TransactionDetailsPage() {
   const { transactionPda } = useParams<{ transactionPda: string }>();
@@ -134,8 +28,9 @@ export default function TransactionDetailsPage() {
   // Extract transaction index and proposal from the PDA
   const [transactionIndex, setTransactionIndex] = React.useState<bigint | null>(null);
   const [proposal, setProposal] = React.useState<multisig.generated.Proposal | null>(null);
-  const [transactionType, setTransactionType] = React.useState<string>('Transaction');
-  const [tokenMetadata, setTokenMetadata] = React.useState<TokenMetadata | null>(null);
+  const [transactionType, setTransactionType] = React.useState<'vault' | 'config' | 'unknown'>(
+    'unknown'
+  );
 
   React.useEffect(() => {
     const fetchTransactionDetails = async () => {
@@ -146,7 +41,7 @@ export default function TransactionDetailsPage() {
         const transactionPubkey = new PublicKey(transactionPda);
         const multisigPubkey = new PublicKey(multisigAddress);
 
-        // Try as VaultTransaction first
+        // Try to fetch as VaultTransaction first
         try {
           const vaultTx = await multisig.accounts.VaultTransaction.fromAccountAddress(
             connection as any,
@@ -154,17 +49,7 @@ export default function TransactionDetailsPage() {
           );
           const index = BigInt(vaultTx.index.toString());
           setTransactionIndex(index);
-
-          // Detect transaction type
-          const txType = await analyzeTransactionType(vaultTx, connection);
-          if (txType) {
-            setTransactionType(txType.type);
-            if (txType.tokenMetadata) {
-              setTokenMetadata(txType.tokenMetadata);
-            }
-          } else {
-            setTransactionType('Transaction');
-          }
+          setTransactionType('vault');
 
           // Fetch the proposal
           const [proposalPda] = multisig.getProposalPda({
@@ -191,7 +76,7 @@ export default function TransactionDetailsPage() {
             );
             const index = BigInt(configTx.index.toString());
             setTransactionIndex(index);
-            setTransactionType('Config Transaction');
+            setTransactionType('config');
 
             // Fetch the proposal
             const [proposalPda] = multisig.getProposalPda({
@@ -218,7 +103,6 @@ export default function TransactionDetailsPage() {
               );
               const index = BigInt(batch.index.toString());
               setTransactionIndex(index);
-              setTransactionType('Batch Transaction');
 
               // Fetch the proposal
               const [proposalPda] = multisig.getProposalPda({
@@ -288,31 +172,18 @@ export default function TransactionDetailsPage() {
             ← Back to Transactions
           </Link>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-foreground">
-              <span className="flex items-center gap-3">
-                {tokenMetadata && (
-                  <div className="flex items-center gap-2">
-                    {tokenMetadata.logoURI ? (
-                      <img
-                        src={tokenMetadata.logoURI}
-                        alt={tokenMetadata.symbol || 'Token'}
-                        className="h-8 w-8 rounded-full"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                        <span className="text-xs font-bold">
-                          {tokenMetadata.symbol?.slice(0, 3) || 'TOK'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {transactionType} Details
+            <h1 className="text-2xl font-bold text-foreground">Transaction Details</h1>
+            {transactionType !== 'unknown' && (
+              <span
+                className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${
+                  transactionType === 'vault'
+                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                    : 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                }`}
+              >
+                {transactionType === 'vault' ? 'Vault Transaction' : 'Config Transaction'}
               </span>
-            </h1>
+            )}
             {isStale && proposalStatus !== 'Executed' && proposalStatus !== 'Cancelled' && (
               <div className="text-warning bg-warning/10 border-warning/20 flex items-center gap-1 rounded-md border px-2 py-1">
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -384,43 +255,36 @@ export default function TransactionDetailsPage() {
                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
               />
             </svg>
-            <div className="flex-1">
-              <p className="text-warning text-sm font-medium">This transaction is stale</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {proposalStatus === 'Rejected'
-                  ? 'This transaction was rejected before becoming stale.'
-                  : 'This transaction has been superseded by newer transactions and can no longer be executed. No actions are available for stale transactions.'}
+            <div>
+              <h3 className="text-warning font-semibold">This transaction is stale</h3>
+              <p className="text-warning/80 mt-1 text-sm">
+                A newer transaction has been executed since this one was created. This transaction
+                can no longer be executed and should be considered obsolete.
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Approval Status Card */}
+      {/* Proposal Status Card */}
       {proposal && (
-        <div className="mb-6 rounded-lg border border-border bg-card p-6 shadow-sm">
+        <div className="mb-6 rounded-lg border border-border bg-card p-6">
           <h2 className="mb-4 text-lg font-semibold text-foreground">Approval Status</h2>
-          <ApprovalStatus proposal={proposal} compact={false} isStale={isStale || false} />
+          <ApprovalStatus proposal={proposal} isStale={isStale || false} />
         </div>
       )}
 
       {/* Transaction Decoder */}
-      <div className="rounded-lg border border-border bg-card shadow-sm">
-        {transactionIndex !== null && multisigAddress && programId ? (
+      {transactionIndex !== null && multisigAddress && (
+        <div className="rounded-lg border border-border bg-card">
           <TransactionDecoder
             connection={connection}
             multisigPda={new PublicKey(multisigAddress)}
             transactionIndex={transactionIndex}
             programId={programId}
-            tokenMetadata={tokenMetadata}
           />
-        ) : (
-          <div className="p-8 text-center">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-b-2 border-primary"></div>
-            <p className="mt-2 text-sm text-muted-foreground">Loading transaction details...</p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
