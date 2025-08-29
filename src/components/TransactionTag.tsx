@@ -1,5 +1,5 @@
 import React from 'react';
-import { TransactionTag as TagType } from '@/lib/instructions/tags/types';
+import { TransactionTag as TagType } from '@/lib/instructions/types';
 
 interface TransactionTagProps {
   tag: TagType;

@@ -4,11 +4,13 @@ import { BorshInstructionCoder } from '@coral-xyz/anchor';
 import { idlManager } from '../idls/idlManager';
 import { IdlFormat, isAnchorCompatible } from '../idls/idlFormats';
 import { InstructionData } from './instructionTypes';
+import { formatInstructionTitle } from '../utils/instructionFormatters';
 
 export interface DecodedInstruction {
   programId: string;
   programName: string;
   instructionName: string;
+  instructionTitle?: string; // Human-friendly formatted title
   data?: InstructionData;
   innerInstructions?: DecodedInstruction[];
   accounts: Array<{
@@ -390,10 +392,12 @@ export class SimpleDecoder {
           const instruction = idlEntry.parser.getInstruction(decoded.name);
           const accountNames = instruction?.accounts?.map((acc) => acc.name) || [];
 
+          const formattedName = this.formatInstructionName(decoded.name);
           return {
             programId: programIdStr,
             programName: this.getProgramName(programIdStr),
-            instructionName: this.formatInstructionName(decoded.name),
+            instructionName: formattedName,
+            instructionTitle: formatInstructionTitle(formattedName),
             accounts: accountKeys.map((key, i) => ({
               name: accountNames[i] || `Account ${i}`,
               pubkey: key.pubkey.toBase58(),
@@ -428,10 +432,14 @@ export class SimpleDecoder {
               }
             }
 
+            const formattedName = this.formatInstructionName(decoded.name || 'UnknownInstruction');
+            console.log('nick', decoded.name, formattedName);
+
             return {
               programId: programIdStr,
               programName: this.getProgramName(programIdStr),
-              instructionName: this.formatInstructionName(decoded.name || 'Unknown Instruction'),
+              instructionName: formattedName,
+              instructionTitle: formatInstructionTitle(formattedName),
               accounts: accountKeys.map((key, i) => ({
                 name: accountNames[i] || `Account ${i}`,
                 pubkey: key.pubkey.toBase58(),
@@ -519,10 +527,12 @@ export class SimpleDecoder {
             }
           }
 
+          const formattedName = this.formatInstructionName(decoded.name);
           return {
             programId: programIdStr,
             programName: this.getProgramName(programIdStr),
-            instructionName: this.formatInstructionName(decoded.name),
+            instructionName: formattedName,
+            instructionTitle: formatInstructionTitle(formattedName),
             data: instructionData,
             accounts: accountKeys.map((key, i) => ({
               name: accountNames[i] || this.getTokenAccountName(data[0], i),
@@ -596,7 +606,8 @@ export class SimpleDecoder {
     return {
       programId: programIdStr,
       programName: this.getProgramName(programIdStr),
-      instructionName: 'Unknown Instruction',
+      instructionName: 'UnknownInstruction',
+      instructionTitle: 'Unknown Instruction',
       accounts: accountKeys.map((key, i) => ({
         name: `Account ${i}`,
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
@@ -899,7 +910,8 @@ export class SimpleDecoder {
         {
           programId: programId.toBase58(),
           programName: 'Squads Multisig V4',
-          instructionName: 'Config Transaction',
+          instructionName: 'ConfigTransaction',
+          instructionTitle: 'Config Transaction',
           accounts: [],
           args: {
             transactionIndex: transactionIndex.toString(),
@@ -1024,7 +1036,8 @@ export class SimpleDecoder {
         {
           programId: programId.toBase58(),
           programName: 'Squads Multisig V4',
-          instructionName: 'Batch Transaction',
+          instructionName: 'BatchTransaction',
+          instructionTitle: 'Batch Transaction',
           accounts: [],
           args: {
             transactionIndex: transactionIndex.toString(),
@@ -1088,7 +1101,7 @@ export class SimpleDecoder {
     return name
       .split('_')
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
+      .join('');
   }
 
   /**
@@ -1141,6 +1154,7 @@ export class SimpleDecoder {
       programId,
       programName: 'Memo Program',
       instructionName: 'Memo',
+      instructionTitle: 'Memo',
       accounts: accountKeys.map((key, i) => ({
         name: `Signer ${i + 1}`,
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',

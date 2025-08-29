@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PublicKey } from '@solana/web3.js';
-import { InstructionSummaryProps } from '@/lib/instructions/summaries/types';
+import { InstructionSummaryProps } from '@/lib/instructions/types';
 import { formatTokenAmount } from '@/lib/utils/formatters';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 import { getTokenMetadata, TokenMetadata } from '@/lib/token/tokenMetadata';

@@ -1,6 +1,7 @@
 import { DecodedTransaction } from '@/lib/transaction/simpleDecoder';
 import { TransactionTag, TransactionTags } from './types';
-import { tagRegistry } from './registry';
+import { registry } from '../registry';
+import '../../registry'; // Ensure registrations are loaded
 
 /**
  * Extract tags from a decoded transaction
@@ -16,14 +17,10 @@ export function extractTransactionTags(transaction: DecodedTransaction): Transac
       programNames.add(instruction.programName);
     }
 
-    // Apply all registered tag matchers
-    const matchers = tagRegistry.getMatchers();
-    for (const matcher of matchers) {
-      const tag = matcher(instruction);
-      if (tag) {
-        // Use label as key to avoid duplicate tags
-        tags.set(tag.label, tag);
-      }
+    // Get tags from the central registry
+    const registryTags = registry.getInstructionTags(instruction);
+    for (const tag of registryTags) {
+      tags.set(tag.label, tag);
     }
 
     // Process inner instructions recursively
@@ -33,11 +30,10 @@ export function extractTransactionTags(transaction: DecodedTransaction): Transac
           programNames.add(innerInstruction.programName);
         }
 
-        for (const matcher of matchers) {
-          const tag = matcher(innerInstruction);
-          if (tag) {
-            tags.set(tag.label, tag);
-          }
+        // Get tags for inner instructions
+        const innerTags = registry.getInstructionTags(innerInstruction);
+        for (const tag of innerTags) {
+          tags.set(tag.label, tag);
         }
       }
     }

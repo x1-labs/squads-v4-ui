@@ -7,7 +7,8 @@ import {
 } from '../lib/transaction/simpleDecoder';
 import * as multisig from '@sqds/multisig';
 import { formatInstructionValue } from '../lib/utils/formatters';
-import { getInstructionSummaryComponent } from '@/lib/instructions/summaries/registry';
+import { registry } from '../lib/registry';
+import '../registry'; // Ensure registrations are loaded
 
 interface TransactionDecoderProps {
   connection: Connection;
@@ -72,7 +73,7 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
 
   const getInstructionSummary = (instruction: DecodedInstruction): React.ReactNode | null => {
     // Look up the summary component in the registry
-    const SummaryComponent = getInstructionSummaryComponent(
+    const SummaryComponent = registry.getInstructionSummary(
       instruction.programId,
       instruction.instructionName
     );
@@ -101,7 +102,9 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
               </span>
               <span className="text-sm text-primary">{instruction.programName}</span>
             </div>
-            <h3 className="text-lg font-semibold text-foreground">{instruction.instructionName}</h3>
+            <h3 className="text-lg font-semibold text-foreground">
+              {instruction.instructionTitle || instruction.instructionName}
+            </h3>
             {instructionSummary && (
               <div className="mt-3 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
                 {instructionSummary}
@@ -211,7 +214,7 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
                       <div className="text-sm">
                         <span className="font-medium">{innerIx.programName}</span>
                         {' - '}
-                        <span className="text-muted-foreground">{innerIx.instructionName}</span>
+                        <span className="text-muted-foreground">{innerIx.instructionTitle}</span>
                       </div>
                     </div>
                   ))}

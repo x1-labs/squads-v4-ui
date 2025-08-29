@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMultisig } from '@/hooks/useServices';
 import { toast } from 'sonner';
 import { TransactionTagList } from './TransactionTag';
-import { TransactionTag } from '@/lib/instructions/tags/types';
+import { TransactionTag } from '@/lib/instructions/types';
 
 // Format address to show first 8 and last 8 characters
 function formatAddress(address: string): string {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { InstructionSummaryProps } from '@/lib/instructions/summaries/types';
+import { InstructionSummaryProps } from '@/lib/instructions/types';
 import { formatXNT } from '@/lib/utils/formatters';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 
