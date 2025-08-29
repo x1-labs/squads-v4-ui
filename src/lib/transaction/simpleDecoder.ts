@@ -3,13 +3,12 @@ import * as multisig from '@sqds/multisig';
 import { BorshInstructionCoder } from '@coral-xyz/anchor';
 import { idlManager } from '../idls/idlManager';
 import { IdlFormat, isAnchorCompatible } from '../idls/idlFormats';
-import { InstructionType, InstructionData } from './instructionTypes';
+import { InstructionData } from './instructionTypes';
 
 export interface DecodedInstruction {
   programId: string;
   programName: string;
   instructionName: string;
-  instructionType: InstructionType;
   data?: InstructionData;
   innerInstructions?: DecodedInstruction[];
   accounts: Array<{
@@ -395,7 +394,6 @@ export class SimpleDecoder {
             programId: programIdStr,
             programName: this.getProgramName(programIdStr),
             instructionName: this.formatInstructionName(decoded.name),
-            instructionType: InstructionType.UNKNOWN,
             accounts: accountKeys.map((key, i) => ({
               name: accountNames[i] || `Account ${i}`,
               pubkey: key.pubkey.toBase58(),
@@ -434,7 +432,6 @@ export class SimpleDecoder {
               programId: programIdStr,
               programName: this.getProgramName(programIdStr),
               instructionName: this.formatInstructionName(decoded.name || 'Unknown Instruction'),
-              instructionType: InstructionType.UNKNOWN,
               accounts: accountKeys.map((key, i) => ({
                 name: accountNames[i] || `Account ${i}`,
                 pubkey: key.pubkey.toBase58(),
@@ -495,7 +492,6 @@ export class SimpleDecoder {
           const accountNames = instruction?.accounts?.map((acc) => acc.name) || [];
 
           // Determine instruction type and create typed data for token transfers
-          let instructionTypeEnum = InstructionType.UNKNOWN;
           let instructionData: InstructionData | undefined;
 
           if (
@@ -504,7 +500,6 @@ export class SimpleDecoder {
           ) {
             const name = decoded.name.toLowerCase();
             if (name === 'transfer') {
-              instructionTypeEnum = InstructionType.SPL_TRANSFER;
               instructionData = {
                 fromTokenAccount: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
                 toTokenAccount: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
@@ -513,7 +508,6 @@ export class SimpleDecoder {
                 decimals: 0, // Basic transfer doesn't have decimals
               };
             } else if (name === 'transferchecked') {
-              instructionTypeEnum = InstructionType.SPL_TRANSFER_CHECKED;
               instructionData = {
                 mint: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
                 fromTokenAccount: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
@@ -529,7 +523,6 @@ export class SimpleDecoder {
             programId: programIdStr,
             programName: this.getProgramName(programIdStr),
             instructionName: this.formatInstructionName(decoded.name),
-            instructionType: instructionTypeEnum,
             data: instructionData,
             accounts: accountKeys.map((key, i) => ({
               name: accountNames[i] || this.getTokenAccountName(data[0], i),
@@ -604,7 +597,6 @@ export class SimpleDecoder {
       programId: programIdStr,
       programName: this.getProgramName(programIdStr),
       instructionName: 'Unknown Instruction',
-      instructionType: InstructionType.UNKNOWN,
       accounts: accountKeys.map((key, i) => ({
         name: `Account ${i}`,
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
@@ -627,7 +619,6 @@ export class SimpleDecoder {
     const instructionType = data.readUInt32LE(0);
     let instructionName = 'Unknown System Instruction';
     let args: any = {};
-    let instructionTypeEnum = InstructionType.UNKNOWN;
     let instructionData: InstructionData | undefined;
 
     switch (instructionType) {
@@ -643,7 +634,6 @@ export class SimpleDecoder {
         break;
       case 2: // Transfer
         instructionName = 'Transfer';
-        instructionTypeEnum = InstructionType.XNT_TRANSFER;
         if (data.length >= 12) {
           const lamports = data.readBigUInt64LE(4);
           args = {
@@ -679,7 +669,6 @@ export class SimpleDecoder {
       programId: '11111111111111111111111111111111',
       programName: 'System Program',
       instructionName,
-      instructionType: instructionTypeEnum,
       data: instructionData,
       accounts: accountKeys.map((key, i) => ({
         name: this.getSystemAccountName(instructionType, i),
@@ -702,7 +691,6 @@ export class SimpleDecoder {
     const instructionType = data[0];
     let instructionName = 'Unknown Token Instruction';
     let args: any = {};
-    let instructionTypeEnum = InstructionType.UNKNOWN;
     let instructionData: InstructionData | undefined;
 
     switch (instructionType) {
@@ -727,7 +715,6 @@ export class SimpleDecoder {
         break;
       case 3: // Transfer
         instructionName = 'Transfer';
-        instructionTypeEnum = InstructionType.SPL_TRANSFER;
         if (data.length >= 9) {
           const amount = data.readBigUInt64LE(1);
           args = {
@@ -796,7 +783,6 @@ export class SimpleDecoder {
         break;
       case 12: // TransferChecked
         instructionName = 'Transfer Checked';
-        instructionTypeEnum = InstructionType.SPL_TRANSFER_CHECKED;
         if (data.length >= 10) {
           const amount = data.readBigUInt64LE(1);
           const decimals = data[9];
@@ -886,7 +872,6 @@ export class SimpleDecoder {
       programId,
       programName: isToken2022 ? 'Token-2022 Program' : 'Token Program',
       instructionName,
-      instructionType: instructionTypeEnum,
       data: instructionData,
       accounts: accountKeys.map((key, i) => ({
         name: this.getTokenAccountName(instructionType, i),
@@ -915,7 +900,6 @@ export class SimpleDecoder {
           programId: programId.toBase58(),
           programName: 'Squads Multisig V4',
           instructionName: 'Config Transaction',
-          instructionType: InstructionType.UNKNOWN,
           accounts: [],
           args: {
             transactionIndex: transactionIndex.toString(),
@@ -1041,7 +1025,6 @@ export class SimpleDecoder {
           programId: programId.toBase58(),
           programName: 'Squads Multisig V4',
           instructionName: 'Batch Transaction',
-          instructionType: InstructionType.UNKNOWN,
           accounts: [],
           args: {
             transactionIndex: transactionIndex.toString(),
@@ -1158,7 +1141,6 @@ export class SimpleDecoder {
       programId,
       programName: 'Memo Program',
       instructionName: 'Memo',
-      instructionType: InstructionType.UNKNOWN,
       accounts: accountKeys.map((key, i) => ({
         name: `Signer ${i + 1}`,
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
@@ -1223,7 +1205,6 @@ export class SimpleDecoder {
       programId: 'ComputeBudget111111111111111111111111111111',
       programName: 'Compute Budget Program',
       instructionName,
-      instructionType: InstructionType.UNKNOWN,
       accounts: accountKeys.map((key, i) => ({
         name: `Account ${i}`,
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
@@ -1261,7 +1242,6 @@ export class SimpleDecoder {
       programId: 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL',
       programName: 'Associated Token Program',
       instructionName,
-      instructionType: InstructionType.UNKNOWN,
       accounts: accountKeys.map((key, i) => ({
         name: accountNames[i] || `Account ${i}`,
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
@@ -1315,7 +1295,6 @@ export class SimpleDecoder {
       programId: 'AddressLookupTab1e1111111111111111111111111',
       programName: 'Address Lookup Table Program',
       instructionName,
-      instructionType: InstructionType.UNKNOWN,
       accounts: accountKeys.map((key, i) => ({
         name: this.getAddressLookupTableAccountName(instructionType, i),
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',

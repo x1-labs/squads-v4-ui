@@ -4,6 +4,9 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { useMultisigData } from './useMultisigData';
 import { useMultisigAddress } from './useMultisigAddress';
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
+import { SimpleDecoder } from '../lib/transaction/simpleDecoder';
+import { extractTransactionTags } from '../lib/tags/extractor';
+import { TransactionTag } from '../lib/tags/types';
 
 // load multisig
 export const useMultisig = () => {
@@ -120,7 +123,21 @@ async function fetchTransactionData(
     }
   }
 
-  return { transactionPda, proposal, index, transactionType };
+  // Extract tags by decoding the transaction
+  let tags: TransactionTag[] = [];
+  try {
+    const decoder = new SimpleDecoder(connection);
+    const decoded = await decoder.decodeVaultTransaction(multisigPda, index, programId);
+
+    if (!decoded.error && decoded.instructions.length > 0) {
+      const extractedTags = extractTransactionTags(decoded);
+      tags = extractedTags.tags;
+    }
+  } catch (error) {
+    console.debug('Failed to extract tags for transaction', index, error);
+  }
+
+  return { transactionPda, proposal, index, transactionType, tags };
 }
 
 export const useTransactions = (startIndex: number, endIndex: number) => {

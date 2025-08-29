@@ -99,9 +99,7 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
               <span className="text-sm font-semibold text-muted-foreground">
                 Instruction #{index + 1}
               </span>
-              <span className="rounded bg-primary/10 px-2 py-1 text-sm text-primary">
-                {instruction.programName}
-              </span>
+              <span className="text-sm text-primary">{instruction.programName}</span>
             </div>
             <h3 className="text-lg font-semibold text-foreground">{instruction.instructionName}</h3>
             {instructionSummary && (

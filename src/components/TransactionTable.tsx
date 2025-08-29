@@ -8,6 +8,8 @@ import { TableBody, TableCell, TableRow } from './ui/table';
 import { useNavigate } from 'react-router-dom';
 import { useMultisig } from '@/hooks/useServices';
 import { toast } from 'sonner';
+import { TransactionTagList } from './TransactionTag';
+import { TransactionTag } from '../lib/tags/types';
 
 // Format address to show first 8 and last 8 characters
 function formatAddress(address: string): string {
@@ -34,6 +36,7 @@ export default function TransactionTable({
     proposal: multisig.generated.Proposal | null;
     index: bigint;
     transactionType?: 'vault' | 'config' | 'unknown';
+    tags?: TransactionTag[];
   }[];
   programId?: string;
 }) {
@@ -112,11 +115,29 @@ export default function TransactionTable({
               </span>
             </TableCell>
             <TableCell className={isGreyedOut ? 'text-muted-foreground' : ''}>
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1.5">
+                {/* Transaction hash with type badge */}
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs text-muted-foreground">
                     {formatAddress(transaction.transactionPda)}
                   </span>
+                  {transaction.transactionType && (
+                    <span
+                      className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${
+                        transaction.transactionType === 'vault'
+                          ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                          : transaction.transactionType === 'config'
+                            ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                            : 'bg-gray-500/10 text-gray-600 dark:text-gray-400'
+                      }`}
+                    >
+                      {transaction.transactionType === 'vault'
+                        ? 'Vault'
+                        : transaction.transactionType === 'config'
+                          ? 'Config'
+                          : 'Unknown'}
+                    </span>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -136,22 +157,17 @@ export default function TransactionTable({
                     </svg>
                   </button>
                 </div>
-                {transaction.transactionType && (
-                  <span
-                    className={`inline-flex w-fit items-center rounded px-1.5 py-0.5 text-xs font-medium ${
-                      transaction.transactionType === 'vault'
-                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                        : transaction.transactionType === 'config'
-                          ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
-                          : 'bg-gray-500/10 text-gray-600 dark:text-gray-400'
-                    }`}
-                  >
-                    {transaction.transactionType === 'vault'
-                      ? 'Vault'
-                      : transaction.transactionType === 'config'
-                        ? 'Config'
-                        : 'Unknown'}
-                  </span>
+
+                {/* Tags on separate line with better styling */}
+                {transaction.tags && transaction.tags.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    <TransactionTagList
+                      tags={transaction.tags}
+                      size="sm"
+                      maxTags={5}
+                      showIcon={false}
+                    />
+                  </div>
                 )}
               </div>
             </TableCell>
