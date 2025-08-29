@@ -30,8 +30,8 @@ The following steps will guide you to build, verify, and host the application.
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/x1-labs/squads-v4-client
-   cd squads-v4-client
+   git clone https://github.com/x1-labs/squads-v4-ui
+   cd squads-v4-ui
    ```
 
 2. Install dependencies:
