@@ -11,7 +11,6 @@ import { MemoSummary } from './components/instructions/summaries/MemoSummary';
 // Import IDLs
 import squadsV4Idl from './lib/idls/squads-v4.json';
 import delegationProgramIdl from './lib/idls/delegation_program.json';
-import stakePoolIdl from './lib/idls/stake_pool.json';
 import tokenProgramIdl from './lib/idls/token_program.json';
 
 // ============================================
@@ -116,26 +115,6 @@ registry.register({
     },
     UpdateValidatorStatus: {
       tags: { label: 'Update Validator Status', color: 'blue', variant: 'subtle' },
-    },
-  },
-});
-
-// ============================================
-// Stake Pool Program
-// ============================================
-registry.register({
-  programId: 'XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux',
-  name: 'Stake Pool',
-  idl: stakePoolIdl,
-  instructions: {
-    Stake: {
-      tags: { label: 'Stake', color: 'green', variant: 'subtle' },
-    },
-    Unstake: {
-      tags: { label: 'Unstake', color: 'yellow', variant: 'subtle' },
-    },
-    ClaimRewards: {
-      tags: { label: 'Claim Rewards', color: 'purple', variant: 'subtle' },
     },
   },
 });
