@@ -50,7 +50,7 @@ export default function TabNav() {
               <li key={'github-link'}>
                 <Link
                   key={`github-link`}
-                  to="https://github.com/Squads-Protocol/public-v4-client"
+                  to="https://github.com/x1-labs/squads-v4-ui"
                   target="_blank"
                   rel="noreferrer"
                   className={`flex items-center rounded-lg px-4 py-3 text-foreground hover:bg-accent dark:hover:bg-accent`}
