@@ -14,6 +14,8 @@ import { isMember } from '../lib/utils';
 import invariant from 'invariant';
 import { waitForConfirmation } from '../lib/transactionConfirmation';
 import { useQueryClient } from '@tanstack/react-query';
+import { Checkbox } from './ui/checkbox';
+import { Label } from './ui/label';
 
 type AddMemberInputProps = {
   multisigPda: string;
@@ -21,8 +23,16 @@ type AddMemberInputProps = {
   programId: string;
 };
 
+// Permission bitmask values
+const PERMISSIONS = {
+  PROPOSER: 1, // Can propose transactions
+  VOTER: 2, // Can vote on transactions
+  EXECUTOR: 4, // Can execute transactions
+};
+
 const AddMemberInput = ({ multisigPda, transactionIndex, programId }: AddMemberInputProps) => {
   const [member, setMember] = useState('');
+  const [permissions, setPermissions] = useState(7); // Default to all basic permissions
   const wallet = useWallet();
   const walletModal = useWalletModal();
   const { data: multisigConfig } = useMultisig();
@@ -30,6 +40,14 @@ const AddMemberInput = ({ multisigPda, transactionIndex, programId }: AddMemberI
   const { connection } = useMultisigData();
   const queryClient = useQueryClient();
   const hasAccess = useAccess();
+
+  const handlePermissionToggle = (permission: number) => {
+    setPermissions((prev) => prev ^ permission); // XOR to toggle the bit
+  };
+
+  const isPermissionEnabled = (permission: number) => {
+    return (permissions & permission) !== 0;
+  };
   const addMember = async () => {
     invariant(multisigConfig, 'invalid multisig conf data');
     if (!wallet.publicKey) {
@@ -49,7 +67,7 @@ const AddMemberInput = ({ multisigPda, transactionIndex, programId }: AddMemberI
           newMember: {
             key: newMemberKey,
             permissions: {
-              mask: 7,
+              mask: permissions,
             },
           },
         },
@@ -96,12 +114,45 @@ const AddMemberInput = ({ multisigPda, transactionIndex, programId }: AddMemberI
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
   };
   return (
-    <div>
-      <Input
-        placeholder="Member Public Key"
-        onChange={(e) => setMember(e.target.value.trim())}
-        className="mb-3"
-      />
+    <div className="space-y-4">
+      <Input placeholder="Member Public Key" onChange={(e) => setMember(e.target.value.trim())} />
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">Member Permissions</Label>
+        <div className="space-y-2 rounded-md border p-3">
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="add-proposer"
+              checked={isPermissionEnabled(PERMISSIONS.PROPOSER)}
+              onCheckedChange={() => handlePermissionToggle(PERMISSIONS.PROPOSER)}
+            />
+            <Label htmlFor="add-proposer" className="cursor-pointer text-sm font-normal">
+              Proposer - Can create transaction proposals
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="add-voter"
+              checked={isPermissionEnabled(PERMISSIONS.VOTER)}
+              onCheckedChange={() => handlePermissionToggle(PERMISSIONS.VOTER)}
+            />
+            <Label htmlFor="add-voter" className="cursor-pointer text-sm font-normal">
+              Voter - Can vote on proposals (approve/reject)
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="add-executor"
+              checked={isPermissionEnabled(PERMISSIONS.EXECUTOR)}
+              onCheckedChange={() => handlePermissionToggle(PERMISSIONS.EXECUTOR)}
+            />
+            <Label htmlFor="add-executor" className="cursor-pointer text-sm font-normal">
+              Executor - Can execute approved transactions
+            </Label>
+          </div>
+        </div>
+      </div>
+
       <Button
         onClick={() =>
           toast.promise(addMember, {
@@ -111,7 +162,7 @@ const AddMemberInput = ({ multisigPda, transactionIndex, programId }: AddMemberI
             error: (e) => `Failed to propose: ${e}`,
           })
         }
-        disabled={!isPublickey(member) || !hasAccess}
+        disabled={!isPublickey(member) || !hasAccess || permissions === 0}
       >
         Add Member
       </Button>

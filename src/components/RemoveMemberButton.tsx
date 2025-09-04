@@ -87,6 +87,7 @@ const RemoveMemberButton = ({
   };
   return (
     <Button
+      size="sm"
       disabled={!isMember}
       onClick={() =>
         toast.promise(removeMember, {

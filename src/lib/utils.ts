@@ -16,12 +16,19 @@ export function range(start: number, end: number): number[] {
 }
 
 export const renderPermissions = (permissionsMask: number) => {
-  return (
-    Object.entries(multisigTypes.Permission)
-      .filter(([_, bit]) => (permissionsMask & bit) === bit) // Check which bits are set
-      .map(([key]) => key) // Get the permission names
-      .join(', ') || 'None'
-  ); // Handle empty case
+  const permissions = [];
+
+  // Check each permission bit
+  if ((permissionsMask & 1) === 1) permissions.push('Proposer');
+  if ((permissionsMask & 2) === 2) permissions.push('Voter');
+  if ((permissionsMask & 4) === 4) permissions.push('Executor');
+
+  // Special case for all permissions
+  if (permissionsMask === 7) {
+    return 'Almighty (Proposer, Voter, Executor)';
+  }
+
+  return permissions.length > 0 ? permissions.join(', ') : 'None';
 };
 
 export const isMember = (publicKey: PublicKey, members: multisigTypes.Member[]) => {
@@ -34,12 +41,12 @@ export const validateSquadAddress = async (
 ): Promise<{ isValid: boolean; error?: string }> => {
   try {
     const pubkey = new PublicKey(address);
-    
+
     const accountInfo = await connection.getAccountInfo(pubkey);
     if (!accountInfo) {
       return { isValid: false, error: 'Address does not exist on chain' };
     }
-    
+
     try {
       // @ts-ignore - Connection type mismatch between versions
       await accounts.Multisig.fromAccountAddress(connection, pubkey);

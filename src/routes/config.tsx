@@ -1,6 +1,7 @@
 import AddMemberInput from '@/components/AddMemberInput';
 import ChangeThresholdInput from '@/components/ChangeThresholdInput';
 import RemoveMemberButton from '@/components/RemoveMemberButton';
+import EditMemberPermissions from '@/components/EditMemberPermissions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { clusterApiUrl } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
@@ -93,7 +94,18 @@ const ConfigurationPage = () => {
                             Permissions: {renderPermissions(member.permissions.mask)}
                           </p>
                         </div>
-                        <div className="ml-auto">
+                        <div className="ml-auto flex gap-2">
+                          <EditMemberPermissions
+                            memberKey={member.key.toBase58()}
+                            currentPermissions={member.permissions.mask}
+                            multisigPda={multisigAddress!}
+                            transactionIndex={
+                              Number(multisigConfig ? multisigConfig.transactionIndex : 0) + 1
+                            }
+                            programId={
+                              programId ? programId.toBase58() : multisig.PROGRAM_ID.toBase58()
+                            }
+                          />
                           <RemoveMemberButton
                             memberKey={member.key.toBase58()}
                             multisigPda={multisigAddress!}
