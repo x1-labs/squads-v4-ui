@@ -100,6 +100,14 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({
             <span className="text-xs font-medium text-destructive">{rejectedCount}</span>
           </div>
         )}
+        {cancelledCount > 0 && !isFinalized && (
+          <div className="flex items-center gap-1 rounded-md border border-yellow-500/20 bg-yellow-500/10 px-2 py-1">
+            <XCircle className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-500" />
+            <span className="text-xs font-medium text-yellow-600 dark:text-yellow-500">
+              {cancelledCount}
+            </span>
+          </div>
+        )}
       </div>
     );
   }
@@ -194,7 +202,11 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({
               {proposal.cancelled.map((member, idx) => (
                 <span
                   key={idx}
-                  className="rounded bg-muted px-2 py-1 text-xs text-muted-foreground"
+                  className={`rounded px-2 py-1 text-xs ${
+                    isFinalized || isStale
+                      ? 'bg-muted text-muted-foreground'
+                      : 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-500'
+                  }`}
                 >
                   {member.toBase58().slice(0, 4)}...{member.toBase58().slice(-4)}
                 </span>
