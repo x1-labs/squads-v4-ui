@@ -153,7 +153,7 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
             }
           }}
         >
-          Send XNT
+          Send
         </Button>
       </DialogTrigger>
       <DialogContent>

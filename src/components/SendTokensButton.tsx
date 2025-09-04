@@ -232,7 +232,7 @@ const SendTokens = ({
             }
           }}
         >
-          Send Tokens
+          Send
         </Button>
       </DialogTrigger>
       <DialogContent>
