@@ -13,12 +13,12 @@ const ConnectWallet = () => {
           onClick={() => {
             modal.setVisible(true);
           }}
-          className="h-12 w-full"
+          className="h-12 w-full bg-orange-500 text-white hover:bg-orange-600"
         >
           Connect Wallet
         </Button>
       ) : (
-        <Button onClick={disconnect} className="h-12 w-full">
+        <Button onClick={disconnect} className="h-12 w-full" variant="outline">
           Disconnect Wallet
         </Button>
       )}

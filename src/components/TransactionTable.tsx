@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { TransactionTagList } from './TransactionTag';
 import { TransactionTag } from '@/lib/instructions/types';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { useAccess } from '@/hooks/useAccess';
 
 // Format address to show first 8 and last 8 characters
 function formatAddress(address: string): string {
@@ -44,6 +45,8 @@ export default function TransactionTable({
 }) {
   const navigate = useNavigate();
   const { data: multisigConfig } = useMultisig();
+  const isMember = useAccess();
+  const { connected } = useWallet();
 
   if (transactions.length === 0) {
     return (
@@ -162,7 +165,7 @@ export default function TransactionTable({
               </div>
             </TableCell>
             <TableCell className="text-right">
-              {(!stale || isExecuted || isCancelled) && (
+              {(!stale || isExecuted || isCancelled) && connected && isMember && (
                 <ActionButtons
                   multisigPda={multisigPda!}
                   transactionIndex={Number(transaction.index)}

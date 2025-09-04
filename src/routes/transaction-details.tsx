@@ -19,6 +19,7 @@ import { extractTransactionTags } from '@/lib/instructions/extractor';
 import { TransactionTag } from '@/lib/instructions/types';
 import { TransactionTagList } from '@/components/TransactionTag';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { useAccess } from '@/hooks/useAccess';
 
 export default function TransactionDetailsPage() {
   const { transactionPda } = useParams<{ transactionPda: string }>();
@@ -29,6 +30,7 @@ export default function TransactionDetailsPage() {
   const { data: multisigConfig } = useMultisig();
   const { selectSquad, addSquad } = useSquadConfig();
   const wallet = useWallet();
+  const isMember = useAccess();
 
   // Create connection with the configured RPC URL
   const connection = useMemo(() => {
@@ -258,7 +260,7 @@ export default function TransactionDetailsPage() {
             </div>
             <p className="mt-1 font-mono text-sm text-muted-foreground">{transactionPda}</p>
           </div>
-          {transactionIndex !== null && multisigAddress && (
+          {transactionIndex !== null && multisigAddress && wallet.connected && isMember && (
             <div className="flex gap-2">
               {showApprove && (
                 <ApproveButton
