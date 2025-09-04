@@ -89,13 +89,16 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({
   if (compact) {
     // Compact view for table
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <div className={`flex items-center gap-1 rounded-md border px-2 py-1 ${getStatusColor()}`}>
           {getStatusIcon()}
           <span className="text-xs font-medium">{getStatusDisplay()}</span>
         </div>
         {rejectedCount > 0 && !isFinalized && (
-          <span className="text-xs text-destructive">({rejectedCount} rejected)</span>
+          <div className="flex items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-2 py-1">
+            <XCircle className="h-3.5 w-3.5 text-destructive" />
+            <span className="text-xs font-medium text-destructive">{rejectedCount}</span>
+          </div>
         )}
       </div>
     );
