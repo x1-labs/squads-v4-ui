@@ -25,7 +25,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; connect-src 'self' https://rpc.testnet.x1.xyz https://rpc.x1.xyz; img-src https: data:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; require-trusted-types-for 'script'"
+          "value": "default-src 'self'; script-src https://multisig.testnet.x1.xyz https://multisig.x1.xyz; connect-src 'self' https://rpc.testnet.x1.xyz https://rpc.x1.xyz; img-src https: data:; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests; require-trusted-types-for 'script'"
         },
         {
           "key": "Cross-Origin-Embedder-Policy",
