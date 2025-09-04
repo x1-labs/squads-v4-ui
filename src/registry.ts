@@ -12,7 +12,6 @@ import { MemoSummary } from './components/instructions/summaries/MemoSummary';
 import squadsV4Idl from './lib/idls/squads-v4.json';
 import delegationProgramIdl from './lib/idls/delegation_program.json';
 import tokenProgramIdl from './lib/idls/token_program.json';
-import stakePoolIdl from './lib/idls/stake_pool.json';
 
 // ============================================
 // System Program
@@ -133,29 +132,6 @@ registry.register({
     Memo: {
       summary: MemoSummary,
       tags: { label: 'Memo', color: 'blue', variant: 'subtle' },
-    },
-  },
-});
-
-// ============================================
-// SPL Stake Pool Program
-// ============================================
-registry.register({
-  programId: 'XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux', // Testnet fork of SPL Stake Pool
-  name: 'SPL Stake Pool',
-  idl: stakePoolIdl,
-  instructions: {
-    depositSol: {
-      tags: { label: 'Stake XNT', color: 'green', variant: 'subtle' },
-    },
-    withdrawSol: {
-      tags: { label: 'Unstake XNT', color: 'orange', variant: 'subtle' },
-    },
-    depositStake: {
-      tags: { label: 'Deposit Stake', color: 'green', variant: 'subtle' },
-    },
-    withdrawStake: {
-      tags: { label: 'Withdraw Stake', color: 'orange', variant: 'subtle' },
     },
   },
 });
