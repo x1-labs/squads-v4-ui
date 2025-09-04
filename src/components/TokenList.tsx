@@ -58,6 +58,31 @@ export function TokenList({ multisigPda }: TokenListProps) {
     return `${mint.slice(0, 8)}...${mint.slice(-8)}`;
   };
 
+  // Format balance for display with appropriate decimal places
+  const formatBalance = (amount: number | null | undefined, decimals?: number): string => {
+    if (amount === null || amount === undefined || isNaN(amount)) return '0';
+
+    // For very small amounts, show more decimal places
+    if (amount > 0 && amount < 0.0001) {
+      return amount.toExponential(2);
+    }
+
+    // For XNT and tokens with high value, show 4 decimal places
+    if (decimals === undefined || decimals === 9) {
+      return amount.toLocaleString(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 4,
+      });
+    }
+
+    // For other tokens, adjust based on their decimals
+    const maxDecimals = Math.min(decimals, 6);
+    return amount.toLocaleString(undefined, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: maxDecimals,
+    });
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -75,7 +100,7 @@ export function TokenList({ multisigPda }: TokenListProps) {
               <div>
                 <p className="font-medium">XNT</p>
                 <p className="text-sm text-muted-foreground">
-                  {((solBalance || 0) / LAMPORTS_PER_SOL).toFixed(4)} XNT
+                  {formatBalance((solBalance || 0) / LAMPORTS_PER_SOL, 9)} XNT
                 </p>
               </div>
             </div>
@@ -123,7 +148,10 @@ export function TokenList({ multisigPda }: TokenListProps) {
                           )}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {token.account.data.parsed.info.tokenAmount.uiAmount}{' '}
+                          {formatBalance(
+                            token.account.data.parsed.info.tokenAmount.uiAmount,
+                            token.account.data.parsed.info.tokenAmount.decimals
+                          )}{' '}
                           {metadata?.symbol || 'tokens'}
                         </p>
                         {metadata && !metadata.name && (
