@@ -176,7 +176,7 @@ export default function TransactionDetailsPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="px-3 py-4 sm:container sm:mx-auto sm:py-8">
         <div className="text-center">
           <p className="mb-4 text-muted-foreground">Loading transaction details...</p>
         </div>
@@ -186,7 +186,7 @@ export default function TransactionDetailsPage() {
 
   if (!transactionPda) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="px-3 py-4 sm:container sm:mx-auto sm:py-8">
         <div className="text-center">
           <h1 className="mb-4 text-2xl font-bold text-foreground">Transaction Not Found</h1>
           <p className="mb-4 text-muted-foreground">
@@ -223,7 +223,7 @@ export default function TransactionDetailsPage() {
   const showCancel = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="px-3 py-4 sm:container sm:mx-auto sm:py-8">
       {/* Header with tags on right */}
       <div className="mb-6">
         {/* Top row with back link and tags */}
@@ -240,10 +240,10 @@ export default function TransactionDetailsPage() {
         </div>
 
         {/* Main header content */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-foreground">Transaction Details</h1>
+              <h1 className="text-xl font-bold text-foreground sm:text-2xl">Transaction Details</h1>
               {isStale && proposalStatus !== 'Executed' && proposalStatus !== 'Cancelled' && (
                 <div className="text-warning bg-warning/10 border-warning/20 flex items-center gap-1 rounded-md border px-2 py-1">
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -258,10 +258,15 @@ export default function TransactionDetailsPage() {
                 </div>
               )}
             </div>
-            <p className="mt-1 font-mono text-sm text-muted-foreground">{transactionPda}</p>
+            <p className="mt-1 font-mono text-xs text-muted-foreground sm:text-sm">
+              <span className="inline sm:hidden">
+                {transactionPda?.slice(0, 8)}...{transactionPda?.slice(-8)}
+              </span>
+              <span className="hidden sm:inline">{transactionPda}</span>
+            </p>
           </div>
           {transactionIndex !== null && multisigAddress && wallet.connected && isMember && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {showApprove && (
                 <ApproveButton
                   multisigPda={multisigAddress}
@@ -329,7 +334,7 @@ export default function TransactionDetailsPage() {
 
       {/* Proposal Status Card */}
       {proposal && (
-        <div className="mb-6 rounded-lg border border-border bg-card p-6">
+        <div className="mb-6 rounded-lg border border-border bg-card p-4 sm:p-6">
           <h2 className="mb-4 text-lg font-semibold text-foreground">Approval Status</h2>
           <ApprovalStatus proposal={proposal} isStale={isStale || false} />
         </div>

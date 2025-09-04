@@ -21,7 +21,7 @@ const ConfigurationPage = () => {
       <ErrorBoundary>
         <Suspense fallback={<div>Loading...</div>}>
           <div className="">
-            <h1 className="mb-4 text-3xl font-bold">Multisig Configuration</h1>
+            <h1 className="mb-4 text-2xl font-bold sm:text-3xl">Multisig Configuration</h1>
             <div className="py-8 text-center">
               <p className="text-muted-foreground">
                 Please select a valid squad to view configuration.
@@ -42,7 +42,7 @@ const ConfigurationPage = () => {
     <ErrorBoundary>
       <Suspense fallback={<div>Loading...</div>}>
         <div className="">
-          <h1 className="mb-4 text-3xl font-bold">Multisig Configuration</h1>
+          <h1 className="mb-4 text-2xl font-bold sm:text-3xl">Multisig Configuration</h1>
 
           {isControlled && (
             <div className="border-warning/50 bg-warning/10 mb-4 rounded-lg border p-4">
@@ -84,17 +84,18 @@ const ConfigurationPage = () => {
               <div className="space-y-8">
                 {multisigConfig &&
                   multisigConfig.members.map((member) => (
-                    <div key={member.key.toBase58()}>
-                      <div className="flex items-center">
-                        <div className="ml-4 space-y-1">
-                          <p className="text-sm font-medium leading-none">
-                            Public Key: {member.key.toBase58()}
+                    <div key={member.key.toBase58()} className="space-y-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="space-y-1">
+                          <p className="break-all text-xs font-medium sm:text-sm">
+                            <span className="text-muted-foreground">Key:</span>{' '}
+                            <span className="font-mono">{member.key.toBase58()}</span>
                           </p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs text-muted-foreground sm:text-sm">
                             Permissions: {renderPermissions(member.permissions.mask)}
                           </p>
                         </div>
-                        <div className="ml-auto flex gap-2">
+                        <div className="flex gap-2 self-end sm:self-auto">
                           <EditMemberPermissions
                             memberKey={member.key.toBase58()}
                             currentPermissions={member.permissions.mask}
@@ -118,14 +119,14 @@ const ConfigurationPage = () => {
                           />
                         </div>
                       </div>
-                      <hr className="mt-2" />
+                      <hr />
                     </div>
                   ))}
               </div>
             </CardContent>
           </Card>
-          <div className="flex pb-4">
-            <Card className="mr-2 mt-4 w-1/2">
+          <div className="flex flex-col gap-4 pb-4 sm:flex-row">
+            <Card className="mt-4 w-full sm:w-1/2">
               <CardHeader>
                 <CardTitle>Add Member</CardTitle>
                 <CardDescription>Add a member to the Multisig</CardDescription>
@@ -140,7 +141,7 @@ const ConfigurationPage = () => {
                 />
               </CardContent>
             </Card>
-            <Card className="mt-4 w-1/2">
+            <Card className="mt-4 w-full sm:w-1/2">
               <CardHeader>
                 <CardTitle>Change Threshold</CardTitle>
                 <CardDescription>

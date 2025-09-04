@@ -8,6 +8,7 @@ import {
 import { Suspense } from 'react';
 import CreateTransaction from '@/components/CreateTransactionButton';
 import TransactionTable from '@/components/TransactionTable';
+import TransactionTableMobile from '@/components/TransactionTableMobile';
 import { useMultisig, useTransactions } from '@/hooks/useServices';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useLocation } from 'react-router-dom';
@@ -73,9 +74,9 @@ export default function TransactionsPage() {
         }
       >
         <div>
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Transactions</h1>
+              <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Transactions</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 Manage and execute multisig transactions
               </p>
@@ -84,26 +85,44 @@ export default function TransactionsPage() {
           </div>
 
           <Suspense>
-            <div className="rounded-lg border border-border bg-card shadow-sm">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-b border-border hover:bg-transparent">
-                    <TableHead className="w-20 font-semibold text-foreground">Index</TableHead>
-                    <TableHead className="font-semibold text-foreground">Proposal</TableHead>
-                    <TableHead className="font-semibold text-foreground">Status</TableHead>
-                    <TableHead className="text-right font-semibold text-foreground">
-                      Actions
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <Suspense>
-                  <TransactionTable
-                    multisigPda={multisigAddress!}
-                    transactions={transactions}
-                    programId={programId!.toBase58()}
-                  />
-                </Suspense>
-              </Table>
+            {/* Desktop Table View */}
+            <div className="hidden sm:block">
+              <div className="overflow-x-auto rounded-lg border border-border bg-card shadow-sm">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-b border-border hover:bg-transparent">
+                      <TableHead className="w-20 whitespace-nowrap font-semibold text-foreground">
+                        Index
+                      </TableHead>
+                      <TableHead className="min-w-[150px] font-semibold text-foreground">
+                        Proposal
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap font-semibold text-foreground">
+                        Status
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap text-right font-semibold text-foreground">
+                        Actions
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <Suspense>
+                    <TransactionTable
+                      multisigPda={multisigAddress!}
+                      transactions={transactions}
+                      programId={programId!.toBase58()}
+                    />
+                  </Suspense>
+                </Table>
+              </div>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="sm:hidden">
+              <TransactionTableMobile
+                multisigPda={multisigAddress!}
+                transactions={transactions}
+                programId={programId!.toBase58()}
+              />
             </div>
           </Suspense>
 

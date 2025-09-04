@@ -13,7 +13,7 @@ export default function Overview() {
     return (
       <main>
         <div>
-          <h1 className="mb-4 text-3xl font-bold">Overview</h1>
+          <h1 className="mb-4 text-2xl font-bold sm:text-3xl">Overview</h1>
           <div className="py-8 text-center">
             <p className="text-muted-foreground">
               Invalid or non-existent multisig account. Please select a valid squad.
@@ -36,7 +36,7 @@ export default function Overview() {
       <div className="space-y-6">
         {/* Header Section */}
         <div className="border-b border-border pb-4">
-          <h1 className="mb-3 text-3xl font-bold">Squad Overview</h1>
+          <h1 className="mb-3 text-2xl font-bold sm:text-3xl">Squad Overview</h1>
           {multisigAddress && (
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useLocation } from 'react-router-dom';
 import { SquadSwitcher } from './SquadSwitcher';
 import { MembershipWarning } from './MembershipWarning';
+import { MobileNav } from './MobileNav';
 
 export default function TabNav() {
   const location = useLocation();
@@ -18,6 +19,7 @@ export default function TabNav() {
 
   return (
     <>
+      {/* Desktop Sidebar */}
       <aside
         id="sidebar"
         className="z-40 hidden h-auto md:fixed md:left-0 md:top-0 md:block md:h-screen md:w-3/12 lg:w-3/12"
@@ -73,25 +75,8 @@ export default function TabNav() {
         </div>
       </aside>
 
-      <aside
-        id="mobile-navbar"
-        className="fixed inset-x-0 bottom-0 z-50 block border-t border-border bg-muted/50 p-2 dark:bg-background md:hidden"
-        aria-label="Mobile navbar"
-      >
-        <div className="mx-auto mt-1 grid h-full max-w-lg grid-cols-5 font-medium">
-          {tabs.map((tab) => (
-            <Link to={tab.route} key={tab.route} className={`flex justify-center`}>
-              <button
-                type="button"
-                className="group inline-flex flex-col items-center justify-center rounded-md py-2 hover:bg-accent"
-              >
-                {tab.icon}
-                <span className="flex-1 whitespace-nowrap text-sm text-foreground">{tab.name}</span>
-              </button>
-            </Link>
-          ))}
-        </div>
-      </aside>
+      {/* Mobile Navigation */}
+      <MobileNav />
     </>
   );
 }

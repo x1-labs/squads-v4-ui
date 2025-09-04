@@ -90,7 +90,7 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
     const instructionSummary = getInstructionSummary(instruction);
 
     return (
-      <div key={index} className="mb-4 rounded-lg border border-border bg-muted/50 p-4">
+      <div key={index} className="mb-4 rounded-lg border border-border bg-muted/50 p-3 sm:p-4">
         <div
           className="flex cursor-pointer items-start justify-between"
           onClick={() => toggleInstruction(index)}
@@ -121,8 +121,11 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
             {/* Program ID */}
             <div>
               <h4 className="mb-1 text-sm font-semibold text-muted-foreground">Program ID</h4>
-              <code className="break-all rounded bg-muted px-2 py-1 text-xs">
-                {instruction.programId}
+              <code className="block rounded bg-muted px-2 py-1 text-xs">
+                <span className="inline sm:hidden">
+                  {instruction.programId.slice(0, 8)}...{instruction.programId.slice(-8)}
+                </span>
+                <span className="hidden break-all sm:inline">{instruction.programId}</span>
               </code>
             </div>
 
@@ -133,7 +136,7 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
                 <div className="space-y-2">
                   {Object.entries(instruction.args).map(([key, value]) => (
                     <div key={key} className="flex flex-col">
-                      <span className="text-sm font-medium text-foreground">{key}:</span>
+                      <span className="text-xs font-medium text-foreground sm:text-sm">{key}:</span>
                       <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded bg-muted p-2 text-xs">
                         {formatInstructionValue(value, key)}
                       </pre>
@@ -148,36 +151,41 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
               <div>
                 <h4 className="mb-2 text-sm font-semibold text-muted-foreground">Accounts</h4>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
+                  <table className="min-w-full text-xs sm:text-sm">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="px-2 py-2 text-left">#</th>
-                        <th className="px-2 py-2 text-left">Name</th>
-                        <th className="px-2 py-2 text-left">Address</th>
-                        <th className="px-2 py-2 text-center">Signer</th>
-                        <th className="px-2 py-2 text-center">Writable</th>
+                        <th className="px-1 py-2 text-left sm:px-2">#</th>
+                        <th className="px-1 py-2 text-left sm:px-2">Name</th>
+                        <th className="px-1 py-2 text-left sm:px-2">Address</th>
+                        <th className="px-1 py-2 text-center sm:px-2">Signer</th>
+                        <th className="px-1 py-2 text-center sm:px-2">Writable</th>
                       </tr>
                     </thead>
                     <tbody>
                       {instruction.accounts.map((account, idx) => (
                         <tr key={idx} className="border-b border-border">
-                          <td className="px-2 py-2">{idx + 1}</td>
-                          <td className="px-2 py-2 font-medium">
+                          <td className="px-1 py-2 sm:px-2">{idx + 1}</td>
+                          <td className="px-1 py-2 font-medium sm:px-2">
                             {account.name || `Account ${idx + 1}`}
                           </td>
-                          <td className="px-2 py-2">
+                          <td className="px-1 py-2 sm:px-2">
                             <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                              {account.pubkey.slice(0, 8)}...{account.pubkey.slice(-8)}
+                              <span className="inline sm:hidden">
+                                {account.pubkey.slice(0, 6)}...{account.pubkey.slice(-4)}
+                              </span>
+                              <span className="hidden sm:inline">
+                                {account.pubkey.slice(0, 8)}...{account.pubkey.slice(-8)}
+                              </span>
                             </code>
                           </td>
-                          <td className="px-2 py-2 text-center">
+                          <td className="px-1 py-2 text-center sm:px-2">
                             {account.isSigner ? (
                               <span className="text-green-500">✓</span>
                             ) : (
                               <span className="text-muted-foreground/50">-</span>
                             )}
                           </td>
-                          <td className="px-2 py-2 text-center">
+                          <td className="px-1 py-2 text-center sm:px-2">
                             {account.isWritable ? (
                               <span className="text-green-500">✓</span>
                             ) : (
@@ -196,8 +204,13 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
             {instruction.rawData && (
               <div>
                 <h4 className="mb-1 text-sm font-semibold text-muted-foreground">Raw Data</h4>
-                <code className="break-all rounded bg-muted px-2 py-1 text-xs">
-                  {instruction.rawData}
+                <code className="block overflow-x-auto rounded bg-muted px-2 py-1 text-xs">
+                  <span className="inline sm:hidden">
+                    {instruction.rawData.length > 50
+                      ? `${instruction.rawData.slice(0, 50)}...`
+                      : instruction.rawData}
+                  </span>
+                  <span className="hidden break-all sm:inline">{instruction.rawData}</span>
                 </code>
               </div>
             )}
@@ -263,13 +276,18 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
       </div>
 
       {/* Transaction Overview */}
-      <div className="mb-6 rounded-lg border border-border bg-card p-4">
+      <div className="mb-6 rounded-lg border border-border bg-card p-3 sm:p-4">
         <h3 className="mb-3 font-semibold text-foreground">Transaction Overview</h3>
-        <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
+        <div className="space-y-3 text-sm md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
           {decodedTx.feePayer && (
-            <div>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
               <span className="font-medium text-muted-foreground">Fee Payer:</span>
-              <code className="ml-2 rounded bg-muted px-2 py-1 text-xs">{decodedTx.feePayer}</code>
+              <code className="rounded bg-muted px-2 py-1 text-xs sm:ml-2">
+                <span className="inline sm:hidden">
+                  {decodedTx.feePayer.slice(0, 8)}...{decodedTx.feePayer.slice(-8)}
+                </span>
+                <span className="hidden sm:inline">{decodedTx.feePayer}</span>
+              </code>
             </div>
           )}
           {decodedTx.signers.length > 0 && (
@@ -279,10 +297,15 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
             </div>
           )}
           {decodedTx.recentBlockhash && (
-            <div>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
               <span className="font-medium text-muted-foreground">Recent Blockhash:</span>
-              <code className="ml-2 rounded bg-muted px-2 py-1 text-xs">
-                {decodedTx.recentBlockhash.slice(0, 16)}...
+              <code className="rounded bg-muted px-2 py-1 text-xs sm:ml-2">
+                <span className="inline sm:hidden">
+                  {decodedTx.recentBlockhash.slice(0, 12)}...
+                </span>
+                <span className="hidden sm:inline">
+                  {decodedTx.recentBlockhash.slice(0, 16)}...
+                </span>
               </code>
             </div>
           )}
@@ -302,7 +325,12 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
               {decodedTx.signers.map((signer, idx) => (
                 <div key={idx} className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">#{idx + 1}</span>
-                  <code className="rounded bg-muted px-2 py-1 text-xs">{signer}</code>
+                  <code className="rounded bg-muted px-2 py-1 text-xs">
+                    <span className="inline sm:hidden">
+                      {signer.slice(0, 8)}...{signer.slice(-8)}
+                    </span>
+                    <span className="hidden sm:inline">{signer}</span>
+                  </code>
                 </div>
               ))}
             </div>

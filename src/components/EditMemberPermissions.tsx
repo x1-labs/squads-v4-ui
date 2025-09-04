@@ -139,7 +139,7 @@ const EditMemberPermissions = ({
           <Settings className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="max-h-[90vh] max-w-[95vw] overflow-y-auto sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Edit Member Permissions</DialogTitle>
           <DialogDescription>
