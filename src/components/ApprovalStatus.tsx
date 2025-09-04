@@ -86,20 +86,82 @@ export const ApprovalStatus: React.FC<ApprovalStatusProps> = ({
     }
   };
 
+  // Helper function to format addresses
+  const formatMemberAddress = (address: string) => {
+    return `${address.slice(0, 8)}...${address.slice(-8)}`;
+  };
+
   if (compact) {
     // Compact view for table
+    const hasVotes = (approvedCount > 0 || rejectedCount > 0 || cancelledCount > 0) && !isFinalized;
+
     return (
       <div className="flex items-center gap-1.5">
-        <div className={`flex items-center gap-1 rounded-md border px-2 py-1 ${getStatusColor()}`}>
-          {getStatusIcon()}
-          <span className="text-xs font-medium">{getStatusDisplay()}</span>
+        {/* Main status badge with combined tooltip on hover */}
+        <div className="group relative">
+          <div
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 ${getStatusColor()}`}
+          >
+            {getStatusIcon()}
+            <span className="text-xs font-medium">{getStatusDisplay()}</span>
+          </div>
+          {hasVotes && (
+            <div className="absolute bottom-full left-0 z-50 mb-2 hidden w-72 rounded-md border bg-popover p-3 shadow-lg group-hover:block">
+              {approvedCount > 0 && (
+                <div className="mb-3">
+                  <p className="mb-1.5 text-xs font-semibold text-green-600 dark:text-green-400">
+                    Approved by {approvedCount} member(s):
+                  </p>
+                  <div className="space-y-0.5">
+                    {proposal.approved.map((member, idx) => (
+                      <div key={idx} className="font-mono text-xs text-muted-foreground">
+                        {formatMemberAddress(member.toBase58())}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {rejectedCount > 0 && (
+                <div className={approvedCount > 0 ? 'mb-3' : 'mb-3'}>
+                  <p className="mb-1.5 text-xs font-semibold text-destructive">
+                    Rejected by {rejectedCount} member(s):
+                  </p>
+                  <div className="space-y-0.5">
+                    {proposal.rejected.map((member, idx) => (
+                      <div key={idx} className="font-mono text-xs text-muted-foreground">
+                        {formatMemberAddress(member.toBase58())}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {cancelledCount > 0 && (
+                <div>
+                  <p className="mb-1.5 text-xs font-semibold text-yellow-600 dark:text-yellow-500">
+                    Cancelled by {cancelledCount} member(s):
+                  </p>
+                  <div className="space-y-0.5">
+                    {proposal.cancelled.map((member, idx) => (
+                      <div key={idx} className="font-mono text-xs text-muted-foreground">
+                        {formatMemberAddress(member.toBase58())}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Rejected count badge (no tooltip) */}
         {rejectedCount > 0 && !isFinalized && (
           <div className="flex items-center gap-1 rounded-md border border-destructive/20 bg-destructive/10 px-2 py-1">
             <XCircle className="h-3.5 w-3.5 text-destructive" />
             <span className="text-xs font-medium text-destructive">{rejectedCount}</span>
           </div>
         )}
+
+        {/* Cancelled count badge (no tooltip) */}
         {cancelledCount > 0 && !isFinalized && (
           <div className="flex items-center gap-1 rounded-md border border-yellow-500/20 bg-yellow-500/10 px-2 py-1">
             <XCircle className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-500" />
