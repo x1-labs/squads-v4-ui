@@ -10,6 +10,7 @@ import { useMultisig } from '@/hooks/useServices';
 import { toast } from 'sonner';
 import { TransactionTagList } from './TransactionTag';
 import { TransactionTag } from '@/lib/instructions/types';
+import { useWallet } from '@solana/wallet-adapter-react';
 
 // Format address to show first 8 and last 8 characters
 function formatAddress(address: string): string {
@@ -23,6 +24,7 @@ interface ActionButtonsProps {
   transactionPda: string;
   proposalStatus: string;
   programId: string;
+  proposal: multisig.generated.Proposal | null;
 }
 
 export default function TransactionTable({
@@ -167,6 +169,7 @@ export default function TransactionTable({
                   transactionPda={transaction.transactionPda}
                   proposalStatus={transaction.proposal?.status.__kind || 'None'}
                   programId={programId ? programId : multisig.PROGRAM_ID.toBase58()}
+                  proposal={transaction.proposal}
                 />
               )}
             </TableCell>
@@ -183,11 +186,24 @@ function ActionButtons({
   transactionPda,
   proposalStatus,
   programId,
+  proposal,
 }: ActionButtonsProps) {
+  const wallet = useWallet();
+
+  // Check if current user has already rejected or cancelled
+  const hasUserRejected = proposal?.rejected?.some((member) =>
+    wallet.publicKey ? member.equals(wallet.publicKey) : false
+  );
+  const hasUserCancelled = proposal?.cancelled?.some((member) =>
+    wallet.publicKey ? member.equals(wallet.publicKey) : false
+  );
+  const hasUserTakenNegativeAction = hasUserRejected || hasUserCancelled;
+
   // Determine which buttons to show based on status
-  const showReject = ['None', 'Draft', 'Active'].includes(proposalStatus);
-  const showExecute = proposalStatus === 'Approved';
-  const showCancel = proposalStatus === 'Approved';
+  const showReject =
+    !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+  const showExecute = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
+  const showCancel = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
 
   return (
     <div className="flex items-center justify-end gap-1">

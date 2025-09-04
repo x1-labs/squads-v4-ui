@@ -18,6 +18,7 @@ import { SimpleDecoder } from '@/lib/transaction/simpleDecoder';
 import { extractTransactionTags } from '@/lib/instructions/extractor';
 import { TransactionTag } from '@/lib/instructions/types';
 import { TransactionTagList } from '@/components/TransactionTag';
+import { useWallet } from '@solana/wallet-adapter-react';
 
 export default function TransactionDetailsPage() {
   const { transactionPda } = useParams<{ transactionPda: string }>();
@@ -27,6 +28,7 @@ export default function TransactionDetailsPage() {
   const { multisigAddress, setMultisigAddress } = useMultisigAddress();
   const { data: multisigConfig } = useMultisig();
   const { selectSquad, addSquad } = useSquadConfig();
+  const wallet = useWallet();
 
   // Create connection with the configured RPC URL
   const connection = useMemo(() => {
@@ -200,12 +202,23 @@ export default function TransactionDetailsPage() {
     multisigConfig &&
     Number(multisigConfig.staleTransactionIndex) > Number(transactionIndex);
 
+  // Check if current user has already rejected or cancelled
+  const hasUserRejected = proposal?.rejected?.some((member) =>
+    wallet.publicKey ? member.equals(wallet.publicKey) : false
+  );
+  const hasUserCancelled = proposal?.cancelled?.some((member) =>
+    wallet.publicKey ? member.equals(wallet.publicKey) : false
+  );
+  const hasUserTakenNegativeAction = hasUserRejected || hasUserCancelled;
+
   // Determine which action buttons to show
   const proposalStatus = proposal?.status.__kind || 'None';
-  const showApprove = !isStale && ['None', 'Draft', 'Active'].includes(proposalStatus);
-  const showReject = !isStale && ['None', 'Draft', 'Active'].includes(proposalStatus);
-  const showExecute = !isStale && proposalStatus === 'Approved';
-  const showCancel = !isStale && proposalStatus === 'Approved';
+  const showApprove =
+    !isStale && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+  const showReject =
+    !isStale && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+  const showExecute = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
+  const showCancel = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
 
   return (
     <div className="container mx-auto py-8">
