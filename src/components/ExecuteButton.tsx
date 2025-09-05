@@ -121,24 +121,6 @@ const ExecuteButton = ({
     let blockhash = (await connection.getLatestBlockhash()).blockhash;
 
     if (txType == 'vault') {
-      
-      // Get the vault transaction details to check ephemeral signers
-      const [vaultTransactionPda] = multisig.getTransactionPda({
-        multisigPda: new PublicKey(multisigPda),
-        index: bigIntTransactionIndex,
-        programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-      });
-      
-      try {
-        const vaultTxAccount = await multisig.accounts.VaultTransaction.fromAccountAddress(
-          // @ts-ignore
-          connection,
-          vaultTransactionPda
-        );
-      } catch (e) {
-        console.error('Failed to fetch vault transaction account:', e);
-      }
-      
       const resp = await multisig.instructions.vaultTransactionExecute({
         multisigPda: new PublicKey(multisigPda),
         // @ts-ignore
@@ -147,8 +129,7 @@ const ExecuteButton = ({
         transactionIndex: bigIntTransactionIndex,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
-      
-      
+
       transactions.push(
         new VersionedTransaction(
           new TransactionMessage({
@@ -214,7 +195,6 @@ const ExecuteButton = ({
     const signedTransactions = await wallet.signAllTransactions(transactions);
 
     let signatures = [];
-    let errors = [];
 
     for (let i = 0; i < signedTransactions.length; i++) {
       const signedTx = signedTransactions[i];
@@ -223,7 +203,7 @@ const ExecuteButton = ({
         const simulation = await connection.simulateTransaction(signedTx, {
           commitment: 'processed',
         });
-        
+
 
         if (simulation.value.err) {
           console.error('Simulation error:', simulation.value.err);
@@ -270,6 +250,7 @@ const ExecuteButton = ({
         });
 
         signatures.push(signature);
+        console.log('Transaction signature', signature);
 
         if (signedTransactions.length === 1) {
           toast.loading('Confirming transaction...', {
@@ -320,6 +301,7 @@ const ExecuteButton = ({
     }
 
     const confirmations = await waitForConfirmation(connection, signatures);
+    console.log('Confirmation results:', confirmations);
 
     // Check if any transactions failed
     const failedTxs = confirmations.filter((status) => {
@@ -423,7 +405,7 @@ const ExecuteButton = ({
           disabled={!isTransactionReady}
           onClick={async () => {
             try {
-              await toast.promise(executeTransaction, {
+              toast.promise(executeTransaction, {
                 id: 'transaction',
                 loading: 'Preparing transaction...',
                 success: (result) => {
