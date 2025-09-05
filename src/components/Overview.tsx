@@ -1,6 +1,6 @@
 import { TokenList } from '@/components/TokenList';
 import { VaultDisplayer } from '@/components/VaultDisplayer';
-import { StakingPanel } from '@/components/StakingPanel';
+import { StakingPanel } from '@/components/staking/StakingPanel';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useMultisig } from '@/hooks/useServices';
 import { toast } from 'sonner';

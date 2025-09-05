@@ -6,12 +6,12 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from './ui/dialog';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Textarea } from './ui/textarea';
+} from '../ui/dialog';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Textarea } from '../ui/textarea';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import {
@@ -22,17 +22,17 @@ import {
 } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';
-import { useMultisigData } from '../hooks/useMultisigData';
-import { useStakePools } from '../hooks/useStakePools';
-import { useBalance, useMultisig } from '../hooks/useServices';
+import { useMultisigData } from '@/hooks/useMultisigData';
+import { useStakePools } from '@/hooks/useStakePools';
+import { useMultisig } from '@/hooks/useServices';
 import { useQueryClient } from '@tanstack/react-query';
-import { waitForConfirmation } from '../lib/transactionConfirmation';
+import { waitForConfirmation } from '@/lib/transactionConfirmation';
 import { stakePoolInfo, getStakePoolAccount, StakePoolInstruction } from '@x1-labs/spl-stake-pool';
 import * as splToken from '@solana/spl-token';
-import { useAccess } from '../hooks/useAccess';
-import { createMemoInstruction } from '../lib/utils/memoInstruction';
+import { useAccess } from '@/hooks/useAccess';
+import { createMemoInstruction } from '@/lib/utils/memoInstruction';
 
-export function DepositXntDialog() {
+export function WithdrawXntDialog() {
   const [isOpen, setIsOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [selectedPool, setSelectedPool] = useState('');
@@ -48,18 +48,19 @@ export function DepositXntDialog() {
     vaultIndex,
   } = useMultisigData();
   const { data: stakePools, isLoading: poolsLoading } = useStakePools();
-  const { data: solBalance } = useBalance();
   const { data: multisigInfo } = useMultisig();
   const queryClient = useQueryClient();
   const isMember = useAccess();
 
+  // Filter pools that have staked balance
+  const stakedPools = stakePools?.filter((p) => p.userBalance && p.userBalance > 0) || [];
+  const selectedPoolInfo = stakedPools.find((p) => p.address === selectedPool);
+
   const parsedAmount = parseFloat(amount);
   const isAmountValid = !isNaN(parsedAmount) && parsedAmount > 0;
-  const maxAmount = solBalance ? solBalance / LAMPORTS_PER_SOL : 0;
+  const maxAmount = selectedPoolInfo?.userBalance || 0;
 
-  const selectedPoolInfo = stakePools?.find((p) => p.address === selectedPool);
-
-  const handleDeposit = async () => {
+  const handleWithdraw = async () => {
     if (!wallet.publicKey || !multisigAddress || !selectedPoolInfo || !multisigInfo) {
       return;
     }
@@ -73,53 +74,22 @@ export function DepositXntDialog() {
       })[0];
 
       const stakePoolAddress = new PublicKey(selectedPoolInfo.address);
-      const lamports = Math.floor(parsedAmount * LAMPORTS_PER_SOL);
-
-      // First get stake pool info
-      const poolInfo = await stakePoolInfo(connection as any, stakePoolAddress);
-
-      if (!poolInfo) {
-        throw new Error('Failed to fetch stake pool info');
-      }
-
-      // Get pool mint from the stake pool info
-      const poolMint = poolInfo.poolMint;
-
-      // For multisig vaults, we need to create the deposit instruction directly
-      // without the ephemeral transfer account that the library uses
+      const poolTokenAmount = Math.floor(parsedAmount * 1e9); // Pool tokens in smallest units
 
       // Get the stake pool account data
       const stakePoolAccount = await getStakePoolAccount(connection as any, stakePoolAddress);
       const stakePool = stakePoolAccount.account.data;
 
-      // Find or create the vault's token account for pool tokens
-      let destinationTokenAccount: PublicKey;
+      // Find the vault's token account for pool tokens
       const tokenAccounts = await connection.getTokenAccountsByOwner(vaultAddress, {
         mint: stakePool.poolMint,
       });
 
-      const depositInstructions = [];
-
-      if (tokenAccounts.value.length > 0) {
-        // Use the existing token account
-        destinationTokenAccount = tokenAccounts.value[0].pubkey;
-      } else {
-        // Create associated token account for the vault
-        destinationTokenAccount = await splToken.getAssociatedTokenAddress(
-          stakePool.poolMint,
-          vaultAddress,
-          true // allowOwnerOffCurve - important for PDAs
-        );
-
-        depositInstructions.push(
-          splToken.createAssociatedTokenAccountInstruction(
-            wallet.publicKey, // payer
-            destinationTokenAccount,
-            vaultAddress, // owner
-            stakePool.poolMint
-          )
-        );
+      if (tokenAccounts.value.length === 0) {
+        throw new Error('No pool token account found for vault');
       }
+
+      const poolTokenAccount = tokenAccounts.value[0].pubkey;
 
       // Get the withdraw authority PDA
       const [withdrawAuthority] = PublicKey.findProgramAddressSync(
@@ -127,90 +97,57 @@ export function DepositXntDialog() {
         new PublicKey('XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux')
       );
 
-      // Create the deposit SOL instruction
-      // For multisig vaults, the vault itself is the funding account
-      depositInstructions.push(
-        StakePoolInstruction.depositSol({
+      // Create the withdraw SOL instruction
+      const withdrawInstructions = [
+        StakePoolInstruction.withdrawSol({
           programId: new PublicKey('XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux'),
           stakePool: stakePoolAddress,
-          reserveStake: stakePool.reserveStake,
-          fundingAccount: vaultAddress, // Vault is the source of funds
-          destinationPoolAccount: destinationTokenAccount,
-          managerFeeAccount: stakePool.managerFeeAccount,
-          referralPoolAccount: destinationTokenAccount, // No referrer
-          poolMint: stakePool.poolMint,
-          lamports,
+          sourcePoolAccount: poolTokenAccount,
           withdrawAuthority,
-          depositAuthority: undefined,
-        })
-      );
-
-      console.log('=== DEPOSIT TRANSACTION DEBUG ===');
-      console.log('Vault address:', vaultAddress.toBase58());
-      console.log('Stake pool address:', stakePoolAddress.toBase58());
-      console.log('Lamports:', lamports);
-      console.log(
-        'Destination token account:',
-        destinationTokenAccount?.toBase58() || 'will be created'
-      );
-      console.log('Number of deposit instructions:', depositInstructions.length);
-      depositInstructions.forEach((ix, i) => {
-        console.log(`Instruction ${i}:`);
-        console.log('  Program ID:', ix.programId.toBase58());
-        console.log('  Keys:');
-        ix.keys.forEach((k: any, idx: number) => {
-          console.log(`    [${idx}] ${k.pubkey.toBase58()}`);
-          console.log(`        isSigner: ${k.isSigner}, isWritable: ${k.isWritable}`);
-          if (k.isSigner) {
-            console.log(`        ⚠️ This account needs to sign!`);
-          }
-        });
-        console.log('  Data (hex):', ix.data.toString('hex'));
-      });
+          reserveStake: stakePool.reserveStake,
+          destinationSystemAccount: vaultAddress, // Vault receives the SOL
+          sourceTransferAuthority: vaultAddress, // Vault owns the pool tokens
+          solWithdrawAuthority: undefined,
+          managerFeeAccount: stakePool.managerFeeAccount,
+          poolMint: stakePool.poolMint,
+          poolTokens: poolTokenAmount,
+        }),
+      ];
 
       const blockhash = (await connection.getLatestBlockhash()).blockhash;
-
-      // Create the transaction message for the vault
-      const depositMessage = new TransactionMessage({
-        instructions: depositInstructions,
-        payerKey: vaultAddress,
-        recentBlockhash: blockhash,
-      });
-
-      console.log('Transaction message payer:', vaultAddress.toBase58());
-      console.log('Blockhash:', blockhash);
 
       // Add memo instruction if provided
       const memoInstruction = createMemoInstruction(memo, vaultAddress);
       if (memoInstruction) {
-        depositInstructions.push(memoInstruction);
-        console.log('Added memo instruction:', memo);
+        withdrawInstructions.push(memoInstruction);
       }
+
+      // Create the transaction message for the vault
+      const withdrawMessage = new TransactionMessage({
+        instructions: withdrawInstructions,
+        payerKey: vaultAddress,
+        recentBlockhash: blockhash,
+      });
 
       const transactionIndex = BigInt(Number(multisigInfo.transactionIndex) + 1);
 
       // Create multisig instructions
-      // For multisig vault transactions, the vault needs to sign
-      // Check if vault is a signer in any of the instructions
+      // For multisig vault transactions, check if vault needs to sign
       let vaultNeedsToSign = false;
-      depositInstructions.forEach((ix) => {
+      withdrawInstructions.forEach((ix) => {
         ix.keys.forEach((key: any) => {
           if (key.isSigner && key.pubkey.equals(vaultAddress)) {
             vaultNeedsToSign = true;
-            console.log('Vault needs to sign for instruction:', ix.programId.toBase58());
           }
         });
       });
-
-      console.log('Vault needs to sign:', vaultNeedsToSign);
-      console.log('Setting ephemeralSigners to:', vaultNeedsToSign ? 1 : 0);
 
       const multisigTransactionIx = multisig.instructions.vaultTransactionCreate({
         multisigPda: new PublicKey(multisigAddress),
         creator: wallet.publicKey,
         ephemeralSigners: vaultNeedsToSign ? 1 : 0,
         // @ts-ignore - Type mismatch between @solana/web3.js versions
-        transactionMessage: depositMessage,
+        transactionMessage: withdrawMessage,
         transactionIndex,
         addressLookupTableAccounts: [],
         rentPayer: wallet.publicKey,
@@ -247,7 +184,7 @@ export function DepositXntDialog() {
         skipPreflight: true,
       });
 
-      toast.loading('Confirming stake transaction...', { id: 'stake-transaction' });
+      toast.loading('Confirming unstake transaction...', { id: 'unstake-transaction' });
 
       const confirmations = await waitForConfirmation(connection, [signature]);
       if (!confirmations[0]) {
@@ -255,9 +192,9 @@ export function DepositXntDialog() {
       }
 
       toast.success(
-        `Successfully proposed staking ${parsedAmount} XNT to ${selectedPoolInfo.name}`,
+        `Successfully proposed unstaking ${parsedAmount} pool tokens from ${selectedPoolInfo.name}`,
         {
-          id: 'stake-transaction',
+          id: 'unstake-transaction',
         }
       );
 
@@ -271,10 +208,13 @@ export function DepositXntDialog() {
       await queryClient.invalidateQueries({ queryKey: ['transactions'] });
       await queryClient.invalidateQueries({ queryKey: ['stakePools'] });
     } catch (error) {
-      console.error('Error creating stake transaction:', error);
-      toast.error(`Failed to stake: ${error instanceof Error ? error.message : 'Unknown error'}`, {
-        id: 'stake-transaction',
-      });
+      console.error('Error creating unstake transaction:', error);
+      toast.error(
+        `Failed to unstake: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        {
+          id: 'unstake-transaction',
+        }
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -284,8 +224,8 @@ export function DepositXntDialog() {
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button
-          variant="default"
-          disabled={!isMember}
+          variant="outline"
+          disabled={!isMember || stakedPools.length === 0}
           onClick={(e) => {
             if (!wallet.publicKey) {
               e.preventDefault();
@@ -295,57 +235,70 @@ export function DepositXntDialog() {
             setIsOpen(true);
           }}
         >
-          Stake
+          Unstake
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Stake XNT</DialogTitle>
+          <DialogTitle>Unstake XNT</DialogTitle>
           <DialogDescription>
-            Stake to earn rewards. Select a pool and enter the amount to stake.
+            Withdraw your staked XNT from a pool. Select a pool and enter the amount of pool tokens
+            to burn.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 pt-4">
           <div className="space-y-2">
-            <Label>Available Balance</Label>
-            <div className="text-2xl font-bold">
-              {maxAmount.toLocaleString(undefined, {
-                maximumFractionDigits: 4,
-                minimumFractionDigits: 0,
-              })}{' '}
-              XNT
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="pool">Select Stake Pool</Label>
+            <Label htmlFor="pool">Select Staked Pool</Label>
             <Select value={selectedPool} onValueChange={setSelectedPool}>
               <SelectTrigger id="pool">
-                <SelectValue placeholder="Choose a stake pool" />
+                <SelectValue placeholder="Choose a pool to unstake from" />
               </SelectTrigger>
               <SelectContent>
                 {poolsLoading ? (
                   <SelectItem value="loading" disabled>
                     Loading pools...
                   </SelectItem>
-                ) : stakePools && stakePools.length > 0 ? (
-                  stakePools.map((pool) => (
+                ) : stakedPools.length > 0 ? (
+                  stakedPools.map((pool) => (
                     <SelectItem key={pool.address} value={pool.address}>
-                      <span>{pool.name}</span>
+                      <div className="flex flex-col">
+                        <span>{pool.name}</span>
+                        <span className="text-sm text-muted-foreground">
+                          Staked:{' '}
+                          {pool.userBalance?.toLocaleString(undefined, {
+                            maximumFractionDigits: 4,
+                            minimumFractionDigits: 0,
+                          })}{' '}
+                          tokens
+                        </span>
+                      </div>
                     </SelectItem>
                   ))
                 ) : (
                   <SelectItem value="none" disabled>
-                    No pools available
+                    No staked positions
                   </SelectItem>
                 )}
               </SelectContent>
             </Select>
           </div>
 
+          {selectedPoolInfo && (
+            <div className="space-y-2">
+              <Label>Staked Balance</Label>
+              <div className="text-2xl font-bold">
+                {selectedPoolInfo.userBalance?.toLocaleString(undefined, {
+                  maximumFractionDigits: 4,
+                  minimumFractionDigits: 0,
+                })}{' '}
+                Pool Tokens
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label htmlFor="amount">Amount to Stake</Label>
+            <Label htmlFor="amount">Pool Tokens to Burn</Label>
             <Input
               id="amount"
               type="number"
@@ -359,7 +312,7 @@ export function DepositXntDialog() {
               <p className="text-sm text-destructive">Please enter a valid amount</p>
             )}
             {isAmountValid && parsedAmount > maxAmount && (
-              <p className="text-sm text-destructive">Insufficient balance</p>
+              <p className="text-sm text-destructive">Exceeds staked balance</p>
             )}
           </div>
 
@@ -367,7 +320,7 @@ export function DepositXntDialog() {
             <Label htmlFor="memo">Memo (optional)</Label>
             <Textarea
               id="memo"
-              placeholder="Add a note about this stake transaction..."
+              placeholder="Add a note about this unstake transaction..."
               value={memo}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setMemo(e.target.value)}
               className="resize-none"
@@ -375,12 +328,18 @@ export function DepositXntDialog() {
             />
           </div>
 
+          <div className="rounded-lg bg-orange-50 p-3 dark:bg-orange-950">
+            <p className="text-sm text-orange-800 dark:text-orange-200">
+              Note: Unstaking may have a cooldown period depending on the pool configuration.
+            </p>
+          </div>
+
           <Button
             className="w-full"
-            onClick={handleDeposit}
+            onClick={handleWithdraw}
             disabled={!selectedPool || !isAmountValid || parsedAmount > maxAmount || isSubmitting}
           >
-            {isSubmitting ? 'Creating Proposal...' : 'Propose Stake Transaction'}
+            {isSubmitting ? 'Creating Proposal...' : 'Propose Unstake Transaction'}
           </Button>
         </div>
       </DialogContent>

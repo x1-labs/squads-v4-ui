@@ -1,8 +1,8 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { DepositXntDialog } from './DepositXntDialog';
 import { WithdrawXntDialog } from './WithdrawXntDialog';
-import { useStakePools } from '../hooks/useStakePools';
-import { Skeleton } from './ui/skeleton';
+import { useStakePools } from '@/hooks/useStakePools';
+import { Skeleton } from '../ui/skeleton';
 
 export function StakingPanel() {
   const { data: stakePools, isLoading: poolsLoading } = useStakePools();

@@ -4,7 +4,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { useMultisigData } from './useMultisigData';
 import { useMultisigAddress } from './useMultisigAddress';
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
-import { SimpleDecoder } from '@/lib/transaction/simpleDecoder';
+import { getDecoderInstance } from '@/lib/transaction/decoderInstance';
 import { extractTransactionTags } from '@/lib/instructions/extractor';
 import { TransactionTag } from '@/lib/instructions/types';
 
@@ -114,7 +114,7 @@ async function fetchTransactionDataFast(
   let tags: TransactionTag[] = [];
   if (transactionType === 'vault' || transactionType === 'config') {
     try {
-      const decoder = new SimpleDecoder(connection);
+      const decoder = getDecoderInstance(connection);
       const decoded = await decoder.decodeVaultTransaction(multisigPda, index, programId);
       if (!decoded.error && decoded.instructions.length > 0) {
         const extractedTags = extractTransactionTags(decoded);
@@ -179,7 +179,7 @@ async function fetchTransactionData(
   // Extract tags by decoding the transaction
   let tags: TransactionTag[] = [];
   try {
-    const decoder = new SimpleDecoder(connection);
+    const decoder = getDecoderInstance(connection);
     const decoded = await decoder.decodeVaultTransaction(multisigPda, index, programId);
 
     if (!decoded.error && decoded.instructions.length > 0) {

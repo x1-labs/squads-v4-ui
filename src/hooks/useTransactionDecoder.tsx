@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Connection, PublicKey } from '@solana/web3.js';
-import { SimpleDecoder, DecodedTransaction } from '@/lib/transaction/simpleDecoder';
+import { getDecoderInstance } from '@/lib/transaction/decoderInstance';
+import { DecodedTransaction } from '@/lib/transaction/simpleDecoder';
 import * as multisig from '@sqds/multisig';
 
 export interface UseTransactionDecoderOptions {
@@ -36,7 +37,7 @@ export const useTransactionDecoder = ({
     setError(null);
 
     try {
-      const decoder = new SimpleDecoder(connection);
+      const decoder = getDecoderInstance(connection);
 
       const multisigPubkey =
         typeof multisigPda === 'string' ? new PublicKey(multisigPda) : multisigPda;
