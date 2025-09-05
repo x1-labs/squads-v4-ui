@@ -57,20 +57,28 @@ export async function getTokenMetadata(
         // but we'll try anyway in case it's pointing to a local server
         const response = await fetch(metadataAccount.uri);
         if (response.ok) {
-          const jsonMetadata = await response.json();
-          if (jsonMetadata.image) {
-            metadata.logoURI = jsonMetadata.image;
-          }
-          // Update name and symbol if they exist in JSON
-          if (jsonMetadata.name) {
-            metadata.name = jsonMetadata.name;
-          }
-          if (jsonMetadata.symbol) {
-            metadata.symbol = jsonMetadata.symbol;
+          const contentType = response.headers.get('content-type');
+
+          // Check if the response is JSON
+          if (contentType && contentType.includes('application/json')) {
+            const jsonMetadata = await response.json();
+            if (jsonMetadata.image) {
+              metadata.logoURI = jsonMetadata.image;
+            }
+            // Update name and symbol if they exist in JSON
+            if (jsonMetadata.name) {
+              metadata.name = jsonMetadata.name;
+            }
+            if (jsonMetadata.symbol) {
+              metadata.symbol = jsonMetadata.symbol;
+            }
+          } else if (contentType && contentType.startsWith('image/')) {
+            // If the URI points directly to an image, use it as the logo
+            metadata.logoURI = metadataAccount.uri;
           }
         }
       } catch (error) {
-        console.debug('Could not fetch off-chain metadata:', error);
+        // Silently ignore - this is common when URIs point to images or are unreachable
       }
     }
 

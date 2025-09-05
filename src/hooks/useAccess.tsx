@@ -16,7 +16,7 @@ export const useAccess = () => {
     return !!memberExists;
   } catch (error) {
     // If there's an error fetching multisig (e.g., invalid address), return false
-    console.log('Error checking access:', error);
+    // Silently handle the error - this is expected when no multisig is selected
     return false;
   }
 };
