@@ -75,14 +75,6 @@ const ExecuteButton = ({
       return;
     }
 
-    console.log({
-      multisigPda: multisigPda,
-      connection,
-      member: member.toBase58(),
-      transactionIndex: bigIntTransactionIndex,
-      programId: programId ? programId : multisig.PROGRAM_ID.toBase58(),
-    });
-
     const [transactionPda] = multisig.getTransactionPda({
       multisigPda: new PublicKey(multisigPda),
       index: bigIntTransactionIndex,
@@ -136,6 +128,7 @@ const ExecuteButton = ({
         transactionIndex: bigIntTransactionIndex,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
+
       transactions.push(
         new VersionedTransaction(
           new TransactionMessage({
@@ -201,7 +194,6 @@ const ExecuteButton = ({
     const signedTransactions = await wallet.signAllTransactions(transactions);
 
     let signatures = [];
-    let errors = [];
 
     for (let i = 0; i < signedTransactions.length; i++) {
       const signedTx = signedTransactions[i];
@@ -225,6 +217,17 @@ const ExecuteButton = ({
           );
 
           if (errorLog) {
+            // Check for stake pool specific error
+            if (
+              errorLog.includes(
+                'First update old validator stake account balances and then pool stake balance'
+              )
+            ) {
+              throw new Error(
+                'Stake pool needs to be updated. Please wait a moment and try again.'
+              );
+            }
+
             // Extract error details from Anchor errors
             const anchorErrorMatch = errorLog.match(
               /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.+?)(?:\.|$)/
@@ -287,6 +290,17 @@ const ExecuteButton = ({
           );
 
           if (errorLog) {
+            // Check for stake pool specific error
+            if (
+              errorLog.includes(
+                'First update old validator stake account balances and then pool stake balance'
+              )
+            ) {
+              throw new Error(
+                'Stake pool needs to be updated. Please wait a moment and try again.'
+              );
+            }
+
             const anchorErrorMatch = errorLog.match(
               /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.+?)(?:\.|$)/
             );
@@ -411,13 +425,12 @@ const ExecuteButton = ({
           disabled={!isTransactionReady}
           onClick={async () => {
             try {
-              await toast.promise(executeTransaction, {
+              toast.promise(executeTransaction, {
                 id: 'transaction',
                 loading: 'Preparing transaction...',
                 success: (result) => {
                   // Handle the success result properly
                   if (result?.message) {
-                    console.log('Execution successful:', result.signatures);
                     return result.message;
                   }
                   return 'Transaction executed successfully!';

@@ -7,11 +7,14 @@ import { registry } from './lib/registry';
 import { XntTransferSummary } from './components/instructions/summaries/XntTransferSummary';
 import { SplTransferSummary } from './components/instructions/summaries/SplTransferSummary';
 import { MemoSummary } from './components/instructions/summaries/MemoSummary';
+import { StakePoolDepositSummary } from './components/instructions/summaries/StakePoolDepositSummary';
+import { StakePoolWithdrawSummary } from './components/instructions/summaries/StakePoolWithdrawSummary';
 
 // Import IDLs
 import squadsV4Idl from './lib/idls/squads-v4.json';
 import delegationProgramIdl from './lib/idls/delegation_program.json';
 import tokenProgramIdl from './lib/idls/token_program.json';
+import stakePoolIdl from './lib/idls/stake_pool.json';
 
 // ============================================
 // System Program
@@ -132,6 +135,25 @@ registry.register({
     Memo: {
       summary: MemoSummary,
       tags: { label: 'Memo', color: 'blue', variant: 'subtle' },
+    },
+  },
+});
+
+// ============================================
+// X1 SPL Stake Pool Program (Fork)
+// ============================================
+registry.register({
+  programId: 'XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux',
+  name: 'X1 Stake Pool',
+  idl: stakePoolIdl,
+  instructions: {
+    depositSol: {
+      summary: StakePoolDepositSummary,
+      tags: { label: 'Stake Deposit', color: 'green', variant: 'subtle' },
+    },
+    withdrawSol: {
+      summary: StakePoolWithdrawSummary,
+      tags: { label: 'Stake Withdraw', color: 'orange', variant: 'subtle' },
     },
   },
 });

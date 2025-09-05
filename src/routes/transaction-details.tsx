@@ -14,7 +14,7 @@ import ApproveButton from '@/components/ApproveButton';
 import RejectButton from '@/components/RejectButton';
 import ExecuteButton from '@/components/ExecuteButton';
 import CancelButton from '@/components/CancelButton';
-import { SimpleDecoder } from '@/lib/transaction/simpleDecoder';
+import { getDecoderInstance } from '@/lib/transaction/decoderInstance';
 import { extractTransactionTags } from '@/lib/instructions/extractor';
 import { TransactionTag } from '@/lib/instructions/types';
 import { TransactionTagList } from '@/components/TransactionTag';
@@ -60,7 +60,7 @@ export default function TransactionDetailsPage() {
   // Helper function to extract tags
   const extractTagsForTransaction = async (multisigPubkey: PublicKey, index: bigint) => {
     try {
-      const decoder = new SimpleDecoder(connection);
+      const decoder = getDecoderInstance(connection);
       const decoded = await decoder.decodeVaultTransaction(multisigPubkey, index, programId);
       if (!decoded.error && decoded.instructions.length > 0) {
         const extractedTags = extractTransactionTags(decoded);

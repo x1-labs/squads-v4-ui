@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Connection, PublicKey } from '@solana/web3.js';
+import { getDecoderInstance } from '../lib/transaction/decoderInstance';
 import {
-  SimpleDecoder,
   DecodedTransaction,
   DecodedInstruction,
 } from '../lib/transaction/simpleDecoder';
@@ -34,7 +34,7 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
       setError(null);
 
       try {
-        const decoder = new SimpleDecoder(connection);
+        const decoder = getDecoderInstance(connection);
         const decoded = await decoder.decodeVaultTransaction(
           multisigPda,
           transactionIndex,

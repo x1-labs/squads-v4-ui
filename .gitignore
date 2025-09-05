@@ -3,3 +3,4 @@ dist/
 .idea/
 squads-public-verify/
 /.env
+/.vercel/
