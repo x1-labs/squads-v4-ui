@@ -22,10 +22,7 @@ export function useStakePools() {
           programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
         })[0];
 
-        // Fetch stake pools with user balances
-        const pools = await getStakePoolsForDisplay(connection, vaultAddress);
-
-        return pools;
+        return await getStakePoolsForDisplay(connection, vaultAddress);
       } catch (error) {
         console.error('Error fetching stake pools:', error);
         return [];
@@ -34,14 +31,4 @@ export function useStakePools() {
     enabled: !!multisigAddress && vaultIndex !== undefined,
     refetchInterval: 30000, // Refetch every 30 seconds
   });
-}
-
-export function useTotalStaked() {
-  const { data: stakePools } = useStakePools();
-
-  if (!stakePools) return 0;
-
-  return stakePools.reduce((total, pool) => {
-    return total + (pool.userBalance || 0);
-  }, 0);
 }

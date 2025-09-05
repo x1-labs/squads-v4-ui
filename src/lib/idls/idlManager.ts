@@ -25,6 +25,35 @@ class IdlManager {
   }
 
   /**
+   * Add an IDL to the registry
+   * @deprecated Use registry.register() from src/registry.ts instead
+   */
+  addIdl(programId: string, name: string, idl: any): void {
+    // Register in the central registry
+    registry.register({
+      programId,
+      name,
+      idl,
+    });
+
+    // Also keep in local map for backward compatibility
+    const formatInfo = detectIdlFormat(idl);
+    const entry: IdlEntry = {
+      programId,
+      name,
+      idl,
+      format: formatInfo.format,
+    };
+
+    if (formatInfo.format === IdlFormat.KINOBI) {
+      entry.parser = new KinobiIdlParser(idl);
+    }
+
+    this.idls.set(programId, entry);
+    console.log(`Added IDL for ${name} (${programId}) - Format: ${formatInfo.format}`);
+  }
+
+  /**
    * Get an IDL by program ID
    * First tries the central registry, then falls back to local map
    */

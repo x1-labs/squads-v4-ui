@@ -2,8 +2,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { BorshInstructionCoder } from '@coral-xyz/anchor';
 import { idlManager } from '../idls/idlManager';
-import { registry } from '../../registry';
-import { IdlFormat, isAnchorCompatible, detectIdlFormat } from '../idls/idlFormats';
+import { IdlFormat, isAnchorCompatible } from '../idls/idlFormats';
 import { InstructionData } from './instructionTypes';
 import { formatInstructionTitle } from '../utils/instructionFormatters';
 
@@ -110,79 +109,62 @@ export class SimpleDecoder {
   }
 
   private initializeCoders() {
-    // First, try to get IDLs from the registry (new system)
-    const registeredPrograms = registry.getAllPrograms();
-
-    for (const program of registeredPrograms) {
-      for (const programId of program.programIds) {
-        if (program.idl) {
-          try {
-            const formatInfo = detectIdlFormat(program.idl);
-
-            // Only create BorshInstructionCoder for Anchor-compatible IDLs
-            if (isAnchorCompatible(formatInfo.format) && program.idl.instructions) {
-              try {
-                const coder = new BorshInstructionCoder(program.idl);
-                this.instructionCoders.set(programId, coder);
-                console.log(`Created coder for ${programId} from registry`);
-              } catch (e: any) {
-                // BorshInstructionCoder failed for this IDL
-                // Fallback: try with resolved types if direct approach fails
-                try {
-                  const resolvedIdl = this.resolveCustomTypes(program.idl);
-                  const coder = new BorshInstructionCoder(resolvedIdl);
-                  this.instructionCoders.set(programId, coder);
-                  console.log(`Created coder for ${programId} from registry (with resolved types)`);
-                } catch (e2) {
-                  console.warn(`Failed to create coder for ${programId} from registry:`, e2);
-                }
-              }
-            }
-          } catch (error) {
-            console.warn(`Failed to process IDL for ${programId} from registry:`, error);
-          }
-        }
-      }
-    }
-
-    // Also load from idlManager (deprecated system) for backwards compatibility
+    // Load all IDLs and create instruction coders
     const idls = idlManager.getAllIdls();
+    console.log(
+      'Initializing decoders for programs:',
+      idls.map((e) => ({
+        name: e.name,
+        id: e.programId,
+        format: e.format,
+      }))
+    );
 
     for (const entry of idls) {
       try {
-        // Skip if already have a coder from registry
-        if (this.instructionCoders.has(entry.programId)) {
-          continue;
-        }
-
         // Only create BorshInstructionCoder for Anchor-compatible IDLs
         if (isAnchorCompatible(entry.format) && entry.idl && entry.idl.instructions) {
           try {
             const coder = new BorshInstructionCoder(entry.idl);
             this.instructionCoders.set(entry.programId, coder);
+            console.log(
+              `✅ Created BorshInstructionCoder for ${entry.name} (format: ${entry.format})`
+            );
           } catch (e: any) {
-            // BorshInstructionCoder failed for this IDL
+            console.warn(`❌ BorshInstructionCoder failed for ${entry.name}:`, {
+              error: e.message || e.toString(),
+              format: entry.format,
+              idlName: entry.idl.name,
+              idlVersion: entry.idl.version,
+              hasInstructions: !!entry.idl.instructions,
+              instructionCount: entry.idl.instructions?.length,
+            });
             // Fallback: try with resolved types if direct approach fails
             try {
               const resolvedIdl = this.resolveCustomTypes(entry.idl);
               const coder = new BorshInstructionCoder(resolvedIdl);
               this.instructionCoders.set(entry.programId, coder);
-              // Successfully created coder with resolved types
+              console.log(
+                `✅ Created BorshInstructionCoder for ${entry.name} (with resolved types, format: ${entry.format})`
+              );
             } catch (e2) {
-              // Failed to create coder even with resolved types
+              console.warn(`❌ BorshInstructionCoder still failed for ${entry.name}:`, e2);
             }
           }
         } else if (entry.format === IdlFormat.KINOBI && entry.parser) {
-          // Using Kinobi parser
+          console.log(`✅ Using Kinobi parser for ${entry.name}`);
         } else {
-          // No parser available for this format
+          console.log(`⚠️ No parser available for ${entry.name} (format: ${entry.format})`);
         }
       } catch (error) {
-        // Failed to create parser for this IDL
+        console.warn(`❌ Failed to create parser for ${entry.name}:`, error);
       }
     }
 
-    // Parsers initialized
+    console.log('Parsers initialized:', {
+      borshCoders: Array.from(this.instructionCoders.keys()),
+      kinobiParsers: idls.filter((e) => e.format === IdlFormat.KINOBI).map((e) => e.programId),
+    });
   }
 
   /**
@@ -398,40 +380,8 @@ export class SimpleDecoder {
       return this.parseKnownProgramInstruction(programId, data, accountKeys);
     }
 
-    // Check registry first for IDL (new system)
-    const registryIdl = registry.getIdl(programIdStr);
-    let idlEntry = null;
-
-    if (registryIdl) {
-      // Create an entry-like object for compatibility
-      const formatInfo = detectIdlFormat(registryIdl);
-      idlEntry = {
-        programId: programIdStr,
-        idl: registryIdl,
-        format: formatInfo.format,
-        parser: null, // Registry doesn't use parsers
-        name: registry.getProgramName(programIdStr) || 'Unknown',
-      };
-
-      if (programIdStr === 'XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux') {
-        console.log('IDL found in registry');
-        console.log('IDL format:', idlEntry.format);
-        console.log('Is Anchor compatible:', isAnchorCompatible(idlEntry.format));
-      }
-    } else {
-      // Fallback to idlManager (deprecated system)
-      idlEntry = idlManager.getIdl(programIdStr);
-
-      if (programIdStr === 'XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux') {
-        console.log('IDL entry from idlManager:', !!idlEntry);
-        if (idlEntry) {
-          console.log('IDL format:', idlEntry.format);
-          console.log('Has parser:', !!idlEntry.parser);
-          console.log('Has IDL:', !!idlEntry.idl);
-          console.log('Is Anchor compatible:', isAnchorCompatible(idlEntry.format));
-        }
-      }
-    }
+    // Get the IDL entry to check format
+    const idlEntry = idlManager.getIdl(programIdStr);
 
     // Try Kinobi parser for Kinobi-format IDLs
     if (idlEntry?.format === IdlFormat.KINOBI && idlEntry.parser) {
@@ -466,18 +416,9 @@ export class SimpleDecoder {
     // Try to decode with Anchor IDL (for Anchor-compatible formats)
     if (idlEntry && isAnchorCompatible(idlEntry.format)) {
       const coder = this.instructionCoders.get(programIdStr);
-
       if (coder) {
         try {
-          if (programIdStr === 'XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux') {
-            console.log('Using BorshInstructionCoder to decode');
-          }
           const decoded = coder.decode(data);
-
-          if (programIdStr === 'XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux') {
-            console.log('Decoded instruction:', decoded);
-          }
-
           if (decoded) {
             // Get the IDL to map account names
             let accountNames: string[] = [];
@@ -508,13 +449,6 @@ export class SimpleDecoder {
             };
           }
         } catch (error) {
-          if (programIdStr === 'XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux') {
-            console.error('=== STAKE POOL DECODE ERROR ===');
-            console.error('Error message:', error);
-            if (error instanceof Error) {
-              console.error('Error stack:', error.stack);
-            }
-          }
           console.warn(`BorshInstructionCoder failed for ${programIdStr}:`, error);
         }
       }
@@ -1121,19 +1055,6 @@ export class SimpleDecoder {
    * Get program name from ID
    */
   private getProgramName(programId: string): string {
-    // Check registry first (new system)
-    const registryName = registry.getProgramName(programId);
-    if (registryName) {
-      return registryName;
-    }
-
-    // Check IDL manager for name (deprecated system)
-    const idlEntry = idlManager.getIdl(programId);
-    if (idlEntry) {
-      return idlEntry.name;
-    }
-
-    // Fallback to known programs
     const knownPrograms: Record<string, string> = {
       '11111111111111111111111111111111': 'System Program',
       TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA: 'Token Program',
@@ -1161,6 +1082,12 @@ export class SimpleDecoder {
       '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8': 'Raydium AMM',
       [multisig.PROGRAM_ID.toBase58()]: 'Squads Multisig V4',
     };
+
+    // Check IDL manager for name
+    const idlEntry = idlManager.getIdl(programId);
+    if (idlEntry) {
+      return idlEntry.name;
+    }
 
     return knownPrograms[programId] || 'Unknown Program';
   }
@@ -1412,243 +1339,5 @@ export class SimpleDecoder {
       default:
         return `Account ${index}`;
     }
-  }
-
-  /**
-   * Parse X1 Stake Pool instructions (fork of SPL Stake Pool with simple u8 discriminators)
-   */
-  private parseStakePoolInstruction(
-    programId: PublicKey,
-    data: Buffer,
-    accountKeys: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>
-  ): DecodedInstruction {
-    const programIdStr = programId.toBase58();
-    const instructionType = data[0];
-    let instructionName = 'Unknown Stake Pool Instruction';
-    let args: any = {};
-
-    switch (instructionType) {
-      case 14: // DepositSol
-        instructionName = 'DepositSol';
-        if (data.length >= 9) {
-          args = {
-            lamports: data.readBigUInt64LE(1).toString(),
-          };
-        }
-        break;
-      case 16: // WithdrawSol
-        instructionName = 'WithdrawSol';
-        if (data.length >= 9) {
-          args = {
-            poolTokens: data.readBigUInt64LE(1).toString(),
-          };
-        }
-        break;
-      case 9: // DepositStake
-        instructionName = 'DepositStake';
-        break;
-      case 10: // WithdrawStake
-        instructionName = 'WithdrawStake';
-        if (data.length >= 9) {
-          args = {
-            poolTokens: data.readBigUInt64LE(1).toString(),
-          };
-        }
-        break;
-      case 0: // Initialize
-        instructionName = 'Initialize';
-        break;
-      case 1: // AddValidatorToPool
-        instructionName = 'AddValidatorToPool';
-        break;
-      case 2: // RemoveValidatorFromPool
-        instructionName = 'RemoveValidatorFromPool';
-        break;
-      case 7: // UpdateStakePoolBalance
-        instructionName = 'UpdateStakePoolBalance';
-        break;
-      case 11: // SetManager
-        instructionName = 'SetManager';
-        break;
-      case 12: // SetFee
-        instructionName = 'SetFee';
-        break;
-      default:
-        instructionName = `StakePoolInstruction${instructionType}`;
-    }
-
-    // Get account names based on instruction type
-    const getAccountName = (index: number): string => {
-      if (instructionType === 14) {
-        // DepositSol
-        const names = [
-          'Stake Pool',
-          'Withdraw Authority',
-          'Reserve Stake',
-          'Funding Account',
-          'Destination Pool Account',
-          'Manager Fee Account',
-          'Referrer Pool Account',
-          'Pool Mint',
-          'System Program',
-          'Token Program',
-          'SOL Deposit Authority',
-        ];
-        return names[index] || `Account ${index}`;
-      } else if (instructionType === 16) {
-        // WithdrawSol
-        const names = [
-          'Stake Pool',
-          'Withdraw Authority',
-          'User Transfer Authority',
-          'Pool Tokens From',
-          'Reserve Stake Account',
-          'Lamports To',
-          'Manager Fee Account',
-          'Pool Mint',
-          'Clock',
-          'Stake History',
-          'Stake Program',
-          'Token Program',
-          'SOL Withdraw Authority',
-        ];
-        return names[index] || `Account ${index}`;
-      }
-      return `Account ${index}`;
-    };
-
-    return {
-      programId: programIdStr,
-      programName: 'X1 Stake Pool',
-      instructionName,
-      instructionTitle: formatInstructionTitle(instructionName),
-      accounts: accountKeys.map((key, i) => ({
-        name: getAccountName(i),
-        pubkey: key.pubkey.toBase58(),
-        isSigner: key.isSigner,
-        isWritable: key.isWritable,
-      })),
-      args,
-      rawData: data.toString('hex').slice(0, 100),
-    };
-  }
-
-  /**
-   * Parse SPL Stake Pool instructions
-   */
-  private parseSplStakePoolInstruction(
-    programId: PublicKey,
-    data: Buffer,
-    accountKeys: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>
-  ): DecodedInstruction {
-    const programIdStr = programId.toBase58();
-    const instructionType = data[0];
-    let instructionName = 'Unknown Stake Pool Instruction';
-    let args: any = {};
-
-    switch (instructionType) {
-      case 14: // DepositSol
-        instructionName = 'Deposit SOL';
-        if (data.length >= 9) {
-          args = {
-            lamports: data.readBigUInt64LE(1).toString(),
-          };
-        }
-        break;
-      case 16: // WithdrawSol
-        instructionName = 'Withdraw SOL';
-        if (data.length >= 9) {
-          args = {
-            poolTokens: data.readBigUInt64LE(1).toString(),
-          };
-        }
-        break;
-      case 9: // DepositStake
-        instructionName = 'Deposit Stake';
-        break;
-      case 10: // WithdrawStake
-        instructionName = 'Withdraw Stake';
-        if (data.length >= 9) {
-          args = {
-            poolTokens: data.readBigUInt64LE(1).toString(),
-          };
-        }
-        break;
-      case 0: // Initialize
-        instructionName = 'Initialize';
-        break;
-      case 1: // AddValidatorToPool
-        instructionName = 'Add Validator to Pool';
-        break;
-      case 2: // RemoveValidatorFromPool
-        instructionName = 'Remove Validator from Pool';
-        break;
-      case 7: // UpdateStakePoolBalance
-        instructionName = 'Update Stake Pool Balance';
-        break;
-      case 11: // SetManager
-        instructionName = 'Set Manager';
-        break;
-      case 12: // SetFee
-        instructionName = 'Set Fee';
-        break;
-      default:
-        instructionName = `Stake Pool Instruction ${instructionType}`;
-    }
-
-    // Get account names based on instruction type
-    const getAccountName = (index: number): string => {
-      if (instructionType === 14) {
-        // DepositSol
-        const names = [
-          'Stake Pool',
-          'Withdraw Authority',
-          'Reserve Stake',
-          'Funding Account',
-          'Destination Pool Account',
-          'Manager Fee Account',
-          'Referrer Pool Account',
-          'Pool Mint',
-          'System Program',
-          'Token Program',
-          'SOL Deposit Authority',
-        ];
-        return names[index] || `Account ${index}`;
-      } else if (instructionType === 16) {
-        // WithdrawSol
-        const names = [
-          'Stake Pool',
-          'Withdraw Authority',
-          'User Transfer Authority',
-          'Pool Tokens From',
-          'Reserve Stake Account',
-          'Lamports To',
-          'Manager Fee Account',
-          'Pool Mint',
-          'Clock',
-          'Stake History',
-          'Stake Program',
-          'Token Program',
-          'SOL Withdraw Authority',
-        ];
-        return names[index] || `Account ${index}`;
-      }
-      return `Account ${index}`;
-    };
-
-    return {
-      programId: programIdStr,
-      programName: 'SPL Stake Pool',
-      instructionName,
-      instructionTitle: instructionName,
-      accounts: accountKeys.map((key, i) => ({
-        name: getAccountName(i),
-        pubkey: key.pubkey.toBase58(),
-        isSigner: key.isSigner,
-        isWritable: key.isWritable,
-      })),
-      args,
-      rawData: data.toString('hex').slice(0, 100),
-    };
   }
 }

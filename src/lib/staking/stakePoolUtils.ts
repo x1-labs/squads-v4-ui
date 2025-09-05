@@ -2,10 +2,6 @@ import { PublicKey, Connection } from '@solana/web3.js';
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { getTokenMetadata } from '../token/tokenMetadata';
 
-// Using X1 Labs custom stake pool program ID
-// Standard SPL Stake Pool: SPoo1Nqm3yryUs1pqhF5as7Gju7PJhG6c41dMLqRkS
-export const STAKE_POOL_PROGRAM_ID = new PublicKey('XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux');
-
 export interface StakePoolInfo {
   address: string;
   name: string;
@@ -98,7 +94,7 @@ export async function getStakePoolsForDisplay(
   for (const pool of pools) {
     try {
       const poolMint = new PublicKey(pool.poolMint);
-      
+
       // Fetch token metadata to get the symbol
       try {
         const metadata = await getTokenMetadata(poolMint, connection);
@@ -108,7 +104,7 @@ export async function getStakePoolsForDisplay(
       } catch (error) {
         console.debug('Failed to fetch metadata for pool token:', pool.poolMint);
       }
-      
+
       // If vault address provided, fetch user balances
       if (vaultAddress) {
         try {
