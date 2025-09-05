@@ -69,10 +69,44 @@ export function shortenAddress(address: string, chars = 4): string {
 }
 
 /**
+ * Format large numbers with K, M, B suffixes
+ */
+export function formatLargeNumber(value: number, decimals: number = 2): string {
+  if (value < 1000) {
+    return value.toFixed(decimals);
+  } else if (value < 1000000) {
+    return `${(value / 1000).toFixed(decimals)}K`;
+  } else if (value < 1000000000) {
+    return `${(value / 1000000).toFixed(decimals)}M`;
+  } else {
+    return `${(value / 1000000000).toFixed(decimals)}B`;
+  }
+}
+
+/**
  * Format instruction argument values for display
  */
 export function formatInstructionValue(value: any, key?: string): string {
   if (value === null || value === undefined) return 'null';
+  
+  // Handle BN (BigNumber) objects from Anchor
+  if (typeof value === 'object' && value.constructor && value.constructor.name === 'BN') {
+    const decimalStr = value.toString(10);
+    // Add thousand separators
+    const num = BigInt(decimalStr);
+    return num.toLocaleString();
+  }
+  
+  // Handle hex strings that might represent numbers
+  if (typeof value === 'object' && value.hex) {
+    try {
+      const num = BigInt('0x' + value.hex);
+      return num.toLocaleString();
+    } catch {
+      return value.hex;
+    }
+  }
+  
   if (typeof value === 'object') {
     if (Array.isArray(value)) {
       // Special handling for actions array in config transactions
@@ -85,7 +119,25 @@ export function formatInstructionValue(value: any, key?: string): string {
       }
       return `[${value.length} items]\n${JSON.stringify(value, null, 2)}`;
     }
+    
+    // Check if the object has a toString method that isn't the default Object.toString
+    if (value.toString && value.toString !== Object.prototype.toString) {
+      const str = value.toString();
+      // If it looks like a number string, format it
+      if (/^\d+$/.test(str)) {
+        const num = BigInt(str);
+        return num.toLocaleString();
+      }
+      return str;
+    }
+    
     return JSON.stringify(value, null, 2);
   }
+  
+  // Handle regular numbers
+  if (typeof value === 'number') {
+    return value.toLocaleString();
+  }
+  
   return String(value);
 }

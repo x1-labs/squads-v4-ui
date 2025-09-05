@@ -77,6 +77,15 @@ module.exports = {
             return acc;
           }, {})
       ),
+      // Pass through all stake pool environment variables (APP_STAKE_ and REACT_APP_STAKE_POOL_)
+      'process.env.APP_STAKE_POOLS': JSON.stringify(
+        Object.keys(process.env)
+          .filter(key => key.startsWith('APP_STAKE_POOL_'))
+          .reduce((acc, key) => {
+            acc[key] = process.env[key];
+            return acc;
+          }, {})
+      ),
     }),
   ],
 };

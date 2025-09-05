@@ -128,6 +128,32 @@ const ExecuteButton = ({
     let blockhash = (await connection.getLatestBlockhash()).blockhash;
 
     if (txType == 'vault') {
+      console.log('=== VAULT TRANSACTION EXECUTION DEBUG ===');
+      console.log('Transaction type:', txType);
+      console.log('Transaction index:', bigIntTransactionIndex.toString());
+      console.log('Multisig PDA:', multisigPda);
+      console.log('Member:', member.toBase58());
+      
+      // Get the vault transaction details to check ephemeral signers
+      const [vaultTransactionPda] = multisig.getTransactionPda({
+        multisigPda: new PublicKey(multisigPda),
+        index: bigIntTransactionIndex,
+        programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+      });
+      
+      try {
+        const vaultTxAccount = await multisig.accounts.VaultTransaction.fromAccountAddress(
+          // @ts-ignore
+          connection,
+          vaultTransactionPda
+        );
+        console.log('Vault transaction account:', vaultTxAccount);
+        console.log('Ephemeral signers count:', vaultTxAccount.ephemeralSignerBumps?.length || 0);
+        console.log('Ephemeral signer bumps:', vaultTxAccount.ephemeralSignerBumps);
+      } catch (e) {
+        console.error('Failed to fetch vault transaction account:', e);
+      }
+      
       const resp = await multisig.instructions.vaultTransactionExecute({
         multisigPda: new PublicKey(multisigPda),
         // @ts-ignore
@@ -136,6 +162,15 @@ const ExecuteButton = ({
         transactionIndex: bigIntTransactionIndex,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
+      
+      console.log('Execute instruction:', resp.instruction);
+      console.log('Execute instruction keys:', resp.instruction.keys.map(k => ({
+        pubkey: k.pubkey.toBase58(),
+        isSigner: k.isSigner,
+        isWritable: k.isWritable
+      })));
+      console.log('Lookup table accounts:', resp.lookupTableAccounts?.length || 0);
+      
       transactions.push(
         new VersionedTransaction(
           new TransactionMessage({
@@ -198,7 +233,16 @@ const ExecuteButton = ({
       );
     }
 
+    console.log('Transactions to sign:', transactions.length);
     const signedTransactions = await wallet.signAllTransactions(transactions);
+    console.log('Signed transactions:', signedTransactions.length);
+    
+    signedTransactions.forEach((tx, i) => {
+      console.log(`Signed transaction ${i}:`);
+      console.log('  Signatures:', tx.signatures.map((sig, idx) => 
+        `[${idx}]: ${sig ? Buffer.from(sig).toString('hex').substring(0, 20) + '...' : 'null'}`))
+      console.log('  Message keys:', tx.message.getAccountKeys().staticAccountKeys.map(k => k.toBase58()));
+    });
 
     let signatures = [];
     let errors = [];
@@ -210,6 +254,11 @@ const ExecuteButton = ({
         const simulation = await connection.simulateTransaction(signedTx, {
           commitment: 'processed',
         });
+        
+        console.log(`Simulation ${i} result:`, simulation.value.err || 'SUCCESS');
+        if (simulation.value.logs) {
+          console.log(`Simulation ${i} logs:`, simulation.value.logs);
+        }
 
         if (simulation.value.err) {
           console.error('Simulation error:', simulation.value.err);

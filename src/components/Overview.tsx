@@ -1,5 +1,6 @@
 import { TokenList } from '@/components/TokenList';
 import { VaultDisplayer } from '@/components/VaultDisplayer';
+import { StakingPanel } from '@/components/StakingPanel';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useMultisig } from '@/hooks/useServices';
 import { toast } from 'sonner';
@@ -91,10 +92,17 @@ export default function Overview() {
 
         {/* Content Sections */}
         {multisigAddress && (
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <VaultDisplayer />
-            <TokenList multisigPda={multisigAddress} />
-          </div>
+          <>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <VaultDisplayer />
+              <TokenList multisigPda={multisigAddress} />
+            </div>
+            
+            {/* Staking Section */}
+            <div className="mt-6">
+              <StakingPanel />
+            </div>
+          </>
         )}
       </div>
     </main>
