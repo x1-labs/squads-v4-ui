@@ -7,6 +7,8 @@ import { registry } from './lib/registry';
 import { XntTransferSummary } from './components/instructions/summaries/XntTransferSummary';
 import { SplTransferSummary } from './components/instructions/summaries/SplTransferSummary';
 import { MemoSummary } from './components/instructions/summaries/MemoSummary';
+import { StakePoolDepositSummary } from './components/instructions/summaries/StakePoolDepositSummary';
+import { StakePoolWithdrawSummary } from './components/instructions/summaries/StakePoolWithdrawSummary';
 
 // Import IDLs
 import squadsV4Idl from './lib/idls/squads-v4.json';
@@ -145,10 +147,12 @@ registry.register({
   name: 'X1 Stake Pool',
   idl: stakePoolIdl,
   instructions: {
-    Depositsol: {
+    depositSol: {
+      summary: StakePoolDepositSummary,
       tags: { label: 'Stake Deposit', color: 'green', variant: 'subtle' },
     },
-    Withdrawsol: {
+    withdrawSol: {
+      summary: StakePoolWithdrawSummary,
       tags: { label: 'Stake Withdraw', color: 'orange', variant: 'subtle' },
     },
   },

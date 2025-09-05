@@ -75,7 +75,6 @@ const ExecuteButton = ({
       return;
     }
 
-
     const [transactionPda] = multisig.getTransactionPda({
       multisigPda: new PublicKey(multisigPda),
       index: bigIntTransactionIndex,
@@ -204,7 +203,6 @@ const ExecuteButton = ({
           commitment: 'processed',
         });
 
-
         if (simulation.value.err) {
           console.error('Simulation error:', simulation.value.err);
 
@@ -219,6 +217,17 @@ const ExecuteButton = ({
           );
 
           if (errorLog) {
+            // Check for stake pool specific error
+            if (
+              errorLog.includes(
+                'First update old validator stake account balances and then pool stake balance'
+              )
+            ) {
+              throw new Error(
+                'Stake pool needs to be updated. Please wait a moment and try again.'
+              );
+            }
+
             // Extract error details from Anchor errors
             const anchorErrorMatch = errorLog.match(
               /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.+?)(?:\.|$)/
@@ -281,6 +290,17 @@ const ExecuteButton = ({
           );
 
           if (errorLog) {
+            // Check for stake pool specific error
+            if (
+              errorLog.includes(
+                'First update old validator stake account balances and then pool stake balance'
+              )
+            ) {
+              throw new Error(
+                'Stake pool needs to be updated. Please wait a moment and try again.'
+              );
+            }
+
             const anchorErrorMatch = errorLog.match(
               /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.+?)(?:\.|$)/
             );
