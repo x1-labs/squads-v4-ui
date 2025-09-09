@@ -15,7 +15,6 @@ import squadsV4Idl from './lib/idls/squads-v4.json';
 import delegationProgramIdl from './lib/idls/delegation_program.json';
 import tokenProgramIdl from './lib/idls/token_program.json';
 import stakePoolIdl from './lib/idls/stake_pool.json';
-import stakeProgramIdl from './lib/idls/stake-program.json';
 
 // ============================================
 // System Program
@@ -157,12 +156,6 @@ registry.register({
       tags: { label: 'Stake Withdraw', color: 'orange', variant: 'subtle' },
     },
   },
-});
-
-registry.register({
-  programId: 'Stake11111111111111111111111111111111111111',
-  name: 'Stake Program',
-  idl: stakeProgramIdl,
 });
 
 // ============================================
