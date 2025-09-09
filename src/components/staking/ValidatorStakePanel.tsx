@@ -68,7 +68,12 @@ export function ValidatorStakePanel() {
               Stake XNT directly to validators
               {totalStaked > 0 && (
                 <span className="block font-medium sm:ml-2 sm:inline">
-                  Total: {totalStaked.toFixed(2)} XNT
+                  Total:{' '}
+                  {totalStaked.toLocaleString(undefined, {
+                    maximumFractionDigits: 2,
+                    minimumFractionDigits: 2,
+                  })}{' '}
+                  XNT
                 </span>
               )}
             </CardDescription>
