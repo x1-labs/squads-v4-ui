@@ -57,7 +57,6 @@ registry.register({
   instructions: {
     Initialize: {
       summary: InitializeStakeSummary,
-      tags: { label: 'Initialize Stake', color: 'cyan', variant: 'subtle' },
     },
     'Delegate Stake': {
       summary: DelegateStakeSummary,

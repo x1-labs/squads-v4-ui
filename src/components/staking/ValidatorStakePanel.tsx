@@ -2,7 +2,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { DelegateStakeDialog } from './DelegateStakeDialog';
 import { UndelegateStakeDialog } from './UndelegateStakeDialog';
 import { WithdrawStakeDialog } from './WithdrawStakeDialog';
-import { CloseStakeDialog } from './CloseStakeDialog';
 import { RedelegateStakeDialog } from './RedelegateStakeDialog';
 import { useStakeAccounts } from '@/hooks/useStakeAccounts';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
@@ -81,7 +80,6 @@ export function ValidatorStakePanel() {
                 <RedelegateStakeDialog stakeAccounts={stakeAccounts} />
                 <UndelegateStakeDialog stakeAccounts={stakeAccounts} />
                 <WithdrawStakeDialog stakeAccounts={stakeAccounts} />
-                <CloseStakeDialog stakeAccounts={stakeAccounts} />
               </>
             )}
           </div>

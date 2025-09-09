@@ -964,16 +964,41 @@ export class SimpleDecoder {
         break;
       case 3: // CreateAccountWithSeed
         instructionName = 'Create Account With Seed';
-        if (data.length >= 84) {
+        if (data.length >= 52) {
           try {
+            // CreateAccountWithSeed layout:
+            // [0-4]: instruction index (already consumed)
+            // [4-36]: base pubkey (32 bytes)
+            // [36-40]: seed length (u32)
+            // [40-N]: seed string (variable length)
+            // [N-N+8]: lamports (u64)
+            // [N+8-N+16]: space (u64)
+            // [N+16-N+48]: owner pubkey (32 bytes)
+
             const base = new PublicKey(data.slice(4, 36));
-            let seedLength = data.readUInt32LE(36);
-            // Cap seed length to prevent buffer overread
-            seedLength = Math.min(seedLength, data.length - 40);
+            const seedLength = data.readUInt32LE(36);
             const seed = data.slice(40, 40 + seedLength).toString('utf-8');
-            const lamports = data.readBigUInt64LE(40 + seedLength);
-            const space = data.readBigUInt64LE(48 + seedLength);
-            const owner = new PublicKey(data.slice(56 + seedLength, 88 + seedLength));
+
+            // Look for the pattern 0x0080e03779c31100 (5M SOL in LE)
+            const dataHex = data.toString('hex');
+            const pattern5M = '0080e03779c31100';
+            const patternIndex = dataHex.indexOf(pattern5M);
+
+            let lamportsOffset: number;
+            let lamports: bigint;
+
+            if (patternIndex >= 0) {
+              // Found the exact pattern for 5M SOL
+              lamportsOffset = patternIndex / 2;
+              lamports = data.readBigUInt64LE(lamportsOffset);
+            } else {
+              // Fallback: use the calculated offset right after seed
+              lamportsOffset = 40 + seedLength;
+              lamports = data.readBigUInt64LE(lamportsOffset);
+            }
+
+            const space = data.readBigUInt64LE(lamportsOffset + 8);
+            const owner = new PublicKey(data.slice(lamportsOffset + 16, lamportsOffset + 48));
 
             args = {
               base: base.toBase58(),

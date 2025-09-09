@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useState } from 'react';
 import * as multisig from '@sqds/multisig';
 import { useWallet } from '@solana/wallet-adapter-react';
@@ -34,6 +35,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { formatXNTCompact } from '@/lib/utils/formatters';
+import { AlertCircle, Wallet, ArrowDown } from 'lucide-react';
 
 type WithdrawStakeDialogProps = {
   stakeAccounts: StakeAccountInfo[];
@@ -60,13 +63,16 @@ export function WithdrawStakeDialog({ stakeAccounts, vaultIndex = 0 }: WithdrawS
 
   // Calculate max withdrawable based on account state
   let maxWithdrawable = 0;
+  let maxWithdrawableWithRent = 0; // Full balance including rent (closes account)
   if (selectedAccountInfo) {
     if (selectedAccountInfo.state === 'inactive') {
-      // Inactive accounts can withdraw everything minus rent
+      // Inactive accounts can withdraw everything
       maxWithdrawable = selectedAccountInfo.balance - selectedAccountInfo.rentExemptReserve;
+      maxWithdrawableWithRent = selectedAccountInfo.balance; // Withdrawing this closes the account
     } else if (selectedAccountInfo.state === 'deactivating') {
       // Deactivating accounts can withdraw the deactivating amount
       maxWithdrawable = selectedAccountInfo.balance - selectedAccountInfo.rentExemptReserve;
+      maxWithdrawableWithRent = selectedAccountInfo.balance; // Withdrawing this closes the account
     } else if (
       selectedAccountInfo.state === 'active' ||
       selectedAccountInfo.state === 'activating'
@@ -76,11 +82,14 @@ export function WithdrawStakeDialog({ stakeAccounts, vaultIndex = 0 }: WithdrawS
       const excessAmount =
         selectedAccountInfo.balance - stakedAmount - selectedAccountInfo.rentExemptReserve;
       maxWithdrawable = Math.max(0, excessAmount);
+      maxWithdrawableWithRent = 0; // Cannot close active accounts
     }
   }
 
   const parsedAmount = parseFloat(amount);
-  const isAmountValid = !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= maxWithdrawable;
+  const isAmountValid =
+    !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= maxWithdrawableWithRent;
+  const isClosingAccount = parsedAmount === maxWithdrawableWithRent && maxWithdrawableWithRent > 0;
 
   const withdrawStake = async () => {
     if (!wallet.publicKey || !multisigAddress || !selectedAccount) {
@@ -197,98 +206,248 @@ export function WithdrawStakeDialog({ stakeAccounts, vaultIndex = 0 }: WithdrawS
           Withdraw
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Withdraw Stake</DialogTitle>
-          <DialogDescription>Withdraw XNT from deactivated stake accounts</DialogDescription>
+          <DialogTitle className="flex items-center gap-2">
+            <Wallet className="h-5 w-5" />
+            Withdraw Stake
+          </DialogTitle>
+          <DialogDescription>
+            Withdraw XNT from stake accounts. Fully deactivated accounts can be closed.
+          </DialogDescription>
         </DialogHeader>
 
-        <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select stake account to withdraw from" />
-          </SelectTrigger>
-          <SelectContent>
-            {withdrawableAccounts.map((account) => (
-              <SelectItem key={account.address} value={account.address}>
-                <div className="flex flex-col">
-                  <span className="font-mono text-xs">
-                    {account.address.slice(0, 8)}...{account.address.slice(-8)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {account.balance.toFixed(2)} XNT ({account.state})
+        <div className="space-y-4">
+          {/* Account Selection */}
+          <div className="space-y-2">
+            <Label htmlFor="stake-account">Select Stake Account</Label>
+            <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+              <SelectTrigger id="stake-account">
+                <SelectValue placeholder="Choose a stake account" />
+              </SelectTrigger>
+              <SelectContent>
+                {withdrawableAccounts.map((account) => {
+                  const canWithdraw =
+                    account.state === 'inactive' ||
+                    account.state === 'deactivating' ||
+                    account.balance - (account.activeStake || 0) - account.rentExemptReserve > 0;
+                  return (
+                    <SelectItem key={account.address} value={account.address}>
+                      <div className="flex w-full items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="font-mono text-xs">
+                            {account.address.slice(0, 8)}...{account.address.slice(-8)}
+                          </span>
+                          <div className="flex items-center gap-2 text-xs">
+                            <span
+                              className={`capitalize ${
+                                account.state === 'active'
+                                  ? 'text-green-600'
+                                  : account.state === 'inactive'
+                                    ? 'text-gray-600'
+                                    : account.state === 'deactivating'
+                                      ? 'text-orange-600'
+                                      : 'text-yellow-600'
+                              }`}
+                            >
+                              {account.state}
+                            </span>
+                            <span className="text-muted-foreground">•</span>
+                            <span className="text-muted-foreground">
+                              {formatXNTCompact(account.balance * LAMPORTS_PER_SOL)}
+                            </span>
+                            {!canWithdraw && (
+                              <span className="text-xs text-red-500">(No withdrawable)</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Account Details */}
+          {selectedAccountInfo && (
+            <div className="space-y-3 rounded-lg border bg-muted/50 p-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">Status</p>
+                  <p
+                    className={`font-medium capitalize ${
+                      selectedAccountInfo.state === 'active'
+                        ? 'text-green-600'
+                        : selectedAccountInfo.state === 'inactive'
+                          ? 'text-gray-600'
+                          : selectedAccountInfo.state === 'deactivating'
+                            ? 'text-orange-600'
+                            : 'text-yellow-600'
+                    }`}
+                  >
+                    {selectedAccountInfo.state}
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">Total Balance</p>
+                  <p
+                    className="font-medium"
+                    title={`${selectedAccountInfo.balance.toFixed(9)} XNT`}
+                  >
+                    {formatXNTCompact(selectedAccountInfo.balance * LAMPORTS_PER_SOL)}
+                  </p>
+                </div>
+                {selectedAccountInfo.activeStake !== undefined &&
+                  selectedAccountInfo.activeStake > 0 && (
+                    <div>
+                      <p className="mb-1 text-xs text-muted-foreground">Active Stake</p>
+                      <p
+                        className="font-medium"
+                        title={`${selectedAccountInfo.activeStake.toFixed(9)} XNT`}
+                      >
+                        {formatXNTCompact(selectedAccountInfo.activeStake * LAMPORTS_PER_SOL)}
+                      </p>
+                    </div>
+                  )}
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">Rent Reserve</p>
+                  <p className="font-medium">
+                    {selectedAccountInfo.rentExemptReserve.toFixed(4)} XNT
+                  </p>
+                </div>
+              </div>
+
+              {/* Withdrawable Amount Display */}
+              <div className="border-t pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Max Withdrawable</span>
+                  <span
+                    className="text-lg font-semibold"
+                    title={`${maxWithdrawable.toFixed(9)} XNT`}
+                  >
+                    {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
                   </span>
                 </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+                {maxWithdrawable === 0 && selectedAccountInfo.state === 'active' && (
+                  <div className="mt-2 flex items-center gap-1 text-xs text-yellow-600">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Deactivate stake first to withdraw</span>
+                  </div>
+                )}
+                {maxWithdrawableWithRent > maxWithdrawable && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    💡 Withdraw {formatXNTCompact(maxWithdrawableWithRent * LAMPORTS_PER_SOL)} to
+                    close account
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
-        {selectedAccountInfo && (
-          <div className="space-y-1 text-xs text-muted-foreground">
-            <div>Status: {selectedAccountInfo.state}</div>
-            <div>Total balance: {selectedAccountInfo.balance.toFixed(4)} XNT</div>
-            {selectedAccountInfo.activeStake !== undefined && (
-              <div>Active stake: {selectedAccountInfo.activeStake.toFixed(4)} XNT</div>
-            )}
-            <div>Rent reserve: {selectedAccountInfo.rentExemptReserve.toFixed(4)} XNT</div>
-            <div className="font-medium">
-              Max withdrawable: {maxWithdrawable.toFixed(4)} XNT
-              {maxWithdrawable === 0 && selectedAccountInfo.state === 'active' && (
-                <span className="text-yellow-600"> (undelegate first to withdraw stake)</span>
+          {/* Amount Input */}
+          <div className="space-y-2">
+            <Label htmlFor="amount">Withdrawal Amount</Label>
+            <div className="space-y-2">
+              <Input
+                id="amount"
+                placeholder={maxWithdrawable > 0 ? `Enter amount` : 'No withdrawable amount'}
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                disabled={!selectedAccount || maxWithdrawable === 0}
+                className="text-lg"
+              />
+              {selectedAccountInfo && maxWithdrawable > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAmount(maxWithdrawable.toString())}
+                    className="w-full"
+                  >
+                    <span className="truncate">
+                      Max • {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
+                    </span>
+                  </Button>
+                  {maxWithdrawableWithRent > maxWithdrawable && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAmount(maxWithdrawableWithRent.toString())}
+                      className="w-full"
+                    >
+                      <span className="truncate">
+                        Close • {formatXNTCompact(maxWithdrawableWithRent * LAMPORTS_PER_SOL)}
+                      </span>
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
+
+            {/* Validation Messages */}
+            {amount && !isAmountValid && (
+              <div className="flex items-center gap-1 text-xs text-red-500">
+                <AlertCircle className="h-3 w-3" />
+                <span>
+                  Max withdrawable: {formatXNTCompact(maxWithdrawableWithRent * LAMPORTS_PER_SOL)}
+                </span>
+              </div>
+            )}
+            {isClosingAccount && (
+              <div className="flex items-center gap-2 rounded-lg bg-yellow-50 p-3 text-xs text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <span>
+                  This withdrawal will close the stake account and return all funds including rent.
+                </span>
+              </div>
+            )}
           </div>
-        )}
 
-        <div className="space-y-2">
-          <Input
-            placeholder={`Amount (max ${maxWithdrawable.toFixed(4)} XNT)`}
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            disabled={!selectedAccount || maxWithdrawable === 0}
-          />
-          {selectedAccountInfo && maxWithdrawable > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAmount(maxWithdrawable.toString())}
-              className="w-full"
-            >
-              Max ({maxWithdrawable.toFixed(4)} XNT)
-            </Button>
-          )}
+          {/* Memo Input */}
+          <div className="space-y-2">
+            <Label htmlFor="memo">Memo (Optional)</Label>
+            <Input
+              id="memo"
+              placeholder="Add a note for this withdrawal"
+              type="text"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              maxLength={200}
+            />
+            {memo.length > 0 && (
+              <p className="text-right text-xs text-muted-foreground">{memo.length}/200</p>
+            )}
+          </div>
+
+          {/* Submit Button */}
+          <Button
+            onClick={() =>
+              toast.promise(withdrawStake, {
+                id: 'transaction',
+                loading: 'Creating withdraw transaction...',
+                success: 'Withdraw proposed.',
+                error: (e) => `Failed to propose: ${e}`,
+              })
+            }
+            disabled={!selectedAccount || !isAmountValid}
+            className="w-full"
+            size="lg"
+          >
+            {isClosingAccount ? (
+              <>
+                <Wallet className="mr-2 h-4 w-4" />
+                Withdraw & Close Account
+              </>
+            ) : (
+              <>
+                <ArrowDown className="mr-2 h-4 w-4" />
+                Withdraw Stake
+              </>
+            )}
+          </Button>
         </div>
-        {amount && !isAmountValid && (
-          <p className="text-xs text-red-500">
-            Invalid amount. Max withdrawable: {maxWithdrawable.toFixed(4)} XNT
-          </p>
-        )}
-
-        <Input
-          placeholder="Memo (optional)"
-          type="text"
-          value={memo}
-          onChange={(e) => setMemo(e.target.value)}
-          maxLength={200}
-        />
-        {memo.length > 0 && (
-          <p className="text-xs text-muted-foreground">{memo.length}/200 characters</p>
-        )}
-
-        <Button
-          onClick={() =>
-            toast.promise(withdrawStake, {
-              id: 'transaction',
-              loading: 'Creating withdraw transaction...',
-              success: 'Withdraw proposed.',
-              error: (e) => `Failed to propose: ${e}`,
-            })
-          }
-          disabled={!selectedAccount || !isAmountValid}
-        >
-          Withdraw Stake
-        </Button>
       </DialogContent>
     </Dialog>
   );

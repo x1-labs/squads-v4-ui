@@ -14,6 +14,7 @@ export const DelegateStakeSummary: React.FC<InstructionSummaryProps> = ({
   connection,
 }) => {
   const [stakeAmount, setStakeAmount] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Get the stake account and vote account from the instruction
   const stakeAccount = instruction.args?.stakeAccount || instruction.accounts?.[0]?.pubkey;
@@ -24,7 +25,10 @@ export const DelegateStakeSummary: React.FC<InstructionSummaryProps> = ({
 
   useEffect(() => {
     const fetchStakeAccountBalance = async () => {
-      if (!stakeAccount) return;
+      if (!stakeAccount) {
+        setIsLoading(false);
+        return;
+      }
 
       try {
         const stakeAccountPubkey = new PublicKey(stakeAccount);
@@ -32,9 +36,24 @@ export const DelegateStakeSummary: React.FC<InstructionSummaryProps> = ({
         if (accountInfo) {
           // Convert lamports to XNT
           setStakeAmount(formatXNT(accountInfo.lamports));
+        } else {
+          // Account doesn't exist yet, might be created in this transaction
+          // Try to get parsed account info to see if it's a new account
+          const parsedInfo = await connection.getParsedAccountInfo(stakeAccountPubkey);
+          if (parsedInfo.value) {
+            setStakeAmount(formatXNT(parsedInfo.value.lamports));
+          } else {
+            // If account doesn't exist, it's likely being created in this transaction
+            // We can't determine the amount without looking at other instructions
+            console.debug('Stake account not found on chain, may be created in this transaction');
+            setStakeAmount(null);
+          }
         }
       } catch (error) {
         console.error('Failed to fetch stake account balance:', error);
+        setStakeAmount(null);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -49,12 +68,18 @@ export const DelegateStakeSummary: React.FC<InstructionSummaryProps> = ({
     <div className="space-y-2 text-sm">
       <div className="font-semibold text-green-600 dark:text-green-400">Delegate Stake</div>
       <div className="space-y-1.5">
-        {stakeAmount && (
-          <div className="grid grid-cols-[80px,1fr] gap-2">
-            <span className="text-muted-foreground">Amount:</span>
+        <div className="grid grid-cols-[80px,1fr] gap-2">
+          <span className="text-muted-foreground">Amount:</span>
+          {isLoading ? (
+            <span className="text-xs text-muted-foreground">Loading...</span>
+          ) : stakeAmount ? (
             <span className="font-medium">{stakeAmount}</span>
-          </div>
-        )}
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              See Create Account instruction above
+            </span>
+          )}
+        </div>
         <AddressWithButtons address={stakeAccount} label="Stake Account" />
         <div className="grid grid-cols-[80px,1fr] gap-2">
           <span className="text-muted-foreground">Validator:</span>

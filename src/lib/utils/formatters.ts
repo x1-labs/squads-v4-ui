@@ -84,11 +84,36 @@ export function formatLargeNumber(value: number, decimals: number = 2): string {
 }
 
 /**
+ * Format XNT with abbreviated units for large amounts
+ */
+export function formatXNTCompact(lamports: bigint | number | string | undefined | null): string {
+  if (lamports === undefined || lamports === null) {
+    return '0 XNT';
+  }
+
+  const lamportsBigInt = typeof lamports === 'bigint' ? lamports : BigInt(lamports.toString());
+  const XNT_DECIMALS = 9;
+
+  // Convert to XNT as a number
+  const xntValue = Number(lamportsBigInt) / 10 ** XNT_DECIMALS;
+
+  if (xntValue < 1000) {
+    return `${xntValue.toFixed(2)} XNT`;
+  } else if (xntValue < 1000000) {
+    return `${(xntValue / 1000).toFixed(2)}K XNT`;
+  } else if (xntValue < 1000000000) {
+    return `${(xntValue / 1000000).toFixed(2)}M XNT`;
+  } else {
+    return `${(xntValue / 1000000000).toFixed(2)}B XNT`;
+  }
+}
+
+/**
  * Format instruction argument values for display
  */
 export function formatInstructionValue(value: any, key?: string): string {
   if (value === null || value === undefined) return 'null';
-  
+
   // Handle BN (BigNumber) objects from Anchor
   if (typeof value === 'object' && value.constructor && value.constructor.name === 'BN') {
     const decimalStr = value.toString(10);
@@ -96,7 +121,7 @@ export function formatInstructionValue(value: any, key?: string): string {
     const num = BigInt(decimalStr);
     return num.toLocaleString();
   }
-  
+
   // Handle hex strings that might represent numbers
   if (typeof value === 'object' && value.hex) {
     try {
@@ -106,7 +131,7 @@ export function formatInstructionValue(value: any, key?: string): string {
       return value.hex;
     }
   }
-  
+
   if (typeof value === 'object') {
     if (Array.isArray(value)) {
       // Special handling for actions array in config transactions
@@ -119,7 +144,7 @@ export function formatInstructionValue(value: any, key?: string): string {
       }
       return `[${value.length} items]\n${JSON.stringify(value, null, 2)}`;
     }
-    
+
     // Check if the object has a toString method that isn't the default Object.toString
     if (value.toString && value.toString !== Object.prototype.toString) {
       const str = value.toString();
@@ -130,14 +155,14 @@ export function formatInstructionValue(value: any, key?: string): string {
       }
       return str;
     }
-    
+
     return JSON.stringify(value, null, 2);
   }
-  
+
   // Handle regular numbers
   if (typeof value === 'number') {
     return value.toLocaleString();
   }
-  
+
   return String(value);
 }
