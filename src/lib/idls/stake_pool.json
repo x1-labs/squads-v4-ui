@@ -794,7 +794,7 @@
     },
     {
       "name": "depositSol",
-      "docs": ["Deposit SOL directly into the pool's reserve account"],
+      "docs": ["Deposit XNT directly into the pool's reserve account"],
       "accounts": [
         {
           "name": "stakePool",
@@ -863,7 +863,7 @@
     },
     {
       "name": "setFundingAuthority",
-      "docs": ["(Manager only) Update SOL deposit, stake deposit, or SOL withdrawal authority"],
+      "docs": ["(Manager only) Update XNT deposit, stake deposit, or XNT withdrawal authority"],
       "accounts": [
         {
           "name": "stakePool",
@@ -896,7 +896,7 @@
     },
     {
       "name": "withdrawSol",
-      "docs": ["Withdraw SOL directly from the pool's reserve account"],
+      "docs": ["Withdraw XNT directly from the pool's reserve account"],
       "accounts": [
         {
           "name": "stakePool",
@@ -1606,7 +1606,7 @@
     },
     {
       "name": "depositSolWithSlippage",
-      "docs": ["Deposit SOL with slippage constraint"],
+      "docs": ["Deposit XNT with slippage constraint"],
       "accounts": [
         {
           "name": "stakePool",
@@ -1679,7 +1679,7 @@
     },
     {
       "name": "withdrawSolWithSlippage",
-      "docs": ["Withdraw SOL with slippage constraint"],
+      "docs": ["Withdraw XNT with slippage constraint"],
       "accounts": [
         {
           "name": "stakePool",
@@ -1944,7 +1944,7 @@
             "type": {
               "option": "pubkey"
             },
-            "docs": ["SOL deposit authority"]
+            "docs": ["XNT deposit authority"]
           },
           {
             "name": "solDepositFee",
@@ -1953,19 +1953,19 @@
                 "name": "Fee"
               }
             },
-            "docs": ["Fee assessed on SOL deposits"]
+            "docs": ["Fee assessed on XNT deposits"]
           },
           {
             "name": "solReferralFee",
             "type": "u8",
-            "docs": ["Fees paid out to referrers on referred SOL deposits"]
+            "docs": ["Fees paid out to referrers on referred XNT deposits"]
           },
           {
             "name": "solWithdrawAuthority",
             "type": {
               "option": "pubkey"
             },
-            "docs": ["SOL withdraw authority"]
+            "docs": ["XNT withdraw authority"]
           },
           {
             "name": "solWithdrawalFee",
@@ -1974,7 +1974,7 @@
                 "name": "Fee"
               }
             },
-            "docs": ["Fee assessed on SOL withdrawals"]
+            "docs": ["Fee assessed on XNT withdrawals"]
           },
           {
             "name": "nextSolWithdrawalFee",
@@ -1983,7 +1983,7 @@
                 "name": "FutureEpoch<Fee>"
               }
             },
-            "docs": ["Future SOL withdrawal fee"]
+            "docs": ["Future XNT withdrawal fee"]
           },
           {
             "name": "lastEpochPoolTokenSupply",
@@ -2488,27 +2488,27 @@
     {
       "code": 31,
       "name": "InvalidSolDepositAuthority",
-      "msg": "Invalid sol deposit authority"
+      "msg": "Invalid XNT deposit authority"
     },
     {
       "code": 32,
       "name": "SolWithdrawalAuthorityRequired",
-      "msg": "No SOL withdraw authority signature when required"
+      "msg": "No XNT withdraw authority signature when required"
     },
     {
       "code": 33,
       "name": "InvalidSolWithdrawAuthority",
-      "msg": "Invalid SOL withdraw authority"
+      "msg": "Invalid XNT withdraw authority"
     },
     {
       "code": 34,
       "name": "SolTransferFailed",
-      "msg": "SOL transfer failed"
+      "msg": "XNT transfer failed"
     },
     {
       "code": 35,
       "name": "InsufficientSolReserves",
-      "msg": "Not enough SOL in the reserve"
+      "msg": "Not enough XNT in the reserve"
     },
     {
       "code": 36,

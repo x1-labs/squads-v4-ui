@@ -979,7 +979,7 @@ export class SimpleDecoder {
             const seedLength = data.readUInt32LE(36);
             const seed = data.slice(40, 40 + seedLength).toString('utf-8');
 
-            // Look for the pattern 0x0080e03779c31100 (5M SOL in LE)
+            // Look for the pattern 0x0080e03779c31100 (5M XNT in LE)
             const dataHex = data.toString('hex');
             const pattern5M = '0080e03779c31100';
             const patternIndex = dataHex.indexOf(pattern5M);
@@ -988,7 +988,7 @@ export class SimpleDecoder {
             let lamports: bigint;
 
             if (patternIndex >= 0) {
-              // Found the exact pattern for 5M SOL
+              // Found the exact pattern for 5M XNT
               lamportsOffset = patternIndex / 2;
               lamports = data.readBigUInt64LE(lamportsOffset);
             } else {

@@ -150,13 +150,6 @@ export async function createStakeAccountWithSeedInstructions(
   return { instructions, stakeAccount };
 }
 
-export async function createStakeAccountWithSeed(
-  vaultAddress: PublicKey,
-  seed: string
-): Promise<PublicKey> {
-  return await PublicKey.createWithSeed(vaultAddress, seed, StakeProgram.programId);
-}
-
 export function createDelegateStakeInstruction(
   stakeAccount: PublicKey,
   vaultAddress: PublicKey,
@@ -192,30 +185,7 @@ export function createWithdrawStakeInstruction(
   }).instructions[0];
 }
 
-export async function getValidatorInfo(
-  connection: Connection,
-  validatorVoteAccount: PublicKey
-): Promise<ValidatorInfo | null> {
-  try {
-    const voteAccount = await connection.getAccountInfo(validatorVoteAccount);
-    if (!voteAccount) {
-      return null;
-    }
-
-    return {
-      address: validatorVoteAccount.toBase58(),
-    };
-  } catch (error) {
-    console.error('Error fetching validator info:', error);
-    return null;
-  }
-}
-
 export async function getMinimumStakeAmount(connection: Connection): Promise<number> {
   const minBalance = await connection.getMinimumBalanceForRentExemption(StakeProgram.space);
   return (minBalance + LAMPORTS_PER_SOL) / LAMPORTS_PER_SOL;
-}
-
-export function generateStakeAccount(): Keypair {
-  return Keypair.generate();
 }

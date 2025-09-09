@@ -4,7 +4,7 @@ import { formatXNT } from '@/lib/utils/formatters';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 
 /**
- * Summary component for XNT (native SOL) transfers
+ * Summary component for XNT transfers
  * Handles both System Program Transfer instructions and XNT_TRANSFER type
  */
 export const XntTransferSummary: React.FC<InstructionSummaryProps> = ({ instruction }) => {

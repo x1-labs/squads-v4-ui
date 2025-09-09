@@ -196,7 +196,7 @@ export function ValidatorStakePanel() {
             <div className="py-8 text-center">
               <p className="text-sm text-muted-foreground">No stake accounts found</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Create a stake account by delegating SOL to a validator
+                Create a stake account by delegating XNT to a validator
               </p>
             </div>
           )}

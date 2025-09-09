@@ -16,10 +16,7 @@ export const DeactivateStakeSummary: React.FC<InstructionSummaryProps> = ({
   const [stakeAmount, setStakeAmount] = useState<string | null>(null);
   const [voteAccount, setVoteAccount] = useState<string | undefined>(undefined);
 
-  // Get the stake account from the instruction
   const stakeAccount = instruction.args?.stakeAccount || instruction.accounts?.[0]?.pubkey;
-
-  // Fetch validator metadata
   const { data: validatorMetadata } = useValidatorMetadata(voteAccount);
 
   useEffect(() => {

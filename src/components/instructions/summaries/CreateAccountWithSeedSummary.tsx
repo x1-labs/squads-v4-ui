@@ -11,10 +11,8 @@ export const CreateAccountWithSeedSummary: React.FC<InstructionSummaryProps> = (
 }) => {
   // Get the create account details from args
   const lamports = instruction.args?.lamports;
-  const space = instruction.args?.space;
   const owner = instruction.args?.owner;
   const seed = instruction.args?.seed;
-  const base = instruction.args?.base;
 
   // Get accounts
   const fundingAccount = instruction.accounts?.[0]?.pubkey;
