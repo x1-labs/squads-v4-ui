@@ -127,7 +127,7 @@ export function DepositXntDialog() {
         new PublicKey('XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux')
       );
 
-      // Create the deposit SOL instruction
+      // Create the deposit XNT instruction
       // For multisig vaults, the vault itself is the funding account
       depositInstructions.push(
         StakePoolInstruction.depositSol({

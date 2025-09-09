@@ -49,7 +49,7 @@ The following steps will guide you to build, verify, and host the application.
    Edit `.env` to customize the following variables:
    - `APP_RPC_URL`: Solana RPC endpoint (default: `https://rpc.testnet.x1.xyz`)
    - `APP_PROGRAM_ID`: Squads program ID (default: `DDL3Xp6ie85DXgiPkXJ7abUyS2tGv4CGEod2DeQXQ941`)
-   - `APP_EXPLORER_URL`: Solana explorer URL (default: `https://explorer.x1.com`)
+   - `APP_EXPLORER_URL`: Solana explorer URL (default: `https://explorer.x1.xyz`)
    - `APP_SAVED_SQUAD_*`: Pre-configured saved squads (see .env.example for format)
 
    Note: These values can also be configured at runtime through the app's settings page.

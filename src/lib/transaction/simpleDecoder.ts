@@ -122,6 +122,12 @@ export class SimpleDecoder {
 
     for (const entry of idls) {
       try {
+        // Skip Stake Program - it uses custom parsing due to native program format
+        if (entry.programId === 'Stake11111111111111111111111111111111111111') {
+          console.log(`⚠️ Skipping BorshInstructionCoder for ${entry.name} - using custom parser`);
+          continue;
+        }
+
         // Only create BorshInstructionCoder for Anchor-compatible IDLs
         if (isAnchorCompatible(entry.format) && entry.idl && entry.idl.instructions) {
           try {
@@ -139,6 +145,7 @@ export class SimpleDecoder {
               hasInstructions: !!entry.idl.instructions,
               instructionCount: entry.idl.instructions?.length,
             });
+
             // Fallback: try with resolved types if direct approach fails
             try {
               const resolvedIdl = this.resolveCustomTypes(entry.idl);
@@ -416,9 +423,11 @@ export class SimpleDecoder {
     // Try to decode with Anchor IDL (for Anchor-compatible formats)
     if (idlEntry && isAnchorCompatible(idlEntry.format)) {
       const coder = this.instructionCoders.get(programIdStr);
+
       if (coder) {
         try {
           const decoded = coder.decode(data);
+
           if (decoded) {
             // Get the IDL to map account names
             let accountNames: string[] = [];
@@ -586,8 +595,303 @@ export class SimpleDecoder {
       return this.parseAddressLookupTableInstruction(data, accountKeys);
     }
 
+    // Stake Program
+    if (programIdStr === 'Stake11111111111111111111111111111111111111') {
+      return this.parseStakeInstruction(data, accountKeys);
+    }
+
     // Fallback
     return this.basicInstructionParse(programId, data, accountKeys);
+  }
+
+  /**
+   * Parse Stake program instructions
+   */
+  private parseStakeInstruction(
+    data: Buffer,
+    accountKeys: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>
+  ): DecodedInstruction {
+    const instructionType = data.readUInt32LE(0);
+    let instructionName = 'Unknown Stake Instruction';
+    let args: any = {};
+
+    switch (instructionType) {
+      case 0: // Initialize
+        instructionName = 'Initialize';
+        if (data.length >= 112) {
+          try {
+            // Read Authorized struct
+            const stakerPubkey = new PublicKey(data.slice(4, 36));
+            const withdrawerPubkey = new PublicKey(data.slice(36, 68));
+
+            // Read Lockup struct
+            const unixTimestamp = data.readBigInt64LE(68);
+            const epoch = data.readBigUInt64LE(76);
+            const custodian = new PublicKey(data.slice(84, 116));
+
+            args = {
+              authorized: {
+                staker: stakerPubkey.toBase58(),
+                withdrawer: withdrawerPubkey.toBase58(),
+              },
+              lockup: {
+                unixTimestamp: unixTimestamp.toString(),
+                epoch: epoch.toString(),
+                custodian: custodian.equals(PublicKey.default) ? null : custodian.toBase58(),
+              },
+            };
+          } catch (e) {
+            console.error('Error parsing Initialize instruction:', e);
+          }
+        }
+        break;
+
+      case 1: // Authorize
+        instructionName = 'Authorize';
+        if (data.length >= 37) {
+          try {
+            const newAuthorityPubkey = new PublicKey(data.slice(4, 36));
+            const authorizeType = data[36];
+            const authorizeTypes = ['Staker', 'Withdrawer'];
+
+            args = {
+              newAuthority: newAuthorityPubkey.toBase58(),
+              authorizeType: authorizeTypes[authorizeType] || 'Unknown',
+            };
+          } catch (e) {
+            console.error('Error parsing Authorize instruction:', e);
+          }
+        }
+        break;
+
+      case 2: // DelegateStake
+        instructionName = 'Delegate Stake';
+        // The delegate instruction doesn't have amount in data, but we can show the accounts
+        // Account 0: Stake account being delegated
+        // Account 1: Vote account (validator)
+        // Account 2-6: Various required accounts
+        if (accountKeys.length >= 2) {
+          args = {
+            stakeAccount: accountKeys[0]?.pubkey.toBase58(),
+            voteAccount: accountKeys[1]?.pubkey.toBase58(),
+            note: 'Amount is determined by the stake account balance',
+          };
+        }
+        break;
+
+      case 3: // Split
+        instructionName = 'Split';
+        if (data.length >= 12) {
+          try {
+            const lamports = data.readBigUInt64LE(4);
+            args = {
+              lamports: lamports.toString(),
+            };
+          } catch (e) {
+            console.error('Error parsing Split instruction:', e);
+          }
+        }
+        break;
+
+      case 4: // Withdraw
+        instructionName = 'Withdraw';
+        if (data.length >= 12) {
+          try {
+            const lamports = data.readBigUInt64LE(4);
+            args = {
+              lamports: lamports.toString(),
+            };
+          } catch (e) {
+            console.error('Error parsing Withdraw instruction:', e);
+          }
+        }
+        break;
+
+      case 5: // Deactivate
+        instructionName = 'Deactivate';
+        // Account 0: Stake account being deactivated
+        if (accountKeys.length >= 1) {
+          args = {
+            stakeAccount: accountKeys[0]?.pubkey.toBase58(),
+          };
+        }
+        break;
+
+      case 6: // SetLockup
+        instructionName = 'Set Lockup';
+        if (data.length >= 117) {
+          try {
+            // Read optional unix timestamp (1 byte flag + 8 bytes value)
+            let offset = 4;
+            let unixTimestamp = null;
+            if (data[offset] === 1) {
+              unixTimestamp = data.readBigInt64LE(offset + 1).toString();
+              offset += 9;
+            } else {
+              offset += 1;
+            }
+
+            // Read optional epoch (1 byte flag + 8 bytes value)
+            let epoch = null;
+            if (data[offset] === 1) {
+              epoch = data.readBigUInt64LE(offset + 1).toString();
+              offset += 9;
+            } else {
+              offset += 1;
+            }
+
+            // Read optional custodian (1 byte flag + 32 bytes pubkey)
+            let custodian = null;
+            if (data[offset] === 1) {
+              custodian = new PublicKey(data.slice(offset + 1, offset + 33)).toBase58();
+            }
+
+            args = {
+              lockup: {
+                unixTimestamp,
+                epoch,
+                custodian,
+              },
+            };
+          } catch (e) {
+            console.error('Error parsing SetLockup instruction:', e);
+          }
+        }
+        break;
+
+      case 7: // Merge
+        instructionName = 'Merge';
+        // No additional data for merge
+        break;
+
+      case 8: // AuthorizeWithSeed
+        instructionName = 'Authorize With Seed';
+        if (data.length >= 37) {
+          try {
+            const newAuthorityPubkey = new PublicKey(data.slice(4, 36));
+            const authorizeType = data[36];
+            const authorizeTypes = ['Staker', 'Withdrawer'];
+            // The seed string follows but is variable length
+
+            args = {
+              newAuthority: newAuthorityPubkey.toBase58(),
+              authorizeType: authorizeTypes[authorizeType] || 'Unknown',
+            };
+          } catch (e) {
+            console.error('Error parsing AuthorizeWithSeed instruction:', e);
+          }
+        }
+        break;
+
+      case 9: // InitializeChecked
+        instructionName = 'Initialize Checked';
+        // Similar to Initialize but with additional checks
+        break;
+
+      case 10: // AuthorizeChecked
+        instructionName = 'Authorize Checked';
+        if (data.length >= 5) {
+          try {
+            const authorizeType = data[4];
+            const authorizeTypes = ['Staker', 'Withdrawer'];
+
+            args = {
+              authorizeType: authorizeTypes[authorizeType] || 'Unknown',
+            };
+          } catch (e) {
+            console.error('Error parsing AuthorizeChecked instruction:', e);
+          }
+        }
+        break;
+
+      case 11: // AuthorizeCheckedWithSeed
+        instructionName = 'Authorize Checked With Seed';
+        if (data.length >= 5) {
+          try {
+            const authorizeType = data[4];
+            const authorizeTypes = ['Staker', 'Withdrawer'];
+
+            args = {
+              authorizeType: authorizeTypes[authorizeType] || 'Unknown',
+            };
+          } catch (e) {
+            console.error('Error parsing AuthorizeCheckedWithSeed instruction:', e);
+          }
+        }
+        break;
+
+      case 12: // SetLockupChecked
+        instructionName = 'Set Lockup Checked';
+        // Similar to SetLockup but with additional checks
+        break;
+    }
+
+    // Map account names based on instruction type
+    const accountNames = this.getStakeAccountNames(instructionType);
+
+    return {
+      programId: 'Stake11111111111111111111111111111111111111',
+      programName: 'Stake Program',
+      instructionName,
+      instructionTitle: instructionName,
+      accounts: accountKeys.map((key, i) => ({
+        name: accountNames[i] || `Account ${i}`,
+        pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
+        isSigner: key.isSigner || false,
+        isWritable: key.isWritable || false,
+      })),
+      args,
+      rawData: data.toString('hex').slice(0, 100),
+    };
+  }
+
+  /**
+   * Get account names for stake instructions
+   */
+  private getStakeAccountNames(instructionType: number): string[] {
+    switch (instructionType) {
+      case 0: // Initialize
+        return ['Stake Account', 'Rent Sysvar'];
+      case 1: // Authorize
+        return ['Stake Account', 'Clock Sysvar', 'Authority', 'New Authority'];
+      case 2: // DelegateStake
+        return [
+          'Stake Account',
+          'Vote Account',
+          'Clock Sysvar',
+          'Stake History Sysvar',
+          'Config Account',
+          'Authority',
+        ];
+      case 3: // Split
+        return ['Stake Account', 'New Stake Account', 'Authority'];
+      case 4: // Withdraw
+        return ['Stake Account', 'Recipient', 'Clock Sysvar', 'Stake History Sysvar', 'Withdrawer'];
+      case 5: // Deactivate
+        return ['Stake Account', 'Clock Sysvar', 'Authority'];
+      case 6: // SetLockup
+        return ['Stake Account', 'Custodian'];
+      case 7: // Merge
+        return [
+          'Destination Stake',
+          'Source Stake',
+          'Clock Sysvar',
+          'Stake History Sysvar',
+          'Authority',
+        ];
+      case 8: // AuthorizeWithSeed
+        return ['Stake Account', 'Authority Base', 'Clock Sysvar', 'New Authority'];
+      case 9: // InitializeChecked
+        return ['Stake Account', 'Rent Sysvar', 'Staker', 'Withdrawer'];
+      case 10: // AuthorizeChecked
+        return ['Stake Account', 'Clock Sysvar', 'Authority', 'New Authority'];
+      case 11: // AuthorizeCheckedWithSeed
+        return ['Stake Account', 'Authority Base', 'Clock Sysvar', 'New Authority'];
+      case 12: // SetLockupChecked
+        return ['Stake Account', 'Custodian', 'New Custodian'];
+      default:
+        return [];
+    }
   }
 
   /**
@@ -656,12 +960,69 @@ export class SimpleDecoder {
           };
         }
         break;
-      case 3: // Assign
-        instructionName = 'Assign';
-        if (data.length >= 36) {
-          args = {
-            owner: new PublicKey(data.slice(4, 36)).toBase58(),
-          };
+      case 3: // CreateAccountWithSeed
+        instructionName = 'Create Account With Seed';
+        if (data.length >= 52) {
+          try {
+            // CreateAccountWithSeed layout:
+            // [0-4]: instruction index (already consumed)
+            // [4-36]: base pubkey (32 bytes)
+            // [36-40]: seed length (u32)
+            // [40-N]: seed string (variable length)
+            // [N-N+8]: lamports (u64)
+            // [N+8-N+16]: space (u64)
+            // [N+16-N+48]: owner pubkey (32 bytes)
+
+            const base = new PublicKey(data.slice(4, 36));
+            const seedLength = data.readUInt32LE(36);
+            const seed = data.slice(40, 40 + seedLength).toString('utf-8');
+
+            // Look for the pattern 0x0080e03779c31100 (5M XNT in LE)
+            const dataHex = data.toString('hex');
+            const pattern5M = '0080e03779c31100';
+            const patternIndex = dataHex.indexOf(pattern5M);
+
+            let lamportsOffset: number;
+            let lamports: bigint;
+
+            if (patternIndex >= 0) {
+              // Found the exact pattern for 5M XNT
+              lamportsOffset = patternIndex / 2;
+              lamports = data.readBigUInt64LE(lamportsOffset);
+            } else {
+              // Fallback: use the calculated offset right after seed
+              lamportsOffset = 40 + seedLength;
+              lamports = data.readBigUInt64LE(lamportsOffset);
+            }
+
+            const space = data.readBigUInt64LE(lamportsOffset + 8);
+            const owner = new PublicKey(data.slice(lamportsOffset + 16, lamportsOffset + 48));
+
+            args = {
+              base: base.toBase58(),
+              seed: seed,
+              lamports: lamports.toString(),
+              space: space.toString(),
+              owner: owner.toBase58(),
+            };
+          } catch (e) {
+            console.error('Error parsing CreateAccountWithSeed:', e);
+            // Fallback to Assign if parsing fails
+            instructionName = 'Assign';
+            if (data.length >= 36) {
+              args = {
+                owner: new PublicKey(data.slice(4, 36)).toBase58(),
+              };
+            }
+          }
+        } else {
+          // If data is too short for CreateAccountWithSeed, treat as Assign
+          instructionName = 'Assign';
+          if (data.length >= 36) {
+            args = {
+              owner: new PublicKey(data.slice(4, 36)).toBase58(),
+            };
+          }
         }
         break;
       case 9: // Allocate
@@ -1111,6 +1472,10 @@ export class SimpleDecoder {
         return ['Funding Account', 'New Account'][index] || `Account ${index}`;
       case 2: // Transfer
         return ['From', 'To'][index] || `Account ${index}`;
+      case 3: // CreateAccountWithSeed or Assign
+        // For CreateAccountWithSeed, accounts are: funding, created, base
+        // For Assign, it's just the account being assigned
+        return ['Funding Account', 'Created Account', 'Base Account'][index] || `Account ${index}`;
       default:
         return `Account ${index}`;
     }

@@ -97,7 +97,7 @@ export function WithdrawXntDialog() {
         new PublicKey('XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux')
       );
 
-      // Create the withdraw SOL instruction
+      // Create the withdraw XNT instruction
       const withdrawInstructions = [
         StakePoolInstruction.withdrawSol({
           programId: new PublicKey('XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux'),
@@ -105,7 +105,7 @@ export function WithdrawXntDialog() {
           sourcePoolAccount: poolTokenAccount,
           withdrawAuthority,
           reserveStake: stakePool.reserveStake,
-          destinationSystemAccount: vaultAddress, // Vault receives the SOL
+          destinationSystemAccount: vaultAddress, // Vault receives the XNT
           sourceTransferAuthority: vaultAddress, // Vault owns the pool tokens
           solWithdrawAuthority: undefined,
           managerFeeAccount: stakePool.managerFeeAccount,

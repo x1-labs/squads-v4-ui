@@ -1,6 +1,7 @@
 import { TokenList } from '@/components/TokenList';
 import { VaultDisplayer } from '@/components/VaultDisplayer';
 import { StakingPanel } from '@/components/staking/StakingPanel';
+import { ValidatorStakePanel } from '@/components/staking/ValidatorStakePanel';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useMultisig } from '@/hooks/useServices';
 import { toast } from 'sonner';
@@ -97,10 +98,11 @@ export default function Overview() {
               <VaultDisplayer />
               <TokenList multisigPda={multisigAddress} />
             </div>
-            
+
             {/* Staking Section */}
-            <div className="mt-6">
+            <div className="mt-6 space-y-6">
               <StakingPanel />
+              <ValidatorStakePanel />
             </div>
           </>
         )}
