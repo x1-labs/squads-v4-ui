@@ -668,7 +668,17 @@ export class SimpleDecoder {
 
       case 2: // DelegateStake
         instructionName = 'Delegate Stake';
-        // No additional data for delegate
+        // The delegate instruction doesn't have amount in data, but we can show the accounts
+        // Account 0: Stake account being delegated
+        // Account 1: Vote account (validator)
+        // Account 2-6: Various required accounts
+        if (accountKeys.length >= 2) {
+          args = {
+            stakeAccount: accountKeys[0]?.pubkey.toBase58(),
+            voteAccount: accountKeys[1]?.pubkey.toBase58(),
+            note: 'Amount is determined by the stake account balance',
+          };
+        }
         break;
 
       case 3: // Split
@@ -701,7 +711,12 @@ export class SimpleDecoder {
 
       case 5: // Deactivate
         instructionName = 'Deactivate';
-        // No additional data for deactivate
+        // Account 0: Stake account being deactivated
+        if (accountKeys.length >= 1) {
+          args = {
+            stakeAccount: accountKeys[0]?.pubkey.toBase58(),
+          };
+        }
         break;
 
       case 6: // SetLockup
@@ -947,12 +962,44 @@ export class SimpleDecoder {
           };
         }
         break;
-      case 3: // Assign
-        instructionName = 'Assign';
-        if (data.length >= 36) {
-          args = {
-            owner: new PublicKey(data.slice(4, 36)).toBase58(),
-          };
+      case 3: // CreateAccountWithSeed
+        instructionName = 'Create Account With Seed';
+        if (data.length >= 84) {
+          try {
+            const base = new PublicKey(data.slice(4, 36));
+            let seedLength = data.readUInt32LE(36);
+            // Cap seed length to prevent buffer overread
+            seedLength = Math.min(seedLength, data.length - 40);
+            const seed = data.slice(40, 40 + seedLength).toString('utf-8');
+            const lamports = data.readBigUInt64LE(40 + seedLength);
+            const space = data.readBigUInt64LE(48 + seedLength);
+            const owner = new PublicKey(data.slice(56 + seedLength, 88 + seedLength));
+
+            args = {
+              base: base.toBase58(),
+              seed: seed,
+              lamports: lamports.toString(),
+              space: space.toString(),
+              owner: owner.toBase58(),
+            };
+          } catch (e) {
+            console.error('Error parsing CreateAccountWithSeed:', e);
+            // Fallback to Assign if parsing fails
+            instructionName = 'Assign';
+            if (data.length >= 36) {
+              args = {
+                owner: new PublicKey(data.slice(4, 36)).toBase58(),
+              };
+            }
+          }
+        } else {
+          // If data is too short for CreateAccountWithSeed, treat as Assign
+          instructionName = 'Assign';
+          if (data.length >= 36) {
+            args = {
+              owner: new PublicKey(data.slice(4, 36)).toBase58(),
+            };
+          }
         }
         break;
       case 9: // Allocate
@@ -1402,6 +1449,10 @@ export class SimpleDecoder {
         return ['Funding Account', 'New Account'][index] || `Account ${index}`;
       case 2: // Transfer
         return ['From', 'To'][index] || `Account ${index}`;
+      case 3: // CreateAccountWithSeed or Assign
+        // For CreateAccountWithSeed, accounts are: funding, created, base
+        // For Assign, it's just the account being assigned
+        return ['Funding Account', 'Created Account', 'Base Account'][index] || `Account ${index}`;
       default:
         return `Account ${index}`;
     }
