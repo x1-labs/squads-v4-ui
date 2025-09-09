@@ -615,8 +615,6 @@ export class SimpleDecoder {
     let instructionName = 'Unknown Stake Instruction';
     let args: any = {};
 
-    console.log('Stake instruction type:', instructionType);
-
     switch (instructionType) {
       case 0: // Initialize
         instructionName = 'Initialize';
