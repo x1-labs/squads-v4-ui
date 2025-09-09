@@ -2,6 +2,16 @@
   "headers": [
     {
       "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "multisig.x1.xyz"
+        },
+        {
+          "type": "host",
+          "value": "multisig.testnet.x1.xyz"
+        }
+      ],
       "headers": [
         {
           "key": "X-Frame-Options",
