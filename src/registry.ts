@@ -9,12 +9,18 @@ import { SplTransferSummary } from './components/instructions/summaries/SplTrans
 import { MemoSummary } from './components/instructions/summaries/MemoSummary';
 import { StakePoolDepositSummary } from './components/instructions/summaries/StakePoolDepositSummary';
 import { StakePoolWithdrawSummary } from './components/instructions/summaries/StakePoolWithdrawSummary';
+import { DelegateStakeSummary } from './components/instructions/summaries/DelegateStakeSummary';
+import { DeactivateStakeSummary } from './components/instructions/summaries/DeactivateStakeSummary';
+import { WithdrawStakeSummary } from './components/instructions/summaries/WithdrawStakeSummary';
+import { InitializeStakeSummary } from './components/instructions/summaries/InitializeStakeSummary';
+import { CreateAccountWithSeedSummary } from './components/instructions/summaries/CreateAccountWithSeedSummary';
 
 // Import IDLs
 import squadsV4Idl from './lib/idls/squads-v4.json';
 import delegationProgramIdl from './lib/idls/delegation_program.json';
 import tokenProgramIdl from './lib/idls/token_program.json';
 import stakePoolIdl from './lib/idls/stake_pool.json';
+// Stake program IDL is registered but uses custom parsing
 
 // ============================================
 // System Program
@@ -30,8 +36,51 @@ registry.register({
     CreateAccount: {
       tags: { label: 'Create Account', color: 'blue', variant: 'subtle' },
     },
+    'Create Account With Seed': {
+      summary: CreateAccountWithSeedSummary,
+      tags: { label: 'Create Account', color: 'blue', variant: 'subtle' },
+    },
     Allocate: {
       tags: { label: 'Allocate', color: 'gray', variant: 'subtle' },
+    },
+  },
+});
+
+// ============================================
+// Stake Program
+// ============================================
+registry.register({
+  programId: 'Stake11111111111111111111111111111111111111',
+  name: 'Stake Program',
+  // Note: Stake program uses custom parsing in simpleDecoder.ts
+  instructions: {
+    Initialize: {
+      summary: InitializeStakeSummary,
+      tags: { label: 'Initialize Stake', color: 'cyan', variant: 'subtle' },
+    },
+    'Delegate Stake': {
+      summary: DelegateStakeSummary,
+      tags: { label: 'Delegate Stake', color: 'green', variant: 'subtle' },
+    },
+    Deactivate: {
+      summary: DeactivateStakeSummary,
+      tags: { label: 'Deactivate Stake', color: 'orange', variant: 'subtle' },
+    },
+    Withdraw: {
+      summary: WithdrawStakeSummary,
+      tags: { label: 'Withdraw Stake', color: 'blue', variant: 'subtle' },
+    },
+    Split: {
+      tags: { label: 'Split Stake', color: 'indigo', variant: 'subtle' },
+    },
+    Authorize: {
+      tags: { label: 'Authorize Stake', color: 'purple', variant: 'subtle' },
+    },
+    'Set Lockup': {
+      tags: { label: 'Set Lockup', color: 'gray', variant: 'subtle' },
+    },
+    Merge: {
+      tags: { label: 'Merge Stake', color: 'cyan', variant: 'subtle' },
     },
   },
 });
