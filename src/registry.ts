@@ -53,6 +53,7 @@ registry.register({
   programId: 'Stake11111111111111111111111111111111111111',
   name: 'Stake Program',
   // Note: Stake program uses custom parsing in simpleDecoder.ts
+  defaultTags: { label: 'Stake Program', color: 'gray', variant: 'subtle' },
   instructions: {
     Initialize: {
       summary: InitializeStakeSummary,

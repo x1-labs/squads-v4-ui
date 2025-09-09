@@ -62,7 +62,7 @@ export const useProgramId = () => {
 };
 
 // explorer url
-const DEFAULT_EXPLORER_URL = process.env.APP_EXPLORER_URL || 'https://explorer.x1.com';
+const DEFAULT_EXPLORER_URL = process.env.APP_EXPLORER_URL || 'https://explorer.x1.xyz';
 const getExplorerUrl = () => {
   if (typeof window !== 'undefined') {
     return localStorage.getItem('x-explorer-url') || DEFAULT_EXPLORER_URL;

@@ -3,6 +3,8 @@ import { InstructionSummaryProps } from '@/lib/instructions/types';
 import { formatXNT } from '@/lib/utils/formatters';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 import { PublicKey } from '@solana/web3.js';
+import { useValidatorMetadata } from '@/hooks/useValidatorMetadata';
+import { ValidatorDisplay } from '@/components/staking/ValidatorDisplay';
 
 /**
  * Summary component for Stake Deactivate instructions
@@ -12,27 +14,39 @@ export const DeactivateStakeSummary: React.FC<InstructionSummaryProps> = ({
   connection,
 }) => {
   const [stakeAmount, setStakeAmount] = useState<string | null>(null);
+  const [voteAccount, setVoteAccount] = useState<string | undefined>(undefined);
 
   // Get the stake account from the instruction
   const stakeAccount = instruction.args?.stakeAccount || instruction.accounts?.[0]?.pubkey;
 
+  // Fetch validator metadata
+  const { data: validatorMetadata } = useValidatorMetadata(voteAccount);
+
   useEffect(() => {
-    const fetchStakeAccountBalance = async () => {
+    const fetchStakeAccountInfo = async () => {
       if (!stakeAccount) return;
 
       try {
         const stakeAccountPubkey = new PublicKey(stakeAccount);
-        const accountInfo = await connection.getAccountInfo(stakeAccountPubkey);
-        if (accountInfo) {
-          // Convert lamports to XNT
-          setStakeAmount(formatXNT(accountInfo.lamports));
+
+        // Fetch stake account info (parsed)
+        const accountInfo = await connection.getParsedAccountInfo(stakeAccountPubkey);
+        if (accountInfo.value) {
+          // Get balance
+          setStakeAmount(formatXNT(accountInfo.value.lamports));
+
+          // Get validator from parsed data
+          const parsedData = accountInfo.value.data as any;
+          if (parsedData?.parsed?.info?.stake?.delegation?.voter) {
+            setVoteAccount(parsedData.parsed.info.stake.delegation.voter);
+          }
         }
       } catch (error) {
-        console.error('Failed to fetch stake account balance:', error);
+        console.error('Failed to fetch stake account info:', error);
       }
     };
 
-    fetchStakeAccountBalance();
+    fetchStakeAccountInfo();
   }, [stakeAccount, connection]);
 
   if (!stakeAccount) {
@@ -50,6 +64,12 @@ export const DeactivateStakeSummary: React.FC<InstructionSummaryProps> = ({
           </div>
         )}
         <AddressWithButtons address={stakeAccount} label="Stake Account" />
+        {voteAccount && (
+          <div className="grid grid-cols-[80px,1fr] gap-2">
+            <span className="text-muted-foreground">Validator:</span>
+            <ValidatorDisplay voteAccount={voteAccount} metadata={validatorMetadata} />
+          </div>
+        )}
       </div>
     </div>
   );
