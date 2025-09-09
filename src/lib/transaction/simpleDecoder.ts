@@ -146,19 +146,6 @@ export class SimpleDecoder {
               instructionCount: entry.idl.instructions?.length,
             });
 
-            // Special debugging for Stake Program errors
-            if (entry.programId === 'Stake11111111111111111111111111111111111111') {
-              console.error('🔍 Stake Program BorshInstructionCoder error details:', {
-                error: e,
-                stack: e.stack,
-                idlInstructions: entry.idl.instructions?.map((ix: any) => ({
-                  name: ix.name,
-                  argCount: ix.args?.length,
-                  args: ix.args?.map((a: any) => ({ name: a.name, type: a.type })),
-                })),
-              });
-            }
-
             // Fallback: try with resolved types if direct approach fails
             try {
               const resolvedIdl = this.resolveCustomTypes(entry.idl);
@@ -169,11 +156,6 @@ export class SimpleDecoder {
               );
             } catch (e2) {
               console.warn(`❌ BorshInstructionCoder still failed for ${entry.name}:`, e2);
-              if (entry.programId === 'Stake11111111111111111111111111111111111111') {
-                console.error('🔍 Stake Program resolved IDL still failed:', {
-                  error: e2,
-                });
-              }
             }
           }
         } else if (entry.format === IdlFormat.KINOBI && entry.parser) {
@@ -477,18 +459,7 @@ export class SimpleDecoder {
           }
         } catch (error) {
           console.warn(`BorshInstructionCoder failed for ${programIdStr}:`, error);
-
-          // Special debugging for Stake Program
-          if (programIdStr === 'Stake11111111111111111111111111111111111111') {
-            console.error('🔍 Stake Program decode error:', {
-              error: error,
-              errorMessage: (error as any)?.message,
-              errorStack: (error as any)?.stack,
-            });
-          }
         }
-      } else if (programIdStr === 'Stake11111111111111111111111111111111111111') {
-        console.warn('🔍 No coder found for Stake Program despite having IDL');
       }
     }
 
