@@ -23,6 +23,7 @@ export function TokenList({ multisigPda }: TokenListProps) {
   );
   const [tokenMetadata, setTokenMetadata] = useState<Map<string, TokenMetadata>>(new Map());
   const [loadingMetadata, setLoadingMetadata] = useState(false);
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
   // Fetch token metadata when tokens change
   useEffect(() => {
@@ -123,14 +124,13 @@ export function TokenList({ multisigPda }: TokenListProps) {
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-muted">
-                        {metadata?.logoURI ? (
+                        {metadata?.logoURI && !imageErrors.has(mint) ? (
                           <img
                             src={metadata.logoURI}
                             alt={metadata.symbol || 'Token'}
                             className="h-full w-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                              e.currentTarget.parentElement!.innerHTML = `<span class="text-xs font-bold text-foreground">${metadata.symbol || 'SPL'}</span>`;
+                            onError={() => {
+                              setImageErrors((prev) => new Set(prev).add(mint));
                             }}
                           />
                         ) : (

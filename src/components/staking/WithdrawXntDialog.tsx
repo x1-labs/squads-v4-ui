@@ -240,7 +240,7 @@ export function WithdrawXntDialog() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Unstake XNT</DialogTitle>
+          <DialogTitle>Unstake from Stake Pool</DialogTitle>
           <DialogDescription>
             Withdraw your staked XNT from a pool. Select a pool and enter the amount of pool tokens
             to burn.
@@ -298,7 +298,19 @@ export function WithdrawXntDialog() {
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="amount">Pool Tokens to Burn</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="amount">Pool Tokens to Burn</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={() => setAmount(maxAmount.toString())}
+                disabled={!selectedPoolInfo}
+              >
+                Max
+              </Button>
+            </div>
             <Input
               id="amount"
               type="number"
