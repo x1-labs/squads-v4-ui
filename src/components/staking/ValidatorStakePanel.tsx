@@ -3,6 +3,7 @@ import { DelegateStakeDialog } from './DelegateStakeDialog';
 import { UndelegateStakeDialog } from './UndelegateStakeDialog';
 import { WithdrawStakeDialog } from './WithdrawStakeDialog';
 import { CloseStakeDialog } from './CloseStakeDialog';
+import { RedelegateStakeDialog } from './RedelegateStakeDialog';
 import { useStakeAccounts } from '@/hooks/useStakeAccounts';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
 import { Skeleton } from '../ui/skeleton';
@@ -77,6 +78,7 @@ export function ValidatorStakePanel() {
             <DelegateStakeDialog />
             {stakeAccounts && stakeAccounts.length > 0 && (
               <>
+                <RedelegateStakeDialog stakeAccounts={stakeAccounts} />
                 <UndelegateStakeDialog stakeAccounts={stakeAccounts} />
                 <WithdrawStakeDialog stakeAccounts={stakeAccounts} />
                 <CloseStakeDialog stakeAccounts={stakeAccounts} />
@@ -116,7 +118,7 @@ export function ValidatorStakePanel() {
                           {account.state}
                         </Badge>
                       </div>
-                      {account.delegatedValidator && (
+                      {account.delegatedValidator ? (
                         <div className="space-y-1">
                           <div className="flex items-center gap-1.5">
                             {validatorMetadata?.get(account.delegatedValidator)?.avatarUrl && (
@@ -167,7 +169,11 @@ export function ValidatorStakePanel() {
                             )}
                           </div>
                         </div>
-                      )}
+                      ) : account.state === 'inactive' ? (
+                        <p className="text-xs text-muted-foreground">
+                          Stake account is undelegated (can be re-delegated)
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <div className="pl-5 text-left sm:pl-0 sm:text-right">
