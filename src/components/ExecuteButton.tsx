@@ -205,9 +205,23 @@ const ExecuteButton = ({
 
         if (simulation.value.err) {
           console.error('Simulation error:', simulation.value.err);
+          console.error('Full simulation logs:', simulation.value.logs);
 
           // Parse the error logs for meaningful messages
           const logs = simulation.value.logs || [];
+
+          // Check for signature verification failure
+          if (JSON.stringify(simulation.value.err).includes('SignatureVerificationFailed')) {
+            console.error('Signature verification failed. Transaction details:', {
+              transaction: signedTx,
+              signers: signedTx.signatures,
+              message: signedTx.message,
+            });
+            throw new Error(
+              'Transaction signature verification failed. This usually means a required signer is missing or the transaction needs to be reconstructed.'
+            );
+          }
+
           const errorLog = logs.find(
             (log) =>
               log.includes('Error') ||
