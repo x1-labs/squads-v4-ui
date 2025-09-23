@@ -20,9 +20,9 @@ export default function TabNav() {
     { name: 'Home', icon: <LucideHome />, route: currentMultisig ? `/${currentMultisig}` : '/' },
     { name: 'Transactions', icon: <ArrowDownUp />, route: currentMultisig ? `/${currentMultisig}/transactions` : '/' },
     { name: 'Staking', icon: <Coins />, route: currentMultisig ? `/${currentMultisig}/stake` : '/' },
-    { name: 'Configuration', icon: <Users />, route: currentMultisig ? `/${currentMultisig}/config` : '/' },
-    { name: 'Programs', icon: <Box />, route: currentMultisig ? `/${currentMultisig}/programs` : '/' },
     { name: 'Validators', icon: <Server />, route: currentMultisig ? `/${currentMultisig}/validators` : '/' },
+    { name: 'Programs', icon: <Box />, route: currentMultisig ? `/${currentMultisig}/programs` : '/' },
+    { name: 'Configuration', icon: <Users />, route: currentMultisig ? `/${currentMultisig}/config` : '/' },
     { name: 'Settings', icon: <Settings />, route: '/settings' },
   ];
 

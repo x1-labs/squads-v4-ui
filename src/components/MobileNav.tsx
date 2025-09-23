@@ -21,9 +21,9 @@ export function MobileNav() {
     { name: 'Home', icon: <LucideHome className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}` : '/' },
     { name: 'Transactions', icon: <ArrowDownUp className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/transactions` : '/' },
     { name: 'Staking', icon: <Coins className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/stake` : '/' },
-    { name: 'Configuration', icon: <Users className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/config` : '/' },
+    { name: 'Validators', icon: <Server className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/validators` : '/' },
     { name: 'Programs', icon: <Box className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/programs` : '/' },
-    { name: 'Validators', icon: <Server className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/validators ` : '/' },
+    { name: 'Configuration', icon: <Users className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/config` : '/' },
     { name: 'Settings', icon: <Settings className="h-5 w-5" />, route: '/settings' },
   ];
 
