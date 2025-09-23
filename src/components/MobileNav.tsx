@@ -114,32 +114,6 @@ export function MobileNav() {
           onClick={() => setIsOpen(false)}
         />
       )}
-
-      {/* Mobile Bottom Navigation (Alternative/Complementary) */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background md:hidden">
-        <div className="grid h-16 grid-cols-6">
-          {tabs.map((tab) => {
-            const isActive =
-              (currentMultisig || tab.name === 'Settings') && (
-                tab.name === 'Settings' ? path === tab.route :
-                tab.name === 'Home' ? path === tab.route :
-                (path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'))
-              );
-            return (
-              <Link
-                key={tab.name}
-                to={tab.route}
-                className={`flex flex-col items-center justify-center space-y-1 ${
-                  isActive ? 'text-primary' : 'text-muted-foreground'
-                }`}
-              >
-                {tab.icon}
-                <span className="text-xs">{tab.name.split(' ')[0]}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </div>
     </>
   );
 }
