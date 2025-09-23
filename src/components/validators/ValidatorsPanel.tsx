@@ -101,7 +101,7 @@ export function ValidatorsPanel() {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle>Squad Validators</CardTitle>
             <CardDescription>
@@ -111,9 +111,10 @@ export function ValidatorsPanel() {
           <div className="flex items-center gap-2">
             <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Validator
+                <Button variant="outline" size="sm" className="flex-1 sm:flex-initial">
+                  <Plus className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Add Validator</span>
+                  <span className="sm:hidden">Add</span>
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -155,18 +156,19 @@ export function ValidatorsPanel() {
             <Button
               variant="outline"
               size="sm"
+              className="flex-1 sm:flex-initial"
               onClick={handleScan}
               disabled={isScanning || fullScanResult.isLoading}
             >
               {isScanning || fullScanResult.isLoading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Scanning...
+                  <Loader2 className="h-4 w-4 animate-spin sm:mr-2" />
+                  <span className="hidden sm:inline">Scanning...</span>
                 </>
               ) : (
                 <>
-                  <Search className="mr-2 h-4 w-4" />
-                  Scan
+                  <Search className="h-4 w-4 sm:mr-2" />
+                  <span>Scan</span>
                 </>
               )}
             </Button>

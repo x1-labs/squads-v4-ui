@@ -152,9 +152,9 @@ export function ChangeCommissionDialog({ validator }: ChangeCommissionDialogProp
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Percent className="mr-2 h-4 w-4" />
-          Change Commission
+        <Button variant="outline" size="sm" className="w-full sm:w-auto">
+          <Percent className="h-4 w-4 sm:mr-2" />
+          <span className="sm:inline">Change Commission</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">

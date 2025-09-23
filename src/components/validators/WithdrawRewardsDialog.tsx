@@ -131,9 +131,9 @@ export function WithdrawRewardsDialog({ validator }: WithdrawRewardsDialogProps)
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Wallet className="mr-2 h-4 w-4" />
-          Withdraw Rewards
+        <Button variant="outline" size="sm" className="w-full sm:w-auto">
+          <Wallet className="h-4 w-4 sm:mr-2" />
+          <span className="sm:inline">Withdraw Rewards</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">

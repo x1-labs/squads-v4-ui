@@ -135,9 +135,9 @@ export function ChangeAuthorityDialog({ validator }: ChangeAuthorityDialogProps)
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Key className="mr-2 h-4 w-4" />
-          Change Authority
+        <Button variant="outline" size="sm" className="w-full sm:w-auto">
+          <Key className="h-4 w-4 sm:mr-2" />
+          <span className="sm:inline">Change Authority</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">

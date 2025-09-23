@@ -62,16 +62,16 @@ export function ValidatorsList({ validators }: ValidatorsListProps) {
                     </div>
                   </div>
                   
-                  <div className="flex flex-wrap gap-4 text-sm">
-                    <div>
+                  <div className="grid grid-cols-1 gap-2 text-sm sm:flex sm:flex-wrap sm:gap-4">
+                    <div className="flex justify-between sm:block">
                       <span className="text-muted-foreground">Commission:</span>{' '}
                       <span className="font-medium">{validator.commission}%</span>
                     </div>
-                    <div>
+                    <div className="flex justify-between sm:block">
                       <span className="text-muted-foreground">Balance:</span>{' '}
                       <span className="font-medium">{validator.balance.toFixed(4)} SOL</span>
                     </div>
-                    <div>
+                    <div className="flex justify-between sm:block">
                       <span className="text-muted-foreground">Rewards:</span>{' '}
                       <span className="font-medium text-green-600 dark:text-green-400">
                         {validator.rewards.toFixed(4)} SOL
@@ -90,7 +90,7 @@ export function ValidatorsList({ validators }: ValidatorsListProps) {
                 </Button>
               </div>
 
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-4 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
                 <WithdrawRewardsDialog validator={validator} />
                 <ChangeCommissionDialog validator={validator} />
                 <ChangeAuthorityDialog validator={validator} />
