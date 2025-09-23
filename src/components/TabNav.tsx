@@ -51,10 +51,12 @@ export default function TabNav() {
                   <Link
                     to={tab.route}
                     className={`flex items-center rounded-lg px-4 py-3 text-foreground ${
-                      (tab.name === 'Settings' ? path === tab.route : 
-                       tab.name === 'Home' ? path === tab.route : 
-                       path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'))
-                        ? 'bg-primary/20 dark:bg-primary/20'
+                      // Only highlight if we actually have a multisig or it's the Settings page
+                      (currentMultisig || tab.name === 'Settings') && (
+                        tab.name === 'Settings' ? path === tab.route : 
+                        tab.name === 'Home' ? path === tab.route : 
+                        path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/')
+                      ) ? 'bg-primary/20 dark:bg-primary/20'
                         : 'hover:bg-accent dark:hover:bg-accent'
                     }`}
                   >

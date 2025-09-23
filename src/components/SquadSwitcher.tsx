@@ -11,7 +11,6 @@ import {
 } from './ui/dropdown-menu';
 import { ChevronDown, Plus, Check, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { isEnvSquad } from '@/lib/envSquads';
 import { VaultSelector } from './VaultSelector';
 
 export const SquadSwitcher = () => {
@@ -38,14 +37,11 @@ export const SquadSwitcher = () => {
     navigate('/');
   };
 
-  // Separate env squads from user squads
-  const envSquads = squads.filter((squad) => isEnvSquad(squad));
-  const userSquads = squads.filter((squad) => !isEnvSquad(squad));
-
-  // Display label for env squads, address for user squads
+  // Display label or address
   const getDisplayText = () => {
     if (!selectedSquad) return 'Select Squad';
-    if (isEnvSquad(selectedSquad)) {
+    // If squad has a custom name, show it, otherwise show truncated address
+    if (selectedSquad.name && !selectedSquad.name.startsWith('Squad ')) {
       return selectedSquad.name;
     }
     return `${selectedSquad.address.slice(0, 6)}...${selectedSquad.address.slice(-6)}`;
@@ -57,7 +53,7 @@ export const SquadSwitcher = () => {
         <DropdownMenuTrigger asChild>
           <Button variant="outline" className="w-full justify-between">
             <span
-              className={`truncate ${!selectedSquad || !isEnvSquad(selectedSquad) ? 'font-mono text-sm' : ''}`}
+              className={`truncate ${!selectedSquad || selectedSquad.name?.startsWith('Squad ') ? 'font-mono text-sm' : ''}`}
             >
               {getDisplayText()}
             </span>
@@ -65,9 +61,9 @@ export const SquadSwitcher = () => {
           </Button>
         </DropdownMenuTrigger>
       <DropdownMenuContent className="w-[250px]">
-        {envSquads.length > 0 && (
+        {squads.length > 0 && (
           <>
-            {envSquads.map((squad: SavedSquad) => (
+            {squads.map((squad: SavedSquad) => (
               <DropdownMenuItem
                 key={squad.address}
                 onClick={() => handleSelectSquad(squad.address)}
@@ -78,34 +74,18 @@ export const SquadSwitcher = () => {
                     <Check className="mr-2 h-4 w-4 shrink-0" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium">{squad.name}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {squad.address.slice(0, 4)}...{squad.address.slice(-4)}
-                    </div>
-                  </div>
-                </div>
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-          </>
-        )}
-        {userSquads.length > 0 && (
-          <>
-            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-              User Defined
-            </div>
-            {userSquads.map((squad: SavedSquad) => (
-              <DropdownMenuItem
-                key={squad.address}
-                onClick={() => handleSelectSquad(squad.address)}
-                className="group flex items-center justify-between"
-              >
-                <div className="flex min-w-0 flex-1 items-center">
-                  {selectedSquad?.address === squad.address && (
-                    <Check className="mr-2 h-4 w-4 shrink-0" />
-                  )}
-                  <div className="truncate font-mono text-sm">
-                    {squad.address.slice(0, 6)}...{squad.address.slice(-6)}
+                    {squad.name && !squad.name.startsWith('Squad ') ? (
+                      <>
+                        <div className="truncate font-medium">{squad.name}</div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {squad.address.slice(0, 4)}...{squad.address.slice(-4)}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="truncate font-mono text-sm">
+                        {squad.address.slice(0, 6)}...{squad.address.slice(-6)}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <Button

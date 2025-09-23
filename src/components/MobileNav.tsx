@@ -74,9 +74,11 @@ export function MobileNav() {
           <nav className="flex-1 space-y-1 p-4">
             {tabs.map((tab) => {
               const isActive =
-                tab.name === 'Settings' ? path === tab.route :
-                tab.name === 'Home' ? path === tab.route :
-                (path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'));
+                (currentMultisig || tab.name === 'Settings') && (
+                  tab.name === 'Settings' ? path === tab.route :
+                  tab.name === 'Home' ? path === tab.route :
+                  (path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'))
+                );
               return (
                 <Link
                   key={tab.name}
@@ -117,9 +119,11 @@ export function MobileNav() {
         <div className="grid h-16 grid-cols-6">
           {tabs.map((tab) => {
             const isActive =
-              tab.name === 'Settings' ? path === tab.route :
-              tab.name === 'Home' ? path === tab.route :
-              (path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'));
+              (currentMultisig || tab.name === 'Settings') && (
+                tab.name === 'Settings' ? path === tab.route :
+                tab.name === 'Home' ? path === tab.route :
+                (path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'))
+              );
             return (
               <Link
                 key={tab.name}

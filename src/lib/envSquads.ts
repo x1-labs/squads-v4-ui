@@ -51,24 +51,23 @@ export function getEnvSquads(): SavedSquad[] {
 
 /**
  * Merge environment-based squads with user-saved squads.
- * Environment squads take precedence and cannot be removed by users.
+ * No longer automatically adds env squads - they must be manually added.
+ * This function now just returns the saved squads.
  */
 export function mergeEnvSquadsWithSaved(savedSquads: SavedSquad[]): SavedSquad[] {
+  // Don't automatically add env squads anymore
+  // Users must manually add them
+  return savedSquads;
+}
+
+/**
+ * Get the default label for a squad address from environment variables.
+ * Returns the label if found, otherwise returns null.
+ */
+export function getEnvSquadLabel(address: string): string | null {
   const envSquads = getEnvSquads();
-
-  const squadMap = new Map<string, SavedSquad>();
-  envSquads.forEach((squad) => {
-    squadMap.set(squad.address, squad);
-  });
-
-  savedSquads.forEach((squad) => {
-    if (!squadMap.has(squad.address)) {
-      squadMap.set(squad.address, squad);
-    }
-  });
-
-  // Return as array, with env squads first
-  return Array.from(squadMap.values());
+  const envSquad = envSquads.find(squad => squad.address === address);
+  return envSquad ? envSquad.name : null;
 }
 
 /**

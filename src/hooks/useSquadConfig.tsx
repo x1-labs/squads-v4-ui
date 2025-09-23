@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { SavedSquad, SquadConfig } from '@/types/squad';
-import { mergeEnvSquadsWithSaved, isEnvSquad } from '@/lib/envSquads';
+import { mergeEnvSquadsWithSaved, isEnvSquad, getEnvSquadLabel } from '@/lib/envSquads';
 
 const SQUADS_STORAGE_KEY = 'x-squads-config';
 
@@ -50,8 +50,14 @@ export const useSquadConfig = () => {
   const addSquad = useMutation({
     mutationFn: async (squad: Omit<SavedSquad, 'addedAt' | 'fromEnv'>) => {
       const config = getSquadConfig();
+      
+      // Check if there's an environment label for this address
+      const envLabel = getEnvSquadLabel(squad.address);
+      
       const newSquad: SavedSquad = {
         ...squad,
+        // Use environment label if available and no custom name was provided
+        name: squad.name || envLabel || `Squad ${squad.address.slice(0, 4)}...${squad.address.slice(-4)}`,
         addedAt: Date.now(),
         fromEnv: false,
       };

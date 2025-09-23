@@ -2,6 +2,7 @@ import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-q
 import { useSquadConfig } from './useSquadConfig';
 import { useEffect } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
+import { getEnvSquadLabel } from '@/lib/envSquads';
 
 const MULTISIG_STORAGE_KEY = 'x-multisig-v4';
 
@@ -71,9 +72,11 @@ export const useMultisigAddress = () => {
       if (newAddress) {
         localStorage.setItem(MULTISIG_STORAGE_KEY, newAddress);
         // Optionally add to saved squads if not already there
+        // Use environment label if available
+        const envLabel = getEnvSquadLabel(newAddress);
         addSquad.mutate({
           address: newAddress,
-          name: `Squad ${newAddress.slice(0, 4)}...${newAddress.slice(-4)}`,
+          name: envLabel || `Squad ${newAddress.slice(0, 4)}...${newAddress.slice(-4)}`,
         });
       } else {
         localStorage.removeItem(MULTISIG_STORAGE_KEY); // Remove if null

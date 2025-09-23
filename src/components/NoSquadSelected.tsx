@@ -9,6 +9,7 @@ import { useSquadConfig } from '@/hooks/useSquadConfig';
 import { useMultisigAddress } from '@/hooks/useMultisigAddress';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { validateSquadAddress } from '@/lib/utils';
+import { getEnvSquadLabel } from '@/lib/envSquads';
 
 export const NoSquadSelected = () => {
   const navigate = useNavigate();
