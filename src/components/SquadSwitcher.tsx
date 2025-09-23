@@ -10,18 +10,34 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { ChevronDown, Plus, Check, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { VaultSelector } from './VaultSelector';
 
 export const SquadSwitcher = () => {
   const { squads, selectedSquad, removeSquad, selectSquad } = useSquadConfig();
   const { setMultisigAddress } = useMultisigAddress();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSelectSquad = (address: string) => {
     selectSquad.mutate(address);
     setMultisigAddress.mutate(address);
-    navigate(`/${address}`);
+    
+    // Get the current path segments
+    const pathSegments = location.pathname.split('/').filter(Boolean);
+    
+    // If we're on a page with a multisig address, replace it
+    if (pathSegments.length > 0 && pathSegments[0].length > 20) { // Likely a multisig address
+      // Replace the first segment (multisig address) with the new one
+      pathSegments[0] = address;
+      navigate(`/${pathSegments.join('/')}`);
+    } else if (pathSegments.length > 0) {
+      // We're on a page like /settings or /create, just go to the squad home
+      navigate(`/${address}`);
+    } else {
+      // We're on the root page
+      navigate(`/${address}`);
+    }
   };
 
   const handleRemoveSquad = (address: string, e: React.MouseEvent) => {
