@@ -5,8 +5,10 @@ export function MembershipWarning() {
   const isMember = useAccess();
   const { connected } = useWallet();
 
-  // Don't show warning if connected and is a member
-  if (connected && isMember) {
+  // Determine whether to show the warning
+  const shouldShowWarning = !(connected && isMember);
+
+  if (!shouldShowWarning) {
     return null;
   }
 
