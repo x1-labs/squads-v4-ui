@@ -659,7 +659,16 @@ export class SimpleDecoder {
         instructionName = 'Withdraw';
         if (data.length >= 9) {
           try {
-            const lamports = data.readBigUInt64LE(1);
+            // The SDK generates a 12-byte format: [discriminator(1)] + [padding(4)] + [lamports(8)]
+            // Older format might be 9-byte: [discriminator(1)] + [lamports(8)]
+            let lamports: bigint;
+            if (data.length === 12) {
+              // SDK format with padding
+              lamports = data.readBigUInt64LE(4);
+            } else {
+              // Direct format without padding
+              lamports = data.readBigUInt64LE(1);
+            }
             args = {
               lamports: lamports.toString(),
               voteAccount: accountKeys[0]?.pubkey?.toBase58(),
