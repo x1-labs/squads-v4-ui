@@ -192,7 +192,7 @@ export default function TransactionDetailsPage() {
           <p className="mb-4 text-muted-foreground">
             The requested transaction could not be found.
           </p>
-          <Button onClick={() => navigate(`/transactions`)}>Back to Transactions</Button>
+          <Button onClick={() => navigate(multisigAddress ? `/${multisigAddress}/transactions` : '/transactions')}>Back to Transactions</Button>
         </div>
       </div>
     );
@@ -228,7 +228,7 @@ export default function TransactionDetailsPage() {
       <div className="mb-6">
         {/* Top row with back link and tags */}
         <div className="mb-4 flex items-start justify-between">
-          <Link to="/transactions" className="text-sm text-primary hover:underline">
+          <Link to={multisigAddress ? `/${multisigAddress}/transactions` : '/transactions'} className="text-sm text-primary hover:underline">
             ← Back to Transactions
           </Link>
           {/* Tags on the right */}

@@ -134,8 +134,8 @@ export default function TransactionsPage() {
               <PaginationContent>
                 {page > 1 && (
                   <PaginationPrevious
-                    onClick={() => navigate(`/transactions?page=${page - 1}`)}
-                    to={`/transactions?page=${page - 1}`}
+                    onClick={() => navigate(`/${multisigAddress}/transactions?page=${page - 1}`)}
+                    to={`/${multisigAddress}/transactions?page=${page - 1}`}
                   />
                 )}
                 <span className="mx-4 text-sm text-muted-foreground">
@@ -143,8 +143,8 @@ export default function TransactionsPage() {
                 </span>
                 {page < totalPages && (
                   <PaginationNext
-                    to={`/transactions?page=${page + 1}`}
-                    onClick={() => navigate(`/transactions?page=${page + 1}`)}
+                    to={`/${multisigAddress}/transactions?page=${page + 1}`}
+                    onClick={() => navigate(`/${multisigAddress}/transactions?page=${page + 1}`)}
                   />
                 )}
               </PaginationContent>

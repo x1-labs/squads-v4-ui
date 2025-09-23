@@ -25,7 +25,7 @@ export default function ViewDetailsButton({
 
   const handleClick = () => {
     // Navigate to the transaction details page
-    navigate(`/transactions/${transactionPda.toBase58()}`);
+    navigate(`/${multisigPda}/transactions/${transactionPda.toBase58()}`);
   };
 
   return (

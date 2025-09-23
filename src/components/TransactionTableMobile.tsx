@@ -88,7 +88,7 @@ export default function TransactionTableMobile({
         return (
           <div
             key={index}
-            onClick={() => navigate(`/transactions/${transaction.transactionPda}`)}
+            onClick={() => navigate(`/${multisigPda}/transactions/${transaction.transactionPda}`)}
             className={`cursor-pointer rounded-lg border border-border bg-card p-4 transition-colors ${
               isGreyedOut ? 'opacity-60 hover:opacity-80' : 'hover:bg-muted/50'
             }`}
@@ -191,7 +191,7 @@ function ActionButtons({
 
   return (
     <div className="flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
-      {showReject && <ReviewButton transactionPda={transactionPda} />}
+      {showReject && <ReviewButton multisigPda={multisigPda} transactionPda={transactionPda} />}
       {showReject && (
         <RejectButton
           multisigPda={multisigPda}

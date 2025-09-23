@@ -86,7 +86,7 @@ export default function TransactionTable({
     if (target.closest('button')) {
       return;
     }
-    navigate(`/transactions/${transactionPda}`);
+    navigate(`/${multisigPda}/transactions/${transactionPda}`);
   };
 
   return (
@@ -210,7 +210,7 @@ function ActionButtons({
 
   return (
     <div className="flex items-center justify-end gap-1">
-      {showReject && <ReviewButton transactionPda={transactionPda} />}
+      {showReject && <ReviewButton multisigPda={multisigPda} transactionPda={transactionPda} />}
       {showReject && (
         <RejectButton
           multisigPda={multisigPda}
