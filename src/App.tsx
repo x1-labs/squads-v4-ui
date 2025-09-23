@@ -19,6 +19,7 @@ import { Routes, Route, BrowserRouter } from 'react-router-dom';
 
 import './styles/global.css'; // ✅ Load Tailwind styles
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { AutoAddEnvSquads } from './components/AutoAddEnvSquads';
 
 const App = () => {
   const queryClient = new QueryClient();
@@ -30,6 +31,9 @@ const App = () => {
         <Wallet>
           <BrowserRouter>
             <div className="flex h-screen min-w-full flex-col bg-background dark:bg-background md:flex-row">
+              <Suspense fallback={null}>
+                <AutoAddEnvSquads />
+              </Suspense>
               <Suspense>
                 <TabNav />
               </Suspense>
