@@ -12,6 +12,7 @@ import {
 import { ChevronDown, Plus, Check, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { isEnvSquad } from '@/lib/envSquads';
+import { VaultSelector } from './VaultSelector';
 
 export const SquadSwitcher = () => {
   const { squads, selectedSquad, removeSquad, selectSquad } = useSquadConfig();
@@ -51,17 +52,18 @@ export const SquadSwitcher = () => {
   };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="mb-2 w-full justify-between">
-          <span
-            className={`truncate ${!selectedSquad || !isEnvSquad(selectedSquad) ? 'font-mono text-sm' : ''}`}
-          >
-            {getDisplayText()}
-          </span>
-          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </DropdownMenuTrigger>
+    <div className="mb-3 space-y-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" className="w-full justify-between">
+            <span
+              className={`truncate ${!selectedSquad || !isEnvSquad(selectedSquad) ? 'font-mono text-sm' : ''}`}
+            >
+              {getDisplayText()}
+            </span>
+            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </DropdownMenuTrigger>
       <DropdownMenuContent className="w-[250px]">
         {envSquads.length > 0 && (
           <>
@@ -125,5 +127,7 @@ export const SquadSwitcher = () => {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    {selectedSquad && <VaultSelector />}
+    </div>
   );
 };

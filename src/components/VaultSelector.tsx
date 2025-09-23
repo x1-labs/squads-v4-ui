@@ -12,8 +12,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
 import { useVaultIndex } from '~/hooks/useVaultIndex';
 
-// Generate vault indices from 0 to 15
-const vaultIndices = Array.from({ length: 256 }, (_, index) => ({
+// Generate vault indices from 0 to 99 (100 vaults total)
+const vaultIndices = Array.from({ length: 100 }, (_, index) => ({
   value: index.toString(),
   label: `Vault ${index}`,
 }));
@@ -36,17 +36,17 @@ export function VaultSelector() {
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-[200px] justify-between"
+          className="w-full justify-between"
         >
           {selectedValue ? `Vault ${selectedValue}` : 'Select Vault Index...'}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0">
+      <PopoverContent className="w-full p-0">
         <Command>
           <CommandInput placeholder="Search Vault Index..." />
           <CommandEmpty>No vault index found.</CommandEmpty>
-          <CommandGroup>
+          <CommandGroup className="max-h-[300px] overflow-y-auto">
             {vaultIndices.map((vaultIndex) => (
               <CommandItem key={vaultIndex.value} value={vaultIndex.value} onSelect={handleSelect}>
                 <Check
