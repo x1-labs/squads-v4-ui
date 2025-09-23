@@ -1,5 +1,6 @@
 import { useSquadConfig } from '@/hooks/useSquadConfig';
 import { useMultisigAddress } from '@/hooks/useMultisigAddress';
+import { useMultisigData } from '@/hooks/useMultisigData';
 import { SavedSquad } from '../types/squad';
 import { Button } from './ui/button';
 import {
@@ -9,13 +10,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { ChevronDown, Plus, Check, Trash2 } from 'lucide-react';
+import { ChevronDown, Plus, Check, Trash2, Copy } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { VaultSelector } from './VaultSelector';
+import { toast } from 'sonner';
 
 export const SquadSwitcher = () => {
   const { squads, selectedSquad, removeSquad, selectSquad } = useSquadConfig();
   const { setMultisigAddress } = useMultisigAddress();
+  const { multisigVault } = useMultisigData();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -61,6 +64,13 @@ export const SquadSwitcher = () => {
       return selectedSquad.name;
     }
     return `${selectedSquad.address.slice(0, 6)}...${selectedSquad.address.slice(-6)}`;
+  };
+
+  const handleCopyVaultAddress = () => {
+    if (multisigVault) {
+      navigator.clipboard.writeText(multisigVault.toBase58());
+      toast.success('Vault address copied to clipboard');
+    }
   };
 
   return (
@@ -124,6 +134,25 @@ export const SquadSwitcher = () => {
       </DropdownMenuContent>
     </DropdownMenu>
     {selectedSquad && <VaultSelector />}
+    {selectedSquad && multisigVault && (
+      <div className="rounded-lg border bg-muted/50 p-2">
+        <div className="mb-1 text-xs text-muted-foreground">Vault Address</div>
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-xs">
+            {multisigVault.toBase58().slice(0, 6)}...{multisigVault.toBase58().slice(-6)}
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0"
+            onClick={handleCopyVaultAddress}
+            title="Copy vault address"
+          >
+            <Copy className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+    )}
     </div>
   );
 };
