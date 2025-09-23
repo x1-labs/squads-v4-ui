@@ -32,9 +32,10 @@ export const NoSquadSelected = () => {
         return;
       }
 
-      // Just select the squad without saving
+      // Select the squad and navigate to its URL
       selectSquad.mutate(squadAddress);
       setMultisigAddress.mutate(squadAddress);
+      navigate(`/${squadAddress}`);
     } finally {
       setIsValidating(false);
     }

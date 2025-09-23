@@ -47,11 +47,13 @@ export default function TabNav() {
             </Link>
             <ul className="space-y-2 text-sm font-medium">
               {tabs.map((tab) => (
-                <li key={tab.route}>
+                <li key={tab.name}>
                   <Link
                     to={tab.route}
                     className={`flex items-center rounded-lg px-4 py-3 text-foreground ${
-                      (path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'))
+                      (tab.name === 'Settings' ? path === tab.route : 
+                       tab.name === 'Home' ? path === tab.route : 
+                       path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'))
                         ? 'bg-primary/20 dark:bg-primary/20'
                         : 'hover:bg-accent dark:hover:bg-accent'
                     }`}

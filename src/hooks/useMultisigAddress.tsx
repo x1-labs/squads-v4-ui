@@ -15,8 +15,16 @@ const getMultisigAddress = () => {
 export const useMultisigAddress = () => {
   const queryClient = useQueryClient();
   const { selectedAddress, addSquad } = useSquadConfig();
-  const params = useParams<{ multisigAddress?: string }>();
-  const urlMultisigAddress = params.multisigAddress;
+  
+  // Safely get params - might be undefined if not in a route context
+  let urlMultisigAddress: string | undefined;
+  try {
+    const params = useParams<{ multisigAddress?: string }>();
+    urlMultisigAddress = params?.multisigAddress;
+  } catch {
+    // If useParams fails (not in router context), just use undefined
+    urlMultisigAddress = undefined;
+  }
 
   const { data: multisigAddress } = useSuspenseQuery({
     queryKey: [MULTISIG_STORAGE_KEY, selectedAddress, urlMultisigAddress],
@@ -25,6 +33,15 @@ export const useMultisigAddress = () => {
       if (urlMultisigAddress) {
         return urlMultisigAddress;
       }
+      
+      // Don't use saved address on these routes - they should always show empty state or their own content
+      if (typeof window !== 'undefined') {
+        const path = window.location.pathname;
+        if (path === '/' || path === '/create' || path === '/settings') {
+          return null;
+        }
+      }
+      
       // Then check if we have a selected squad from config
       if (selectedAddress) {
         return selectedAddress;

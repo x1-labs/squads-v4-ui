@@ -74,10 +74,12 @@ export function MobileNav() {
           <nav className="flex-1 space-y-1 p-4">
             {tabs.map((tab) => {
               const isActive =
+                tab.name === 'Settings' ? path === tab.route :
+                tab.name === 'Home' ? path === tab.route :
                 (path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'));
               return (
                 <Link
-                  key={tab.route}
+                  key={tab.name}
                   to={tab.route}
                   onClick={handleNavClick}
                   className={`flex items-center rounded-lg px-4 py-3 text-base transition-colors ${
@@ -115,10 +117,12 @@ export function MobileNav() {
         <div className="grid h-16 grid-cols-6">
           {tabs.map((tab) => {
             const isActive =
+              tab.name === 'Settings' ? path === tab.route :
+              tab.name === 'Home' ? path === tab.route :
               (path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'));
             return (
               <Link
-                key={tab.route}
+                key={tab.name}
                 to={tab.route}
                 className={`flex flex-col items-center justify-center space-y-1 ${
                   isActive ? 'text-primary' : 'text-muted-foreground'
