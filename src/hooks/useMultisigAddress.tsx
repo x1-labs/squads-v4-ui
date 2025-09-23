@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { useSquadConfig } from './useSquadConfig';
 import { useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation } from 'react-router-dom';
 
 const MULTISIG_STORAGE_KEY = 'x-multisig-v4';
 

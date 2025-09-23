@@ -13,6 +13,7 @@ module.exports = {
     path: path.resolve(__dirname, 'dist'),
     filename: 'bundle.js', // Unique file name per build
     // chunkFilename: '[name].[contenthash].js', // Ensure chunks get unique names
+    publicPath: '/',
     clean: true,
     assetModuleFilename: 'assets/[hash][ext][query]',
     pathinfo: false,
