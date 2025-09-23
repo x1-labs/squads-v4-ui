@@ -600,8 +600,182 @@ export class SimpleDecoder {
       return this.parseStakeInstruction(data, accountKeys);
     }
 
+    // Vote Program
+    if (programIdStr === 'Vote111111111111111111111111111111111111111') {
+      return this.parseVoteInstruction(data, accountKeys);
+    }
+
     // Fallback
     return this.basicInstructionParse(programId, data, accountKeys);
+  }
+
+  /**
+   * Parse Vote program instructions
+   */
+  private parseVoteInstruction(
+    data: Buffer,
+    accountKeys: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>
+  ): DecodedInstruction {
+    const instructionType = data[0];
+    let instructionName = 'Unknown Vote Instruction';
+    let args: any = {};
+
+    switch (instructionType) {
+      case 0: // InitializeAccount
+        instructionName = 'Initialize Account';
+        break;
+      case 1: // Authorize
+        instructionName = 'Authorize';
+        if (data.length >= 37) {
+          try {
+            // The format for Authorize is:
+            // [1 byte discriminator][32 bytes new_authority][1 byte vote_authorize_type]
+            // But looking at the raw data: 01 00000018628ec0861cf21d790fd61633a7d4a5c780c538abf72fe6018cf33cfdb954bc 01 000000
+            // There seems to be padding at the beginning after the discriminator
+            // [01] = discriminator
+            // [00 00 00] = padding (3 bytes)
+            // [32 bytes] = new authority pubkey
+            // [01] = vote authorize type (1 = Voter, 0 = Withdrawer based on actual data)
+            // [00 00 00] = more padding
+            const newAuthority = new PublicKey(data.slice(4, 36));
+            const voteAuthorizeType = data[36];
+            // Reversed order - 1 = Voter, 0 = Withdrawer
+            const authorizeTypes = ['Withdrawer', 'Voter'];
+            args = {
+              newAuthority: newAuthority.toBase58(),
+              authorityType: authorizeTypes[voteAuthorizeType] || 'Unknown',
+              voteAccount: accountKeys[0]?.pubkey?.toBase58(),
+              authority: accountKeys[2]?.pubkey?.toBase58(),
+            };
+          } catch (e) {
+            console.error('Error parsing Vote Authorize instruction:', e);
+          }
+        }
+        break;
+      case 2: // Vote
+        instructionName = 'Vote';
+        break;
+      case 3: // Withdraw
+        instructionName = 'Withdraw';
+        if (data.length >= 9) {
+          try {
+            const lamports = data.readBigUInt64LE(1);
+            args = {
+              lamports: lamports.toString(),
+              voteAccount: accountKeys[0]?.pubkey?.toBase58(),
+              destination: accountKeys[1]?.pubkey?.toBase58(),
+              withdrawAuthority: accountKeys[2]?.pubkey?.toBase58()
+            };
+          } catch (e) {
+            console.error('Error parsing Vote Withdraw instruction:', e);
+          }
+        }
+        break;
+      case 4: // UpdateValidatorIdentity
+        instructionName = 'Update Validator Identity';
+        break;
+      case 5: // UpdateCommission
+        instructionName = 'Update Commission';
+        if (data.length >= 5) {
+          try {
+            // Based on actual raw data "0500000011":
+            // [05] = discriminator (5 for UpdateCommission)
+            // [00][00][00] = padding (3 bytes)
+            // [11] = commission (0x11 = 17 in decimal)
+            // So the format is: [discriminator][padding][commission]
+            const commission = data[4];
+            args = {
+              commission,
+              voteAccount: accountKeys[0]?.pubkey?.toBase58(),
+              withdrawAuthority: accountKeys[1]?.pubkey?.toBase58()
+            };
+          } catch (e) {
+            console.error('Error parsing UpdateCommission instruction:', e);
+          }
+        }
+        break;
+      case 6: // VoteSwitch
+        instructionName = 'Vote Switch';
+        break;
+      case 7: // AuthorizeChecked
+        instructionName = 'Authorize Checked';
+        break;
+      case 8: // UpdateVoteState
+        instructionName = 'Update Vote State';
+        break;
+      case 9: // UpdateVoteStateSwitch
+        instructionName = 'Update Vote State Switch';
+        break;
+      case 10: // AuthorizeWithSeed
+        instructionName = 'Authorize With Seed';
+        break;
+      case 11: // AuthorizeCheckedWithSeed
+        instructionName = 'Authorize Checked With Seed';
+        break;
+      case 12: // CompactUpdateVoteState
+        instructionName = 'Compact Update Vote State';
+        break;
+      case 13: // CompactUpdateVoteStateSwitch
+        instructionName = 'Compact Update Vote State Switch';
+        break;
+    }
+
+    // Map account names based on instruction type
+    const accountNames = this.getVoteAccountNames(instructionType);
+
+    // Return proper name format for registry matching
+    let registryInstructionName = instructionName;
+    if (instructionType === 5) {
+      registryInstructionName = 'updateCommission';
+    } else if (instructionType === 3) {
+      registryInstructionName = 'withdraw';
+    } else if (instructionType === 1) {
+      registryInstructionName = 'authorize';
+    }
+
+    return {
+      programId: 'Vote111111111111111111111111111111111111111',
+      programName: 'Vote Program',
+      instructionName: registryInstructionName,
+      instructionTitle: instructionName,
+      data: args,  // Pass args as data for summary components
+      accounts: accountKeys.map((key, i) => ({
+        name: accountNames[i] || `Account ${i}`,
+        pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
+        isSigner: key.isSigner || false,
+        isWritable: key.isWritable || false,
+      })),
+      args,
+      rawData: data.toString('hex').slice(0, 100),
+    };
+  }
+
+  /**
+   * Get account names for vote instructions
+   */
+  private getVoteAccountNames(instructionType: number): string[] {
+    switch (instructionType) {
+      case 0: // InitializeAccount
+        return ['Vote Account', 'Rent Sysvar', 'Clock Sysvar', 'Node Account'];
+      case 1: // Authorize  
+        return ['Vote Account', 'Clock Sysvar', 'Authority', 'New Authority'];
+      case 2: // Vote
+        return ['Vote Account', 'Slot Hashes Sysvar', 'Clock Sysvar', 'Authority'];
+      case 3: // Withdraw
+        return ['Vote Account', 'Destination', 'Withdraw Authority'];
+      case 4: // UpdateValidatorIdentity
+        return ['Vote Account', 'New Validator Identity', 'Withdraw Authority'];
+      case 5: // UpdateCommission
+        return ['Vote Account', 'Withdraw Authority'];
+      case 6: // VoteSwitch
+        return ['Vote Account', 'Vote Switch', 'Clock Sysvar', 'Authority'];
+      case 7: // AuthorizeChecked
+        return ['Vote Account', 'Clock Sysvar', 'Authority', 'New Authority'];
+      case 10: // AuthorizeWithSeed
+        return ['Vote Account', 'Clock Sysvar', 'Base Account', 'New Authority'];
+      default:
+        return [];
+    }
   }
 
   /**

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { ArrowDownUp, LucideHome, Settings, Users, Box, Menu, X, Coins } from 'lucide-react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { ArrowDownUp, LucideHome, Settings, Users, Box, Menu, X, Coins, Server } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
 import ConnectWallet from '@/components/ConnectWalletButton';
 import { SquadSwitcher } from './SquadSwitcher';
 import { MembershipWarning } from './MembershipWarning';
@@ -23,6 +23,7 @@ export function MobileNav() {
     { name: 'Staking', icon: <Coins className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/stake` : '/' },
     { name: 'Configuration', icon: <Users className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/config` : '/' },
     { name: 'Programs', icon: <Box className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/programs` : '/' },
+    { name: 'Validators', icon: <Server className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/validators ` : '/' },
     { name: 'Settings', icon: <Settings className="h-5 w-5" />, route: '/settings' },
   ];
 

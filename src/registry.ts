@@ -14,6 +14,9 @@ import { DeactivateStakeSummary } from './components/instructions/summaries/Deac
 import { WithdrawStakeSummary } from './components/instructions/summaries/WithdrawStakeSummary';
 import { InitializeStakeSummary } from './components/instructions/summaries/InitializeStakeSummary';
 import { CreateAccountWithSeedSummary } from './components/instructions/summaries/CreateAccountWithSeedSummary';
+import { UpdateCommissionSummary } from './components/instructions/summaries/UpdateCommissionSummary';
+import { VoteWithdrawSummary } from './components/instructions/summaries/VoteWithdrawSummary';
+import { VoteAuthorizeSummary } from './components/instructions/summaries/VoteAuthorizeSummary';
 
 // Import IDLs
 import squadsV4Idl from './lib/idls/squads-v4.json';
@@ -42,6 +45,25 @@ registry.register({
     },
     Allocate: {
       tags: { label: 'Allocate', color: 'gray', variant: 'subtle' },
+    },
+  },
+});
+
+registry.register({
+  programId: 'Vote111111111111111111111111111111111111111',
+  name: 'Vote Program',
+  instructions: {
+    updateCommission: {
+      summary: UpdateCommissionSummary,
+      tags: { label: 'Update Commission', color: 'purple', variant: 'subtle' },
+    },
+    withdraw: {
+      summary: VoteWithdrawSummary,
+      tags: { label: 'Withdraw Rewards', color: 'green', variant: 'subtle' },
+    },
+    authorize: {
+      summary: VoteAuthorizeSummary,
+      tags: { label: 'Change Authority', color: 'blue', variant: 'subtle' },
     },
   },
 });

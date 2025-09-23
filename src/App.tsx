@@ -15,6 +15,7 @@ import TransactionsPage from './routes/transactions';
 import TransactionDetailsPage from './routes/transaction-details';
 import ProgramsPage from './routes/programs';
 import StakePage from './routes/stake';
+import ValidatorsPage from './routes/validators';
 import { Routes, Route, BrowserRouter } from 'react-router-dom';
 
 import './styles/global.css'; // ✅ Load Tailwind styles
@@ -42,6 +43,7 @@ const App = () => {
                   <Suspense fallback={<p>Loading...</p>}>
                     <Routes>
                       <Route index path="/" element={<HomePage />} />
+                      <Route path="/config" element={<ConfigPage />} />
                       <Route path="/create" element={<CreatePage />} />
                       <Route path="/settings" element={<SettingsPage />} />
                       <Route path="/:multisigAddress" element={<HomePage />} />
@@ -50,6 +52,7 @@ const App = () => {
                       <Route path="/:multisigAddress/transactions" element={<TransactionsPage />} />
                       <Route path="/:multisigAddress/transactions/:transactionPda" element={<TransactionDetailsPage />} />
                       <Route path="/:multisigAddress/programs" element={<ProgramsPage />} />
+                      <Route path="/validators" element={<ValidatorsPage />} />
                       <Route path="*" element={<p>404 - Not Found</p>} /> {/* Catch-all route */}
                     </Routes>
                   </Suspense>

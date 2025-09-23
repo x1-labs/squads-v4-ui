@@ -1,4 +1,4 @@
-import { ArrowDownUp, LucideHome, Settings, Users, Box, Github, Coins } from 'lucide-react';
+import { ArrowDownUp, LucideHome, Settings, Users, Box, Github, Coins, Server } from 'lucide-react';
 import ConnectWallet from '@/components/ConnectWalletButton';
 import { Link } from 'react-router-dom';
 import { useLocation, useParams } from 'react-router-dom';
@@ -22,6 +22,7 @@ export default function TabNav() {
     { name: 'Staking', icon: <Coins />, route: currentMultisig ? `/${currentMultisig}/stake` : '/' },
     { name: 'Configuration', icon: <Users />, route: currentMultisig ? `/${currentMultisig}/config` : '/' },
     { name: 'Programs', icon: <Box />, route: currentMultisig ? `/${currentMultisig}/programs` : '/' },
+    { name: 'Validators', icon: <Server />, route: currentMultisig ? `/${currentMultisig}/validators` : '/' },
     { name: 'Settings', icon: <Settings />, route: '/settings' },
   ];
 
