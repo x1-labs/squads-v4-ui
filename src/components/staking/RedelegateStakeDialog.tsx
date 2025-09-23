@@ -36,7 +36,7 @@ import {
 } from '@/components/ui/select';
 import { RefreshCw } from 'lucide-react';
 
-export function RedelegateStakeDialog({ stakeAccounts }: { stakeAccounts: StakeAccountInfo[] }) {
+export function RedelegateStakeDialog({ stakeAccounts, vaultIndex = 0 }: { stakeAccounts: StakeAccountInfo[]; vaultIndex?: number }) {
   const [open, setOpen] = useState(false);
   const [selectedStakeAccount, setSelectedStakeAccount] = useState<string>('');
   const [validatorVoteAccount, setValidatorVoteAccount] = useState('');
@@ -94,7 +94,7 @@ export function RedelegateStakeDialog({ stakeAccounts }: { stakeAccounts: StakeA
 
       // Get vault PDA
       const vaultPda = multisig.getVaultPda({
-        index: 0,
+        index: vaultIndex,
         multisigPda: new PublicKey(multisigAddress!),
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       })[0];
@@ -135,7 +135,7 @@ export function RedelegateStakeDialog({ stakeAccounts }: { stakeAccounts: StakeA
         transactionIndex: transactionIndexBN,
         addressLookupTableAccounts: [],
         rentPayer: wallet.publicKey,
-        vaultIndex: 0,
+        vaultIndex: vaultIndex,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
 

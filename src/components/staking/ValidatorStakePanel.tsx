@@ -5,11 +5,13 @@ import { WithdrawStakeDialog } from './WithdrawStakeDialog';
 import { RedelegateStakeDialog } from './RedelegateStakeDialog';
 import { useStakeAccounts } from '@/hooks/useStakeAccounts';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
+import { useMultisigData } from '@/hooks/useMultisigData';
 import { Skeleton } from '../ui/skeleton';
 import { Badge } from '../ui/badge';
 
 export function ValidatorStakePanel() {
-  const { data: stakeAccounts, isLoading } = useStakeAccounts();
+  const { vaultIndex } = useMultisigData();
+  const { data: stakeAccounts, isLoading } = useStakeAccounts(vaultIndex);
 
   // Get unique validator addresses
   const validatorAddresses =
@@ -79,12 +81,12 @@ export function ValidatorStakePanel() {
             </CardDescription>
           </div>
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-            <DelegateStakeDialog />
+            <DelegateStakeDialog vaultIndex={vaultIndex} />
             {stakeAccounts && stakeAccounts.length > 0 && (
               <>
-                <RedelegateStakeDialog stakeAccounts={stakeAccounts} />
-                <UndelegateStakeDialog stakeAccounts={stakeAccounts} />
-                <WithdrawStakeDialog stakeAccounts={stakeAccounts} />
+                <RedelegateStakeDialog stakeAccounts={stakeAccounts} vaultIndex={vaultIndex} />
+                <UndelegateStakeDialog stakeAccounts={stakeAccounts} vaultIndex={vaultIndex} />
+                <WithdrawStakeDialog stakeAccounts={stakeAccounts} vaultIndex={vaultIndex} />
               </>
             )}
           </div>
