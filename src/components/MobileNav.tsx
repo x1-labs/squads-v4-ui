@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowDownUp, LucideHome, Settings, Users, Box, Menu, X, Coins, Server } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import ConnectWallet from '@/components/ConnectWalletButton';
 import { SquadSwitcher } from './SquadSwitcher';
 import { MembershipWarning } from './MembershipWarning';

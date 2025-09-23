@@ -52,7 +52,7 @@ const App = () => {
                       <Route path="/:multisigAddress/transactions" element={<TransactionsPage />} />
                       <Route path="/:multisigAddress/transactions/:transactionPda" element={<TransactionDetailsPage />} />
                       <Route path="/:multisigAddress/programs" element={<ProgramsPage />} />
-                      <Route path="/validators" element={<ValidatorsPage />} />
+                      <Route path="/:multisigAddress/validators" element={<ValidatorsPage />} />
                       <Route path="*" element={<p>404 - Not Found</p>} /> {/* Catch-all route */}
                     </Routes>
                   </Suspense>
