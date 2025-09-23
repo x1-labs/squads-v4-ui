@@ -126,14 +126,48 @@ export function createWithdrawInstruction(
   toPubkey: PublicKey,
   lamports: number
 ): TransactionInstruction {
-  const withdrawIx = VoteProgram.withdraw({
+  console.log('createWithdrawInstruction called with:');
+  console.log('  votePubkey:', votePubkey.toBase58());
+  console.log('  authorizedWithdrawer:', authorizedWithdrawer.toBase58());
+  console.log('  toPubkey:', toPubkey.toBase58());
+  console.log('  lamports:', lamports);
+  console.log('  lamports in SOL:', lamports / 1_000_000_000);
+  
+  // The SDK generates the instruction with the withdrawer as a signer
+  // When executed through multisig, the multisig will sign on behalf of the vault
+  const withdrawTx = VoteProgram.withdraw({
     votePubkey,
     authorizedWithdrawerPubkey: authorizedWithdrawer,
     toPubkey,
     lamports
   });
-  // Extract the instruction from the transaction
-  return withdrawIx.instructions[0];
+  
+  const sdkInstruction = withdrawTx.instructions[0];
+  
+  // For multisig execution, we need to ensure the withdrawer account isn't marked as signer
+  // The multisig program will handle the signature
+  const adjustedKeys = sdkInstruction.keys.map(key => {
+    if (key.pubkey.equals(authorizedWithdrawer)) {
+      // Remove signer flag for the withdrawer when it's the multisig vault
+      return { ...key, isSigner: false };
+    }
+    return key;
+  });
+  
+  const adjustedInstruction = new TransactionInstruction({
+    keys: adjustedKeys,
+    programId: sdkInstruction.programId,
+    data: sdkInstruction.data
+  });
+  
+  console.log('Adjusted instruction for multisig:');
+  console.log('  Data hex:', Buffer.from(adjustedInstruction.data).toString('hex'));
+  console.log('  Data length:', adjustedInstruction.data.length);
+  console.log('  Accounts:', adjustedInstruction.keys.map((k, i) => 
+    `[${i}] ${k.pubkey.toBase58()} (signer=${k.isSigner}, writable=${k.isWritable})`
+  ));
+  
+  return adjustedInstruction;
 }
 
 export function createAuthorizeWithdrawerInstruction(
