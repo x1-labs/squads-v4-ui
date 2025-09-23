@@ -28,7 +28,13 @@ export function useKnownValidators() {
 
   // Load known validators from localStorage
   useEffect(() => {
-    if (!multisigVault) return;
+    if (!multisigVault) {
+      // Clear validators when no vault is selected
+      globalValidators = [];
+      setKnownValidators([]);
+      globalListeners.forEach(listener => listener([]));
+      return;
+    }
     
     const storageKey = `known_validators_${multisigVault.toBase58()}`;
     const stored = localStorage.getItem(storageKey);
@@ -41,7 +47,16 @@ export function useKnownValidators() {
         globalListeners.forEach(listener => listener(parsed));
       } catch (e) {
         console.error('Failed to parse known validators:', e);
+        // Reset on error
+        globalValidators = [];
+        setKnownValidators([]);
+        globalListeners.forEach(listener => listener([]));
       }
+    } else {
+      // No stored validators for this vault, reset
+      globalValidators = [];
+      setKnownValidators([]);
+      globalListeners.forEach(listener => listener([]));
     }
   }, [multisigVault]);
 

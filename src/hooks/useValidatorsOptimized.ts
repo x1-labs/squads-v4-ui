@@ -23,7 +23,7 @@ export function useValidatorsOptimized() {
   // Create queries for each known validator
   const validatorQueries = useQueries({
     queries: knownValidators.map((validator: any) => ({
-      queryKey: ['validator', validator.votePubkey],
+      queryKey: ['validator', validator.votePubkey, multisigVault?.toBase58()],
       queryFn: async () => {
         try {
           const votePubkey = new PublicKey(validator.votePubkey);
@@ -42,6 +42,7 @@ export function useValidatorsOptimized() {
       enabled: !!multisigVault,
       staleTime: 5 * 60 * 1000,
       gcTime: 10 * 60 * 1000,
+      retry: 1, // Reduce retries for validators that don't belong to this vault
     })),
   });
 
