@@ -14,6 +14,7 @@ import SettingsPage from './routes/settings';
 import TransactionsPage from './routes/transactions';
 import TransactionDetailsPage from './routes/transaction-details';
 import ProgramsPage from './routes/programs';
+import StakePage from './routes/stake';
 import { Routes, Route, HashRouter } from 'react-router-dom';
 
 import './styles/global.css'; // ✅ Load Tailwind styles
@@ -40,6 +41,7 @@ const App = () => {
                       <Route path="/config" element={<ConfigPage />} />
                       <Route path="/create" element={<CreatePage />} />
                       <Route path="/settings" element={<SettingsPage />} />
+                      <Route path="/stake" element={<StakePage />} />
                       <Route path="/transactions" element={<TransactionsPage />} />
                       <Route
                         path="/transactions/:transactionPda"

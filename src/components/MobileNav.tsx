@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowDownUp, LucideHome, Settings, Users, Box, Menu, X } from 'lucide-react';
+import { ArrowDownUp, LucideHome, Settings, Users, Box, Menu, X, Coins } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import ConnectWallet from '@/components/ConnectWalletButton';
 import { SquadSwitcher } from './SquadSwitcher';
@@ -14,6 +14,7 @@ export function MobileNav() {
   const tabs = [
     { name: 'Home', icon: <LucideHome className="h-5 w-5" />, route: '/' },
     { name: 'Transactions', icon: <ArrowDownUp className="h-5 w-5" />, route: '/transactions/' },
+    { name: 'Staking', icon: <Coins className="h-5 w-5" />, route: '/stake/' },
     { name: 'Configuration', icon: <Users className="h-5 w-5" />, route: '/config/' },
     { name: 'Programs', icon: <Box className="h-5 w-5" />, route: '/programs/' },
     { name: 'Settings', icon: <Settings className="h-5 w-5" />, route: '/settings/' },
@@ -105,7 +106,7 @@ export function MobileNav() {
 
       {/* Mobile Bottom Navigation (Alternative/Complementary) */}
       <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background md:hidden">
-        <div className="grid h-16 grid-cols-5">
+        <div className="grid h-16 grid-cols-6">
           {tabs.map((tab) => {
             const isActive =
               (path!.startsWith(`${tab.route}/`) && tab.route !== '/') || tab.route === path;
