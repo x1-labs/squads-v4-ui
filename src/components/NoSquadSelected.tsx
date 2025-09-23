@@ -1,7 +1,7 @@
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, Search, Loader2, Radar, Check } from 'lucide-react';
+import { Plus, Users, Search, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -10,21 +10,15 @@ import { useMultisigAddress } from '@/hooks/useMultisigAddress';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { validateSquadAddress } from '@/lib/utils';
 import { getEnvSquadLabel } from '@/lib/envSquads';
-import { useDiscoverSquads } from '@/hooks/useDiscoverSquads';
-import { useWallet } from '@solana/wallet-adapter-react';
-import { Alert, AlertDescription } from './ui/alert';
 
 export const NoSquadSelected = () => {
   const navigate = useNavigate();
   const [squadAddress, setSquadAddress] = useState('');
   const [error, setError] = useState('');
   const [isValidating, setIsValidating] = useState(false);
-  const [addedSquads, setAddedSquads] = useState<Set<string>>(new Set());
-  const { selectSquad, addSquad } = useSquadConfig();
+  const { selectSquad } = useSquadConfig();
   const { setMultisigAddress } = useMultisigAddress();
   const { connection } = useMultisigData();
-  const { publicKey } = useWallet();
-  const { scanForSquads, isScanning, discoveredSquads, error: scanError } = useDiscoverSquads();
 
   const handleEnterSquad = async () => {
     setError('');
@@ -46,23 +40,6 @@ export const NoSquadSelected = () => {
     } finally {
       setIsValidating(false);
     }
-  };
-
-  const handleAddDiscoveredSquad = (address: string) => {
-    // Get environment label if available
-    const envLabel = getEnvSquadLabel(address);
-    
-    // Add the squad to saved squads
-    addSquad.mutate({
-      address,
-      name: envLabel || `Squad ${address.slice(0, 4)}...${address.slice(-4)}`,
-    });
-    
-    // Track that we've added this squad
-    setAddedSquads(prev => new Set(prev).add(address));
-    
-    // Don't navigate away - let user add multiple squads
-    // They can select a squad from the switcher when ready
   };
 
   return (
@@ -125,114 +102,17 @@ export const NoSquadSelected = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                onClick={() => navigate('/create')}
-                className="h-11"
-                variant="outline"
-                size="lg"
-              >
-                <Plus className="mr-2 h-5 w-5" />
-                Create New
-              </Button>
-              
-              <Button
-                onClick={scanForSquads}
-                disabled={!publicKey || isScanning}
-                className="h-11"
-                variant="outline"
-                size="lg"
-              >
-                {isScanning ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Scanning...
-                  </>
-                ) : (
-                  <>
-                    <Radar className="mr-2 h-5 w-5" />
-                    Scan for Squads
-                  </>
-                )}
-              </Button>
-            </div>
-            
-            {!publicKey && (
-              <p className="text-center text-sm text-muted-foreground">
-                Connect wallet to scan for existing squads
-              </p>
-            )}
+            <Button
+              onClick={() => navigate('/create')}
+              className="h-11 w-full"
+              variant="outline"
+              size="lg"
+            >
+              <Plus className="mr-2 h-5 w-5" />
+              Create New Squad
+            </Button>
           </CardContent>
         </Card>
-        
-        {/* Display discovered squads */}
-        {(discoveredSquads.length > 0 || scanError) && (
-          <Card>
-            <CardContent className="pt-6">
-              {scanError && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertDescription>{scanError}</AlertDescription>
-                </Alert>
-              )}
-              
-              {discoveredSquads.length > 0 && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-semibold">
-                      Found {discoveredSquads.length} Squad{discoveredSquads.length !== 1 ? 's' : ''}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Select a squad to add it to your saved list
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    {discoveredSquads.map((squad) => {
-                      const envLabel = getEnvSquadLabel(squad.address);
-                      const isAdded = addedSquads.has(squad.address);
-                      
-                      return (
-                        <div
-                          key={squad.address}
-                          className="flex items-center justify-between rounded-lg border p-3"
-                        >
-                          <div className="min-w-0 flex-1">
-                            {envLabel && (
-                              <div className="font-medium">{envLabel}</div>
-                            )}
-                            <div className="font-mono text-sm text-muted-foreground">
-                              {squad.address.slice(0, 8)}...{squad.address.slice(-8)}
-                            </div>
-                            <div className="mt-1 flex gap-4 text-xs text-muted-foreground">
-                              <span>{squad.memberCount} members</span>
-                              <span>Threshold: {squad.threshold}/{squad.memberCount}</span>
-                            </div>
-                          </div>
-                          <Button
-                            size="sm"
-                            onClick={() => handleAddDiscoveredSquad(squad.address)}
-                            disabled={isAdded}
-                            variant={isAdded ? "ghost" : "default"}
-                            className={isAdded ? "text-green-600" : ""}
-                          >
-                            {isAdded ? (
-                              <>
-                                <Check className="mr-1 h-4 w-4" />
-                                Added
-                              </>
-                            ) : (
-                              'Add'
-                            )}
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );
