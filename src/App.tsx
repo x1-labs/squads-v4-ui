@@ -38,16 +38,14 @@ const App = () => {
                   <Suspense fallback={<p>Loading...</p>}>
                     <Routes>
                       <Route index path="/" element={<HomePage />} />
-                      <Route path="/config" element={<ConfigPage />} />
                       <Route path="/create" element={<CreatePage />} />
                       <Route path="/settings" element={<SettingsPage />} />
-                      <Route path="/stake" element={<StakePage />} />
-                      <Route path="/transactions" element={<TransactionsPage />} />
-                      <Route
-                        path="/transactions/:transactionPda"
-                        element={<TransactionDetailsPage />}
-                      />
-                      <Route path="/programs" element={<ProgramsPage />} />
+                      <Route path="/:multisigAddress" element={<HomePage />} />
+                      <Route path="/:multisigAddress/config" element={<ConfigPage />} />
+                      <Route path="/:multisigAddress/stake" element={<StakePage />} />
+                      <Route path="/:multisigAddress/transactions" element={<TransactionsPage />} />
+                      <Route path="/:multisigAddress/transactions/:transactionPda" element={<TransactionDetailsPage />} />
+                      <Route path="/:multisigAddress/programs" element={<ProgramsPage />} />
                       <Route path="*" element={<p>404 - Not Found</p>} /> {/* Catch-all route */}
                     </Routes>
                   </Suspense>

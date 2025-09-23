@@ -1,22 +1,28 @@
 import { useState } from 'react';
 import { ArrowDownUp, LucideHome, Settings, Users, Box, Menu, X, Coins } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import ConnectWallet from '@/components/ConnectWalletButton';
 import { SquadSwitcher } from './SquadSwitcher';
 import { MembershipWarning } from './MembershipWarning';
 import { Button } from './ui/button';
+import { useMultisigData } from '@/hooks/useMultisigData';
 
 export function MobileNav() {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
   const path = location.pathname;
+  const params = useParams<{ multisigAddress?: string }>();
+  const { multisigAddress } = useMultisigData();
+  
+  // Use multisig from URL or from current selection
+  const currentMultisig = params.multisigAddress || multisigAddress || '';
 
   const tabs = [
-    { name: 'Home', icon: <LucideHome className="h-5 w-5" />, route: '/' },
-    { name: 'Transactions', icon: <ArrowDownUp className="h-5 w-5" />, route: '/transactions' },
-    { name: 'Staking', icon: <Coins className="h-5 w-5" />, route: '/stake' },
-    { name: 'Configuration', icon: <Users className="h-5 w-5" />, route: '/config' },
-    { name: 'Programs', icon: <Box className="h-5 w-5" />, route: '/programs' },
+    { name: 'Home', icon: <LucideHome className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}` : '/' },
+    { name: 'Transactions', icon: <ArrowDownUp className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/transactions` : '/' },
+    { name: 'Staking', icon: <Coins className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/stake` : '/' },
+    { name: 'Configuration', icon: <Users className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/config` : '/' },
+    { name: 'Programs', icon: <Box className="h-5 w-5" />, route: currentMultisig ? `/${currentMultisig}/programs` : '/' },
     { name: 'Settings', icon: <Settings className="h-5 w-5" />, route: '/settings' },
   ];
 

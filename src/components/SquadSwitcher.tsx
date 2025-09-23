@@ -22,7 +22,7 @@ export const SquadSwitcher = () => {
   const handleSelectSquad = (address: string) => {
     selectSquad.mutate(address);
     setMultisigAddress.mutate(address);
-    navigate('/');
+    navigate(`/${address}`);
   };
 
   const handleRemoveSquad = (address: string, e: React.MouseEvent) => {

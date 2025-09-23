@@ -1,20 +1,27 @@
 import { ArrowDownUp, LucideHome, Settings, Users, Box, Github, Coins } from 'lucide-react';
 import ConnectWallet from '@/components/ConnectWalletButton';
 import { Link } from 'react-router-dom';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { SquadSwitcher } from './SquadSwitcher';
 import { MembershipWarning } from './MembershipWarning';
 import { MobileNav } from './MobileNav';
+import { useMultisigData } from '@/hooks/useMultisigData';
 
 export default function TabNav() {
   const location = useLocation();
   const path = location.pathname;
+  const params = useParams<{ multisigAddress?: string }>();
+  const { multisigAddress } = useMultisigData();
+  
+  // Use multisig from URL or from current selection
+  const currentMultisig = params.multisigAddress || multisigAddress || '';
+  
   const tabs = [
-    { name: 'Home', icon: <LucideHome />, route: '/' },
-    { name: 'Transactions', icon: <ArrowDownUp />, route: '/transactions' },
-    { name: 'Staking', icon: <Coins />, route: '/stake' },
-    { name: 'Configuration', icon: <Users />, route: '/config' },
-    { name: 'Programs', icon: <Box />, route: '/programs' },
+    { name: 'Home', icon: <LucideHome />, route: currentMultisig ? `/${currentMultisig}` : '/' },
+    { name: 'Transactions', icon: <ArrowDownUp />, route: currentMultisig ? `/${currentMultisig}/transactions` : '/' },
+    { name: 'Staking', icon: <Coins />, route: currentMultisig ? `/${currentMultisig}/stake` : '/' },
+    { name: 'Configuration', icon: <Users />, route: currentMultisig ? `/${currentMultisig}/config` : '/' },
+    { name: 'Programs', icon: <Box />, route: currentMultisig ? `/${currentMultisig}/programs` : '/' },
     { name: 'Settings', icon: <Settings />, route: '/settings' },
   ];
 

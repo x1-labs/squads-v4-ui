@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { useSquadConfig } from './useSquadConfig';
 import { useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 
 const MULTISIG_STORAGE_KEY = 'x-multisig-v4';
 
@@ -14,11 +15,17 @@ const getMultisigAddress = () => {
 export const useMultisigAddress = () => {
   const queryClient = useQueryClient();
   const { selectedAddress, addSquad } = useSquadConfig();
+  const params = useParams<{ multisigAddress?: string }>();
+  const urlMultisigAddress = params.multisigAddress;
 
   const { data: multisigAddress } = useSuspenseQuery({
-    queryKey: [MULTISIG_STORAGE_KEY, selectedAddress],
+    queryKey: [MULTISIG_STORAGE_KEY, selectedAddress, urlMultisigAddress],
     queryFn: async () => {
-      // First check if we have a selected squad from config
+      // First check if we have a multisig address from URL
+      if (urlMultisigAddress) {
+        return urlMultisigAddress;
+      }
+      // Then check if we have a selected squad from config
       if (selectedAddress) {
         return selectedAddress;
       }
@@ -33,12 +40,14 @@ export const useMultisigAddress = () => {
     },
   });
 
-  // Sync selected squad address with multisig address
+  // Sync URL or selected squad address with multisig address
   useEffect(() => {
-    if (selectedAddress && selectedAddress !== multisigAddress) {
-      queryClient.setQueryData([MULTISIG_STORAGE_KEY], selectedAddress);
+    if (urlMultisigAddress) {
+      queryClient.setQueryData([MULTISIG_STORAGE_KEY, selectedAddress, urlMultisigAddress], urlMultisigAddress);
+    } else if (selectedAddress && selectedAddress !== multisigAddress) {
+      queryClient.setQueryData([MULTISIG_STORAGE_KEY, selectedAddress, urlMultisigAddress], selectedAddress);
     }
-  }, [selectedAddress, multisigAddress, queryClient]);
+  }, [urlMultisigAddress, selectedAddress, multisigAddress, queryClient]);
 
   const setMultisigAddress = useMutation({
     mutationFn: async (newAddress: string | null) => {
