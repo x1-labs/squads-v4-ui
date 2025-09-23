@@ -13,11 +13,11 @@ export function MobileNav() {
 
   const tabs = [
     { name: 'Home', icon: <LucideHome className="h-5 w-5" />, route: '/' },
-    { name: 'Transactions', icon: <ArrowDownUp className="h-5 w-5" />, route: '/transactions/' },
-    { name: 'Staking', icon: <Coins className="h-5 w-5" />, route: '/stake/' },
-    { name: 'Configuration', icon: <Users className="h-5 w-5" />, route: '/config/' },
-    { name: 'Programs', icon: <Box className="h-5 w-5" />, route: '/programs/' },
-    { name: 'Settings', icon: <Settings className="h-5 w-5" />, route: '/settings/' },
+    { name: 'Transactions', icon: <ArrowDownUp className="h-5 w-5" />, route: '/transactions' },
+    { name: 'Staking', icon: <Coins className="h-5 w-5" />, route: '/stake' },
+    { name: 'Configuration', icon: <Users className="h-5 w-5" />, route: '/config' },
+    { name: 'Programs', icon: <Box className="h-5 w-5" />, route: '/programs' },
+    { name: 'Settings', icon: <Settings className="h-5 w-5" />, route: '/settings' },
   ];
 
   const handleNavClick = () => {
@@ -68,7 +68,7 @@ export function MobileNav() {
           <nav className="flex-1 space-y-1 p-4">
             {tabs.map((tab) => {
               const isActive =
-                (path!.startsWith(`${tab.route}/`) && tab.route !== '/') || tab.route === path;
+                (path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'));
               return (
                 <Link
                   key={tab.route}
@@ -109,7 +109,7 @@ export function MobileNav() {
         <div className="grid h-16 grid-cols-6">
           {tabs.map((tab) => {
             const isActive =
-              (path!.startsWith(`${tab.route}/`) && tab.route !== '/') || tab.route === path;
+              (path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'));
             return (
               <Link
                 key={tab.route}

@@ -15,7 +15,7 @@ import TransactionsPage from './routes/transactions';
 import TransactionDetailsPage from './routes/transaction-details';
 import ProgramsPage from './routes/programs';
 import StakePage from './routes/stake';
-import { Routes, Route, HashRouter } from 'react-router-dom';
+import { Routes, Route, BrowserRouter } from 'react-router-dom';
 
 import './styles/global.css'; // ✅ Load Tailwind styles
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -28,7 +28,7 @@ const App = () => {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <Wallet>
-          <HashRouter>
+          <BrowserRouter>
             <div className="flex h-screen min-w-full flex-col bg-background dark:bg-background md:flex-row">
               <Suspense>
                 <TabNav />
@@ -63,7 +63,7 @@ const App = () => {
                 }}
               />
             </div>
-          </HashRouter>
+          </BrowserRouter>
         </Wallet>
       </QueryClientProvider>
     </ThemeProvider>

@@ -11,11 +11,11 @@ export default function TabNav() {
   const path = location.pathname;
   const tabs = [
     { name: 'Home', icon: <LucideHome />, route: '/' },
-    { name: 'Transactions', icon: <ArrowDownUp />, route: '/transactions/' },
-    { name: 'Staking', icon: <Coins />, route: '/stake/' },
-    { name: 'Configuration', icon: <Users />, route: '/config/' },
-    { name: 'Programs', icon: <Box />, route: '/programs/' },
-    { name: 'Settings', icon: <Settings />, route: '/settings/' },
+    { name: 'Transactions', icon: <ArrowDownUp />, route: '/transactions' },
+    { name: 'Staking', icon: <Coins />, route: '/stake' },
+    { name: 'Configuration', icon: <Users />, route: '/config' },
+    { name: 'Programs', icon: <Box />, route: '/programs' },
+    { name: 'Settings', icon: <Settings />, route: '/settings' },
   ];
 
   return (
@@ -44,7 +44,7 @@ export default function TabNav() {
                   <Link
                     to={tab.route}
                     className={`flex items-center rounded-lg px-4 py-3 text-foreground ${
-                      (path!.startsWith(`${tab.route}/`) && tab.route !== '/') || tab.route === path
+                      (path === tab.route || (path!.startsWith(`${tab.route}/`) && tab.route !== '/'))
                         ? 'bg-primary/20 dark:bg-primary/20'
                         : 'hover:bg-accent dark:hover:bg-accent'
                     }`}
