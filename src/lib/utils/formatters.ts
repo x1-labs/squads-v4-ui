@@ -91,7 +91,10 @@ export function formatXNTCompact(lamports: bigint | number | string | undefined 
     return '0 XNT';
   }
 
-  const lamportsBigInt = typeof lamports === 'bigint' ? lamports : BigInt(lamports.toString());
+  // Handle decimal numbers by rounding them first
+  const lamportsBigInt = typeof lamports === 'bigint' 
+    ? lamports 
+    : BigInt(Math.round(Number(lamports)));
   const XNT_DECIMALS = 9;
 
   // Convert to XNT as a number
