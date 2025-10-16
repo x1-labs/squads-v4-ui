@@ -1156,27 +1156,31 @@ export class SimpleDecoder {
             // [N+8-N+16]: space (u64)
             // [N+16-N+48]: owner pubkey (32 bytes)
 
+            // CreateAccountWithSeed uses bincode serialization with this structure:
+            // [0-4]: instruction index (u32) - already read
+            // [4-36]: base pubkey (32 bytes)
+            // [36-44]: seed length (u64 in bincode format)
+            // [44-N]: seed string (variable length)
+            // [N-N+8]: lamports (u64)
+            // [N+8-N+16]: space (u64)
+            // [N+16-N+48]: owner pubkey (32 bytes)
+            
             const base = new PublicKey(data.slice(4, 36));
-            const seedLength = data.readUInt32LE(36);
-            const seed = data.slice(40, 40 + seedLength).toString('utf-8');
+            // Bincode uses u64 for string length, not u32
+            const seedLength = Number(data.readBigUInt64LE(36));
+            const seed = data.slice(44, 44 + seedLength).toString('utf-8');
+            
+            const lamportsOffset = 44 + seedLength;
+            const lamports = data.readBigUInt64LE(lamportsOffset);
 
-            // Look for the pattern 0x0080e03779c31100 (5M XNT in LE)
-            const dataHex = data.toString('hex');
-            const pattern5M = '0080e03779c31100';
-            const patternIndex = dataHex.indexOf(pattern5M);
-
-            let lamportsOffset: number;
-            let lamports: bigint;
-
-            if (patternIndex >= 0) {
-              // Found the exact pattern for 5M XNT
-              lamportsOffset = patternIndex / 2;
-              lamports = data.readBigUInt64LE(lamportsOffset);
-            } else {
-              // Fallback: use the calculated offset right after seed
-              lamportsOffset = 40 + seedLength;
-              lamports = data.readBigUInt64LE(lamportsOffset);
-            }
+            console.log('CreateAccountWithSeed DEBUG:', {
+              dataLength: data.length,
+              seedLength,
+              seed,
+              lamportsOffset,
+              lamports: lamports.toString(),
+              lamportsFormatted: (Number(lamports) / 10**9).toLocaleString() + ' XNT'
+            });
 
             const space = data.readBigUInt64LE(lamportsOffset + 8);
             const owner = new PublicKey(data.slice(lamportsOffset + 16, lamportsOffset + 48));
