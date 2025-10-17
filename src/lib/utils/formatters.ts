@@ -24,7 +24,10 @@ export function formatXNT(lamports: bigint | number | string | undefined | null)
     return `${wholePart.toLocaleString()} XNT`;
   }
 
-  return `${wholePart.toLocaleString()}.${trimmedFractional} XNT`;
+  // Limit to 2 decimal places
+  const limitedFractional = trimmedFractional.substring(0, 2);
+
+  return `${wholePart.toLocaleString()}.${limitedFractional} XNT`;
 }
 
 /**

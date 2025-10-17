@@ -32,7 +32,7 @@ export function StakeAccountActions({
   const [mergeOpen, setMergeOpen] = useState(false);
 
   const canUndelegate = account.state === 'active' || account.state === 'activating';
-  const canWithdraw = account.state === 'inactive';
+  const canWithdraw = account.state === 'inactive' || account.state === 'deactivating';
   const canRedelegate = account.state === 'inactive';
   const canSplit = account.balance > account.rentExemptReserve + 0.1; // Must have enough to split (leave 0.1 XNT minimum)
   const canMerge = getCompatibleMergeAccounts(account, allStakeAccounts).length > 0; // Must have compatible accounts to merge with

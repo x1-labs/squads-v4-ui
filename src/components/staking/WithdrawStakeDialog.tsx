@@ -84,38 +84,44 @@ export function WithdrawStakeDialog({
   const selectedAccountInfo =
     preSelectedAccount || withdrawableAccounts.find((acc) => acc.address === selectedAccount);
 
-  // Calculate max withdrawable based on account state
+  // Calculate max withdrawable based on account state with safe buffer
+  // Based on Solana stake program validation:
+  // - lamports_and_reserve = lamports + reserve
+  // - if is_staked && lamports_and_reserve > stake_account.get_lamports() => error
+  // - if not full withdrawal && lamports_and_reserve > stake_account.get_lamports() => error
   let maxWithdrawable = 0;
   let maxWithdrawableWithRent = 0; // Full balance including rent (closes account)
+
+  const SAFETY_BUFFER_PERCENT = 0.01; // 1% safety buffer to prevent edge cases
+
   if (selectedAccountInfo) {
+    const totalBalance = selectedAccountInfo.balance;
+    const rentReserve = selectedAccountInfo.rentExemptReserve;
+    const isStaked = selectedAccountInfo.state === 'active' || selectedAccountInfo.state === 'activating';
     if (selectedAccountInfo.state === 'inactive') {
-      // Inactive accounts can withdraw everything
-      maxWithdrawable = selectedAccountInfo.balance - selectedAccountInfo.rentExemptReserve;
-      maxWithdrawableWithRent = selectedAccountInfo.balance; // Withdrawing this closes the account
+      // Inactive accounts can withdraw everything without buffer
+      // For non-full withdrawal: lamports + reserve <= total_balance
+      // Max safe withdrawal = total_balance - reserve
+      maxWithdrawable = Math.max(0, totalBalance - rentReserve);
+      // For full withdrawal (account closure): can withdraw everything
+      maxWithdrawableWithRent = totalBalance;
     } else if (selectedAccountInfo.state === 'deactivating') {
-      // Deactivating accounts can withdraw the deactivating amount
-      maxWithdrawable = selectedAccountInfo.balance - selectedAccountInfo.rentExemptReserve;
-      maxWithdrawableWithRent = selectedAccountInfo.balance; // Withdrawing this closes the account
-    } else if (
-      selectedAccountInfo.state === 'active' ||
-      selectedAccountInfo.state === 'activating'
-    ) {
-      // Active/activating accounts can only withdraw excess above staked amount
-      const stakedAmount = selectedAccountInfo.activeStake || 0;
-      const excessAmount =
-        selectedAccountInfo.balance - stakedAmount - selectedAccountInfo.rentExemptReserve;
-      maxWithdrawable = Math.max(0, excessAmount);
-      maxWithdrawableWithRent = 0; // Cannot close active accounts
+      // Deactivating accounts can only withdraw the inactive portion
+      const inactiveAmount = selectedAccountInfo.inactiveStake || 0;
+      const safetyBuffer = inactiveAmount * SAFETY_BUFFER_PERCENT;
+      maxWithdrawable = Math.max(0, inactiveAmount - safetyBuffer);
+      // For account closure, can withdraw full inactive amount + rent exempt portion
+      maxWithdrawableWithRent = Math.max(0, inactiveAmount + rentReserve);
     }
   }
 
   const parsedAmount = parseFloat(amount);
   const isAmountValid =
-    !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= maxWithdrawableWithRent;
-  const isClosingAccount = parsedAmount === maxWithdrawableWithRent && maxWithdrawableWithRent > 0;
+    !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= maxWithdrawableWithRent + 0.001; // Small tolerance for floating point precision
+  const isClosingAccount = Math.abs(parsedAmount - maxWithdrawableWithRent) < 0.001 && maxWithdrawableWithRent > 0;
 
   const withdrawStake = async () => {
-    if (!wallet.publicKey || !multisigAddress || !selectedAccount) {
+    if (!wallet.publicKey || !multisigAddress || !selectedAccountInfo) {
       throw 'Wallet not connected or no account selected';
     }
 
@@ -128,7 +134,7 @@ export function WithdrawStakeDialog({
     const lamports = parsedAmount * LAMPORTS_PER_SOL;
 
     const withdrawInstruction = createWithdrawStakeInstruction(
-      new PublicKey(selectedAccount),
+      new PublicKey(selectedAccountInfo.address),
       vaultAddress,
       lamports
     );
@@ -306,10 +312,16 @@ export function WithdrawStakeDialog({
                     {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
                   </span>
                 </div>
-                {maxWithdrawable === 0 && selectedAccountInfo.state === 'active' && (
+                {maxWithdrawable === 0 && (selectedAccountInfo.state === 'active' || selectedAccountInfo.state === 'activating') && (
                   <div className="mt-2 flex items-center gap-1 text-xs text-yellow-600">
                     <AlertCircle className="h-3 w-3" />
-                    <span>Deactivate stake first to withdraw</span>
+                    <span>Account balance too low for safe withdrawal</span>
+                  </div>
+                )}
+                {maxWithdrawable === 0 && selectedAccountInfo.state === 'deactivating' && (
+                  <div className="mt-2 flex items-center gap-1 text-xs text-yellow-600">
+                    <AlertCircle className="h-3 w-3" />
+                    <span>Wait for deactivation to complete or account balance too low</span>
                   </div>
                 )}
                 {maxWithdrawableWithRent > maxWithdrawable && (
@@ -340,14 +352,14 @@ export function WithdrawStakeDialog({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setAmount(maxWithdrawable.toString())}
+                    onClick={() => setAmount(maxWithdrawable.toFixed(2))}
                     className="w-full"
                   >
                     <span className="truncate">
                       Max • {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
                     </span>
                   </Button>
-                  {maxWithdrawableWithRent > maxWithdrawable && (
+                  {maxWithdrawableWithRent > maxWithdrawable && selectedAccountInfo.state !== 'deactivating' && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -370,6 +382,11 @@ export function WithdrawStakeDialog({
                 <span>
                   Max withdrawable: {formatXNTCompact(maxWithdrawableWithRent * LAMPORTS_PER_SOL)}
                 </span>
+              </div>
+            )}
+            {selectedAccountInfo && maxWithdrawable > 0 && selectedAccountInfo.state === 'deactivating' && (
+              <div className="mt-1 text-xs text-muted-foreground">
+                💡 Includes 1% safety buffer for deactivating stakes to prevent Solana validation errors
               </div>
             )}
             {isClosingAccount && (
@@ -408,7 +425,7 @@ export function WithdrawStakeDialog({
                 error: (e) => `Failed to propose: ${e}`,
               })
             }
-            disabled={!selectedAccount || !isAmountValid}
+            disabled={!selectedAccountInfo || !isAmountValid}
             className="w-full"
             size="lg"
           >

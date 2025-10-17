@@ -29,13 +29,13 @@ export function ValidatorStakePanel() {
   // Calculate totals
   const totals = stakeAccounts?.reduce(
     (acc, account) => {
-      acc.totalDelegated += account.delegated;
+      acc.totalBalance += account.balance;
       acc.totalActive += account.activeStake || 0;
       acc.totalInactive += account.inactiveStake || 0;
       return acc;
     },
-    { totalDelegated: 0, totalActive: 0, totalInactive: 0 }
-  ) || { totalDelegated: 0, totalActive: 0, totalInactive: 0 };
+    { totalBalance: 0, totalActive: 0, totalInactive: 0 }
+  ) || { totalBalance: 0, totalActive: 0, totalInactive: 0 };
 
   const getStatusBadgeVariant = (
     state: string
@@ -68,12 +68,12 @@ export function ValidatorStakePanel() {
             </div>
           </div>
           {/* Summary Stats */}
-          {totals.totalDelegated > 0 && (
+          {totals.totalBalance > 0 && (
             <div className="grid grid-cols-1 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-3 sm:gap-4">
               <div className="text-center">
-                <p className="text-xs text-muted-foreground">Total Delegated</p>
+                <p className="text-xs text-muted-foreground">Total Balance</p>
                 <p className="text-sm font-medium sm:text-base">
-                  {totals.totalDelegated.toLocaleString(undefined, {
+                  {totals.totalBalance.toLocaleString(undefined, {
                     maximumFractionDigits: 2,
                   })}{' '}
                   XNT
@@ -113,9 +113,9 @@ export function ValidatorStakePanel() {
               <h3 className="mb-3 text-sm font-medium text-muted-foreground">Stake Accounts</h3>
               {stakeAccounts
                 .sort((a, b) => {
-                  // Primary sort: delegated amount (highest to lowest)
-                  if (b.delegated !== a.delegated) {
-                    return b.delegated - a.delegated;
+                  // Primary sort: balance amount (highest to lowest)
+                  if (b.balance !== a.balance) {
+                    return b.balance - a.balance;
                   }
                   // Secondary sort: vote account alphabetically (for consistent ordering when amounts are equal)
                   const aValidator = a.delegatedValidator || '';
@@ -225,7 +225,7 @@ export function ValidatorStakePanel() {
                         <div className="text-left sm:text-right">
                           <div className="space-y-1">
                             <p className="text-sm font-medium sm:text-base">
-                              {account.delegated.toLocaleString(undefined, {
+                              {(account.state === 'inactive' ? account.balance : account.delegated).toLocaleString(undefined, {
                                 maximumFractionDigits: 2,
                               })}{' '}
                               XNT
