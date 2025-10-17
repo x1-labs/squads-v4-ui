@@ -190,7 +190,7 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
             }
           }}
         >
-          Delegate
+          Stake
         </Button>
       </DialogTrigger>
       <DialogContent>

@@ -5,17 +5,14 @@ import {
   LAMPORTS_PER_SOL,
   Authorized,
   Lockup,
-  SystemProgram,
   TransactionInstruction,
-  SYSVAR_CLOCK_PUBKEY,
-  SYSVAR_RENT_PUBKEY,
-  SYSVAR_STAKE_HISTORY_PUBKEY,
-  Keypair,
 } from '@solana/web3.js';
+import { getStakeActivation } from '@anza-xyz/solana-rpc-get-stake-activation';
 
 export interface StakeAccountInfo {
   address: string;
   balance: number;
+  delegated: number;
   state: 'activating' | 'active' | 'deactivating' | 'inactive';
   delegatedValidator?: string;
   activationEpoch?: number;
@@ -23,14 +20,6 @@ export interface StakeAccountInfo {
   rentExemptReserve: number;
   activeStake?: number;
   inactiveStake?: number;
-}
-
-export interface ValidatorInfo {
-  address: string;
-  identity?: string;
-  name?: string;
-  commission?: number;
-  activatedStake?: number;
 }
 
 export async function getStakeAccountsForVault(
@@ -59,60 +48,36 @@ export async function getStakeAccountsForVault(
         const stake = info.stake;
         const meta = info.meta;
 
-        let state: StakeAccountInfo['state'] = 'inactive';
-        const currentEpoch = (await connection.getEpochInfo()).epoch;
+        const stakeActivation = await getStakeActivation(connection as any, account.pubkey);
+        console.log('Stake Activation for', account.pubkey.toBase58(), ':', stakeActivation);
 
-        // Check activation and deactivation epochs - they might be in delegation object
-        const delegation = stake?.delegation;
-        const activationEpoch = delegation?.activationEpoch
-          ? Number(delegation.activationEpoch)
-          : stake?.activationEpoch
-            ? Number(stake.activationEpoch)
-            : null;
-        const deactivationEpoch = delegation?.deactivationEpoch
-          ? Number(delegation.deactivationEpoch)
-          : stake?.deactivationEpoch
-            ? Number(stake.deactivationEpoch)
-            : null;
-
-        // MAX_EPOCH is used to indicate the stake is not deactivating
-        const MAX_EPOCH = 18446744073709551615;
-
-        if (deactivationEpoch && deactivationEpoch !== MAX_EPOCH) {
-          // Stake is deactivating or deactivated
-          if (deactivationEpoch <= currentEpoch) {
-            state = 'inactive';
-          } else {
-            state = 'deactivating';
-          }
-        } else if (activationEpoch !== null) {
-          // Stake is activating or active
-          if (activationEpoch <= currentEpoch) {
-            state = 'active';
-          } else {
-            state = 'activating';
-          }
-        }
+        let state = 'inactive';
+        if (stakeActivation.status === 'activating') state = 'activating';
+        else if (stakeActivation.status === 'deactivating') state = 'deactivating';
 
         stakeAccounts.push({
           address: account.pubkey.toBase58(),
           balance: account.account.lamports / LAMPORTS_PER_SOL,
-          state,
+          delegated: stake.delegation.stake / LAMPORTS_PER_SOL,
+          state: state as 'activating' | 'active' | 'deactivating' | 'inactive',
           delegatedValidator: stake.delegation?.voter,
           activationEpoch: stake.activationEpoch,
           deactivationEpoch: stake.deactivationEpoch,
           rentExemptReserve: meta.rentExemptReserve / LAMPORTS_PER_SOL,
-          activeStake: stake.delegation?.stake
-            ? stake.delegation.stake / LAMPORTS_PER_SOL
-            : undefined,
+          activeStake: Number(stakeActivation.active / BigInt(LAMPORTS_PER_SOL)),
+          inactiveStake: Number(stakeActivation.inactive / BigInt(LAMPORTS_PER_SOL)),
         });
       } else if (parsedData.parsed?.type === 'initialized') {
         const info = parsedData.parsed.info;
         const meta = info.meta;
+        const stake = info?.stake;
+
+        const delegated = stake?.delegation?.stake ? stake.delegation.stake / LAMPORTS_PER_SOL : 0;
 
         stakeAccounts.push({
           address: account.pubkey.toBase58(),
           balance: account.account.lamports / LAMPORTS_PER_SOL,
+          delegated: delegated,
           state: 'inactive',
           rentExemptReserve: meta.rentExemptReserve / LAMPORTS_PER_SOL,
         });

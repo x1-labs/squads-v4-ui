@@ -24,30 +24,34 @@ import { useAccess } from '@/hooks/useAccess';
 import { waitForConfirmation } from '@/lib/transactionConfirmation';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import { createDeactivateStakeInstruction } from '@/lib/staking/validatorStakeUtils';
-import { StakeAccountInfo } from '@/lib/staking/validatorStakeUtils';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { StakeAccountInfo as StakeAccountData } from '@/lib/staking/validatorStakeUtils';
+import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
 import { Input } from '@/components/ui/input';
+import { StakeAccountDisplay } from './StakeAccountDisplay';
 
 type UndelegateStakeDialogProps = {
-  stakeAccounts: StakeAccountInfo[];
+  stakeAccounts?: StakeAccountData[];
   vaultIndex?: number;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  preSelectedAccount?: StakeAccountData;
 };
 
 export function UndelegateStakeDialog({
-  stakeAccounts,
+  stakeAccounts = [],
   vaultIndex = 0,
+  isOpen: externalIsOpen,
+  onOpenChange: externalOnOpenChange,
+  preSelectedAccount,
 }: UndelegateStakeDialogProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
+  const setIsOpen = externalOnOpenChange || setInternalIsOpen;
   const closeDialog = () => setIsOpen(false);
+
   const wallet = useWallet();
   const walletModal = useWalletModal();
-  const [selectedAccount, setSelectedAccount] = useState<string>('');
+  const [selectedAccount, setSelectedAccount] = useState<string>(preSelectedAccount?.address || '');
   const [memo, setMemo] = useState('');
   const { connection, programId, multisigAddress } = useMultisigData();
   const queryClient = useQueryClient();
@@ -56,6 +60,14 @@ export function UndelegateStakeDialog({
   const activeAccounts = stakeAccounts.filter(
     (account) => account.state === 'active' || account.state === 'activating'
   );
+
+  // Get unique validator addresses for metadata
+  const validatorAddresses = [
+    ...activeAccounts.map((account) => account.delegatedValidator),
+    preSelectedAccount?.delegatedValidator,
+  ].filter((v): v is string => !!v);
+
+  const { data: validatorMetadata } = useValidatorsMetadata(validatorAddresses);
 
   const undelegate = async () => {
     if (!wallet.publicKey || !multisigAddress || !selectedAccount) {
@@ -151,51 +163,36 @@ export function UndelegateStakeDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          disabled={!isMember || activeAccounts.length === 0}
-          onClick={(e) => {
-            if (!wallet.publicKey) {
-              e.preventDefault();
-              walletModal.setVisible(true);
-              return;
-            } else {
-              setIsOpen(true);
-            }
-          }}
-        >
-          Undelegate
-        </Button>
-      </DialogTrigger>
+      {externalIsOpen === undefined && (
+        <DialogTrigger asChild>
+          <Button
+            variant="outline"
+            disabled={!isMember || activeAccounts.length === 0}
+            onClick={(e) => {
+              if (!wallet.publicKey) {
+                e.preventDefault();
+                walletModal.setVisible(true);
+                return;
+              } else {
+                setIsOpen(true);
+              }
+            }}
+          >
+            Undelegate
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Undelegate Stake</DialogTitle>
+          <DialogTitle>Unstake</DialogTitle>
           <DialogDescription>
             Deactivate a stake account. After deactivation, you'll need to wait for the cooldown
             period before withdrawing.
           </DialogDescription>
         </DialogHeader>
 
-        <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-          <SelectTrigger>
-            <SelectValue placeholder="Select stake account to undelegate" />
-          </SelectTrigger>
-          <SelectContent>
-            {activeAccounts.map((account) => (
-              <SelectItem key={account.address} value={account.address}>
-                <div className="flex w-full items-center justify-between">
-                  <span className="font-mono text-xs">
-                    {account.address.slice(0, 8)}...{account.address.slice(-8)}
-                  </span>
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {account.balance.toFixed(2)} XNT
-                  </span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Account Info - No Selection Needed */}
+        {preSelectedAccount && <StakeAccountDisplay account={preSelectedAccount} />}
 
         <Input
           placeholder="Memo (optional)"
@@ -219,7 +216,7 @@ export function UndelegateStakeDialog({
           }
           disabled={!selectedAccount}
         >
-          Undelegate Stake
+          Unstake
         </Button>
       </DialogContent>
     </Dialog>

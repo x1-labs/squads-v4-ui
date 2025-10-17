@@ -27,7 +27,8 @@ import { useAccess } from '@/hooks/useAccess';
 import { waitForConfirmation } from '@/lib/transactionConfirmation';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import { createWithdrawStakeInstruction } from '@/lib/staking/validatorStakeUtils';
-import { StakeAccountInfo } from '@/lib/staking/validatorStakeUtils';
+import { StakeAccountInfo as StakeAccountData } from '@/lib/staking/validatorStakeUtils';
+import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
 import {
   Select,
   SelectContent,
@@ -37,18 +38,31 @@ import {
 } from '@/components/ui/select';
 import { formatXNTCompact } from '@/lib/utils/formatters';
 import { AlertCircle, Wallet, ArrowDown } from 'lucide-react';
+import { StakeAccountDisplay } from './StakeAccountDisplay';
 
 type WithdrawStakeDialogProps = {
-  stakeAccounts: StakeAccountInfo[];
+  stakeAccounts?: StakeAccountData[];
   vaultIndex?: number;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  preSelectedAccount?: StakeAccountData;
 };
 
-export function WithdrawStakeDialog({ stakeAccounts, vaultIndex = 0 }: WithdrawStakeDialogProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function WithdrawStakeDialog({
+  stakeAccounts = [],
+  vaultIndex = 0,
+  isOpen: externalIsOpen,
+  onOpenChange: externalOnOpenChange,
+  preSelectedAccount,
+}: WithdrawStakeDialogProps) {
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
+  const setIsOpen = externalOnOpenChange || setInternalIsOpen;
   const closeDialog = () => setIsOpen(false);
+
   const wallet = useWallet();
   const walletModal = useWalletModal();
-  const [selectedAccount, setSelectedAccount] = useState<string>('');
+  const [selectedAccount, setSelectedAccount] = useState<string>(preSelectedAccount?.address || '');
   const [amount, setAmount] = useState<string>('');
   const [memo, setMemo] = useState('');
   const { connection, programId, multisigAddress } = useMultisigData();
@@ -59,7 +73,16 @@ export function WithdrawStakeDialog({ stakeAccounts, vaultIndex = 0 }: WithdrawS
   // Active accounts can withdraw excess, inactive can withdraw all
   const withdrawableAccounts = stakeAccounts;
 
-  const selectedAccountInfo = withdrawableAccounts.find((acc) => acc.address === selectedAccount);
+  // Get unique validator addresses for metadata
+  const validatorAddresses = [
+    ...withdrawableAccounts.map((account) => account.delegatedValidator),
+    preSelectedAccount?.delegatedValidator,
+  ].filter((v): v is string => !!v);
+
+  const { data: validatorMetadata } = useValidatorsMetadata(validatorAddresses);
+
+  const selectedAccountInfo =
+    preSelectedAccount || withdrawableAccounts.find((acc) => acc.address === selectedAccount);
 
   // Calculate max withdrawable based on account state
   let maxWithdrawable = 0;
@@ -189,23 +212,25 @@ export function WithdrawStakeDialog({ stakeAccounts, vaultIndex = 0 }: WithdrawS
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          disabled={!isMember || stakeAccounts.length === 0}
-          onClick={(e) => {
-            if (!wallet.publicKey) {
-              e.preventDefault();
-              walletModal.setVisible(true);
-              return;
-            } else {
-              setIsOpen(true);
-            }
-          }}
-        >
-          Withdraw
-        </Button>
-      </DialogTrigger>
+      {externalIsOpen === undefined && (
+        <DialogTrigger asChild>
+          <Button
+            variant="outline"
+            disabled={!isMember || stakeAccounts.length === 0}
+            onClick={(e) => {
+              if (!wallet.publicKey) {
+                e.preventDefault();
+                walletModal.setVisible(true);
+                return;
+              } else {
+                setIsOpen(true);
+              }
+            }}
+          >
+            Withdraw
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -218,56 +243,8 @@ export function WithdrawStakeDialog({ stakeAccounts, vaultIndex = 0 }: WithdrawS
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Account Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="stake-account">Select Stake Account</Label>
-            <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-              <SelectTrigger id="stake-account">
-                <SelectValue placeholder="Choose a stake account" />
-              </SelectTrigger>
-              <SelectContent>
-                {withdrawableAccounts.map((account) => {
-                  const canWithdraw =
-                    account.state === 'inactive' ||
-                    account.state === 'deactivating' ||
-                    account.balance - (account.activeStake || 0) - account.rentExemptReserve > 0;
-                  return (
-                    <SelectItem key={account.address} value={account.address}>
-                      <div className="flex w-full items-center justify-between">
-                        <div className="flex flex-col">
-                          <span className="font-mono text-xs">
-                            {account.address.slice(0, 8)}...{account.address.slice(-8)}
-                          </span>
-                          <div className="flex items-center gap-2 text-xs">
-                            <span
-                              className={`capitalize ${
-                                account.state === 'active'
-                                  ? 'text-green-600'
-                                  : account.state === 'inactive'
-                                    ? 'text-gray-600'
-                                    : account.state === 'deactivating'
-                                      ? 'text-orange-600'
-                                      : 'text-yellow-600'
-                              }`}
-                            >
-                              {account.state}
-                            </span>
-                            <span className="text-muted-foreground">•</span>
-                            <span className="text-muted-foreground">
-                              {formatXNTCompact(account.balance * LAMPORTS_PER_SOL)}
-                            </span>
-                            {!canWithdraw && (
-                              <span className="text-xs text-red-500">(No withdrawable)</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Account Info - No Selection Needed */}
+          {selectedAccountInfo && <StakeAccountDisplay account={selectedAccountInfo} />}
 
           {/* Account Details */}
           {selectedAccountInfo && (

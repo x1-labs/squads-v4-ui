@@ -23,23 +23,36 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import * as multisig from '@sqds/multisig';
 import { createDelegateStakeInstruction } from '@/lib/staking/validatorStakeUtils';
-import { StakeAccountInfo } from '@/lib/staking/validatorStakeUtils';
+import { StakeAccountInfo as StakeAccountData } from '@/lib/staking/validatorStakeUtils';
 import { toast } from 'sonner';
 import { waitForConfirmation } from '@/lib/transactionConfirmation';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { RefreshCw } from 'lucide-react';
+import { StakeAccountDisplay } from './StakeAccountDisplay';
 
-export function RedelegateStakeDialog({ stakeAccounts, vaultIndex = 0 }: { stakeAccounts: StakeAccountInfo[]; vaultIndex?: number }) {
-  const [open, setOpen] = useState(false);
-  const [selectedStakeAccount, setSelectedStakeAccount] = useState<string>('');
-  const [validatorVoteAccount, setValidatorVoteAccount] = useState('');
+type RedelegateStakeDialogProps = {
+  stakeAccounts: StakeAccountData[];
+  vaultIndex?: number;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  preSelectedAccount?: StakeAccountData;
+};
+
+export function RedelegateStakeDialog({
+  stakeAccounts,
+  vaultIndex = 0,
+  isOpen: externalIsOpen,
+  onOpenChange: externalOnOpenChange,
+  preSelectedAccount,
+}: RedelegateStakeDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = externalIsOpen !== undefined ? externalIsOpen : internalOpen;
+  const setOpen = externalOnOpenChange || setInternalOpen;
+
+  const selectedStakeAccount = preSelectedAccount?.address || '';
+  const [validatorVoteAccount, setValidatorVoteAccount] = useState(
+    preSelectedAccount?.delegatedValidator || ''
+  );
   const [memo, setMemo] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,22 +66,13 @@ export function RedelegateStakeDialog({ stakeAccounts, vaultIndex = 0 }: { stake
   // These accounts may still have a delegatedValidator field from their previous delegation
   const undelegatedAccounts = stakeAccounts.filter((account) => account.state === 'inactive');
 
-  if (undelegatedAccounts.length === 0) {
+  if (undelegatedAccounts.length === 0 && !preSelectedAccount) {
     return null;
   }
 
-  const handleStakeAccountChange = (value: string) => {
-    setSelectedStakeAccount(value);
-    // Prefill the validator with the previous delegated validator if available
-    const account = undelegatedAccounts.find((acc) => acc.address === value);
-    if (account?.delegatedValidator) {
-      setValidatorVoteAccount(account.delegatedValidator);
-    }
-  };
-
   const handleSubmit = async () => {
     if (!selectedStakeAccount || !validatorVoteAccount) {
-      setError('Please select a stake account and enter a validator address');
+      setError('Please enter a validator address');
       return;
     }
 
@@ -178,7 +182,6 @@ export function RedelegateStakeDialog({ stakeAccounts, vaultIndex = 0 }: { stake
 
       toast.success('Stake re-delegated successfully!', { id: 'transaction' });
       setOpen(false);
-      setSelectedStakeAccount('');
       setValidatorVoteAccount('');
       setMemo('');
       await queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -194,63 +197,38 @@ export function RedelegateStakeDialog({ stakeAccounts, vaultIndex = 0 }: { stake
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9"
-          disabled={!isMember}
-          onClick={(e) => {
-            if (!wallet.publicKey) {
-              e.preventDefault();
-              walletModal.setVisible(true);
-              return;
-            } else {
-              setOpen(true);
-            }
-          }}
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Re-delegate
-        </Button>
-      </DialogTrigger>
+      {externalIsOpen === undefined && (
+        <DialogTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9"
+            disabled={!isMember}
+            onClick={(e) => {
+              if (!wallet.publicKey) {
+                e.preventDefault();
+                walletModal.setVisible(true);
+                return;
+              } else {
+                setOpen(true);
+              }
+            }}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Re-delegate
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Re-delegate Stake</DialogTitle>
+          <DialogTitle>Restake</DialogTitle>
           <DialogDescription>
-            Re-delegate an undelegated stake account to a new validator.
+            Restake an undelegated stake account to a new validator.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="stake-account">Stake Account</Label>
-            <Select value={selectedStakeAccount} onValueChange={handleStakeAccountChange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select an undelegated stake account" />
-              </SelectTrigger>
-              <SelectContent>
-                {undelegatedAccounts.map((account) => (
-                  <SelectItem key={account.address} value={account.address}>
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="font-mono text-xs">
-                          {account.address.slice(0, 8)}...{account.address.slice(-8)}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {account.balance.toFixed(2)} XNT
-                        </span>
-                      </div>
-                      {account.delegatedValidator && (
-                        <span className="text-xs text-muted-foreground">
-                          Previous: {account.delegatedValidator.slice(0, 6)}...
-                        </span>
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Account Info - No Selection Needed */}
+          {preSelectedAccount && <StakeAccountDisplay account={preSelectedAccount} />}
           <div className="space-y-2">
             <Label htmlFor="validator">Validator Vote Account</Label>
             <Input
