@@ -52,7 +52,8 @@ export async function getStakeAccountsForVault(
         console.log('Stake Activation for', account.pubkey.toBase58(), ':', stakeActivation);
 
         let state = 'inactive';
-        if (stakeActivation.status === 'activating') state = 'activating';
+        if (stakeActivation.status === 'active') state = 'active';
+        else if (stakeActivation.status === 'activating') state = 'activating';
         else if (stakeActivation.status === 'deactivating') state = 'deactivating';
 
         stakeAccounts.push({
@@ -148,6 +149,95 @@ export function createWithdrawStakeInstruction(
     toPubkey: vaultAddress,
     lamports,
   }).instructions[0];
+}
+
+export async function createSplitStakeInstructions(
+  sourceStakeAccount: PublicKey,
+  vaultAddress: PublicKey,
+  lamports: number,
+  seed: string,
+  connection: Connection
+): Promise<{ instructions: TransactionInstruction[]; newStakeAccount: PublicKey }> {
+  // Calculate the new stake account address using the seed
+  const newStakeAccount = await PublicKey.createWithSeed(vaultAddress, seed, StakeProgram.programId);
+
+  // Get rent exempt reserve for the split transaction (optional parameter)
+  const rentExemptReserve = await connection.getMinimumBalanceForRentExemption(StakeProgram.space);
+
+  // Create split with seed instruction - this handles both account creation and splitting
+  const splitTransaction = StakeProgram.splitWithSeed({
+    stakePubkey: sourceStakeAccount,
+    authorizedPubkey: vaultAddress,
+    splitStakePubkey: newStakeAccount,
+    basePubkey: vaultAddress,
+    seed,
+    lamports,
+  }, rentExemptReserve);
+
+  return {
+    instructions: splitTransaction.instructions,
+    newStakeAccount,
+  };
+}
+
+export function createMergeStakeInstruction(
+  destinationStakeAccount: PublicKey,
+  sourceStakeAccount: PublicKey,
+  vaultAddress: PublicKey
+): TransactionInstruction {
+  const mergeTransaction = StakeProgram.merge({
+    stakePubkey: destinationStakeAccount,
+    sourceStakePubKey: sourceStakeAccount,
+    authorizedPubkey: vaultAddress,
+  });
+  return mergeTransaction.instructions[0];
+}
+
+export function getCompatibleMergeAccounts(
+  destinationAccount: StakeAccountInfo,
+  allAccounts: StakeAccountInfo[]
+): StakeAccountInfo[] {
+  return allAccounts.filter((sourceAccount) => {
+    // Can't merge with itself
+    if (sourceAccount.address === destinationAccount.address) {
+      return false;
+    }
+
+    // Must have same validator if both are active/activating
+    const bothActiveOrActivating = 
+      (destinationAccount.state === 'active' || destinationAccount.state === 'activating') &&
+      (sourceAccount.state === 'active' || sourceAccount.state === 'activating');
+    
+    if (bothActiveOrActivating && destinationAccount.delegatedValidator !== sourceAccount.delegatedValidator) {
+      return false;
+    }
+
+    // Valid merge combinations based on Solana rules:
+    const destState = destinationAccount.state;
+    const srcState = sourceAccount.state;
+
+    // Two deactivated stakes
+    if (destState === 'inactive' && srcState === 'inactive') {
+      return true;
+    }
+
+    // Inactive stake into activating stake
+    if (destState === 'activating' && srcState === 'inactive') {
+      return true;
+    }
+
+    // Two activated stakes (same validator already checked above)
+    if (destState === 'active' && srcState === 'active') {
+      return true;
+    }
+
+    // Two activating accounts with same activation epoch and same validator
+    if (destState === 'activating' && srcState === 'activating') {
+      return destinationAccount.activationEpoch === sourceAccount.activationEpoch;
+    }
+
+    return false;
+  });
 }
 
 export async function getMinimumStakeAmount(connection: Connection): Promise<number> {

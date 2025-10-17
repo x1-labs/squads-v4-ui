@@ -12,6 +12,8 @@ import { StakePoolWithdrawSummary } from './components/instructions/summaries/St
 import { DelegateStakeSummary } from './components/instructions/summaries/DelegateStakeSummary';
 import { DeactivateStakeSummary } from './components/instructions/summaries/DeactivateStakeSummary';
 import { WithdrawStakeSummary } from './components/instructions/summaries/WithdrawStakeSummary';
+import { SplitStakeSummary } from './components/instructions/summaries/SplitStakeSummary';
+import { MergeStakeSummary } from './components/instructions/summaries/MergeStakeSummary';
 import { InitializeStakeSummary } from './components/instructions/summaries/InitializeStakeSummary';
 import { CreateAccountWithSeedSummary } from './components/instructions/summaries/CreateAccountWithSeedSummary';
 import { UpdateCommissionSummary } from './components/instructions/summaries/UpdateCommissionSummary';
@@ -93,6 +95,7 @@ registry.register({
       tags: { label: 'Withdraw Stake', color: 'blue', variant: 'subtle' },
     },
     Split: {
+      summary: SplitStakeSummary,
       tags: { label: 'Split Stake', color: 'indigo', variant: 'subtle' },
     },
     Authorize: {
@@ -102,6 +105,7 @@ registry.register({
       tags: { label: 'Set Lockup', color: 'gray', variant: 'subtle' },
     },
     Merge: {
+      summary: MergeStakeSummary,
       tags: { label: 'Merge Stake', color: 'cyan', variant: 'subtle' },
     },
   },
