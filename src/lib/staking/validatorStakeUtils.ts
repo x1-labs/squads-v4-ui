@@ -51,6 +51,15 @@ export async function getStakeAccountsForVault(
         const stakeActivation = await getStakeActivation(connection as any, account.pubkey);
         console.log('Stake Activation for', account.pubkey.toBase58(), ':', stakeActivation);
 
+        // Handle edge case where activationEpoch is max u64 value
+        // This indicates the stake is actually active from epoch 0
+        if (stake?.delegation?.activationEpoch === "18446744073709551615") {
+          stake.delegation.activationEpoch = "0";
+          stakeActivation.status = 'active';
+          stakeActivation.active = BigInt(stake.delegation.stake);
+          stakeActivation.inactive = BigInt(account.account.lamports) - stakeActivation.active;
+        }
+
         let state = 'inactive';
         if (stakeActivation.status === 'active') state = 'active';
         else if (stakeActivation.status === 'activating') state = 'activating';
@@ -204,10 +213,10 @@ export function getCompatibleMergeAccounts(
     }
 
     // Must have same validator if both are active/activating
-    const bothActiveOrActivating = 
+    const bothActiveOrActivating =
       (destinationAccount.state === 'active' || destinationAccount.state === 'activating') &&
       (sourceAccount.state === 'active' || sourceAccount.state === 'activating');
-    
+
     if (bothActiveOrActivating && destinationAccount.delegatedValidator !== sourceAccount.delegatedValidator) {
       return false;
     }
