@@ -53,10 +53,9 @@ export function TokenList({ multisigPda }: TokenListProps) {
     fetchMetadata();
   }, [tokens, connection]);
 
-  // Format mint address for display
+  // Format mint address for display - show full address
   const formatMint = (mint: string) => {
-    if (mint.length <= 20) return mint;
-    return `${mint.slice(0, 8)}...${mint.slice(-8)}`;
+    return mint;
   };
 
   // Format balance for display with appropriate decimal places
@@ -140,7 +139,7 @@ export function TokenList({ multisigPda }: TokenListProps) {
                         )}
                       </div>
                       <div>
-                        <p className="font-medium">
+                        <p className="font-medium break-all">
                           {isLoading ? (
                             <span className="text-muted-foreground">Loading...</span>
                           ) : (
@@ -154,11 +153,9 @@ export function TokenList({ multisigPda }: TokenListProps) {
                           )}{' '}
                           {metadata?.symbol || 'tokens'}
                         </p>
-                        {metadata && !metadata.name && (
-                          <p className="font-mono text-xs text-muted-foreground">
-                            {formatMint(mint)}
-                          </p>
-                        )}
+                        <p className="font-mono text-xs text-muted-foreground break-all">
+                          {formatMint(mint)}
+                        </p>
                       </div>
                     </div>
                     <SendTokens
