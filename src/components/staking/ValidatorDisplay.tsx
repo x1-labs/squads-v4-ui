@@ -69,6 +69,27 @@ export const ValidatorDisplay: React.FC<ValidatorDisplayProps> = ({
           <code className="flex-1 break-all rounded bg-muted px-1.5 py-0.5 text-xs">
             {metadata.identity}
           </code>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(metadata.identity!);
+              toast.success('Address copied to clipboard');
+            }}
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Copy address"
+          >
+            <Copy className="h-3 w-3" />
+          </button>
+          <a
+            href={`${explorerUrl}/address/${metadata.identity}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="View on explorer"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </a>
         </div>
       )}
     </div>
