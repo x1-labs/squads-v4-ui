@@ -113,9 +113,18 @@ const ExecuteButton = ({
     const priorityFeeInstruction = ComputeBudgetProgram.setComputeUnitPrice({
       microLamports: priorityFeeLamports,
     });
+
     const computeUnitInstruction = ComputeBudgetProgram.setComputeUnitLimit({
       units: computeUnitBudget,
     });
+
+    const instructions: TransactionInstruction[] = [];
+    if (priorityFeeLamports != 5000) {
+      instructions.push(priorityFeeInstruction);
+    }
+    if (computeUnitBudget != 200_000) {
+      instructions.push(computeUnitInstruction);
+    }
 
     let blockhash = (await connection.getLatestBlockhash()).blockhash;
 
@@ -128,11 +137,11 @@ const ExecuteButton = ({
         transactionIndex: bigIntTransactionIndex,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
-
+      instructions.push(resp.instruction);
       transactions.push(
         new VersionedTransaction(
           new TransactionMessage({
-            instructions: [priorityFeeInstruction, computeUnitInstruction, resp.instruction],
+            instructions: instructions,
             payerKey: member,
             recentBlockhash: blockhash,
           }).compileToV0Message(resp.lookupTableAccounts)
@@ -146,10 +155,12 @@ const ExecuteButton = ({
         transactionIndex: bigIntTransactionIndex,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
+
+      instructions.push(executeIx);
       transactions.push(
         new VersionedTransaction(
           new TransactionMessage({
-            instructions: [priorityFeeInstruction, computeUnitInstruction, executeIx],
+            instructions: instructions,
             payerKey: member,
             recentBlockhash: blockhash,
           }).compileToV0Message()
