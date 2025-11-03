@@ -32,7 +32,8 @@ export const useRpcUrl = () => {
   return { rpcUrl, setRpcUrl };
 };
 
-const DEFAULT_PROGRAM_ID = process.env.APP_PROGRAM_ID || "DDL3Xp6ie85DXgiPkXJ7abUyS2tGv4CGEod2DeQXQ941";
+const DEFAULT_PROGRAM_ID =
+  process.env.APP_PROGRAM_ID || 'DDL3Xp6ie85DXgiPkXJ7abUyS2tGv4CGEod2DeQXQ941';
 
 const getProgramId = () => {
   if (typeof window !== 'undefined') {
@@ -88,4 +89,34 @@ export const useExplorerUrl = () => {
     },
   });
   return { explorerUrl, setExplorerUrl };
+};
+
+// stake pool program id
+const DEFAULT_STAKE_POOL_PROGRAM_ID =
+  process.env.APP_STAKE_POOL_PROGRAM_ID || 'XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux';
+const getStakePoolProgramId = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('x-stake-pool-program-id') || DEFAULT_STAKE_POOL_PROGRAM_ID;
+  }
+  return DEFAULT_STAKE_POOL_PROGRAM_ID;
+};
+
+export const useStakePoolProgramId = () => {
+  const queryClient = useQueryClient();
+
+  const { data: stakePoolProgramId } = useSuspenseQuery({
+    queryKey: ['stakePoolProgramId'],
+    queryFn: () => Promise.resolve(getStakePoolProgramId()),
+  });
+
+  const setStakePoolProgramId = useMutation({
+    mutationFn: (newStakePoolProgramId: string) => {
+      localStorage.setItem('x-stake-pool-program-id', newStakePoolProgramId);
+      return Promise.resolve(newStakePoolProgramId);
+    },
+    onSuccess: (newStakePoolProgramId) => {
+      queryClient.setQueryData(['stakePoolProgramId'], newStakePoolProgramId);
+    },
+  });
+  return { stakePoolProgramId, setStakePoolProgramId };
 };

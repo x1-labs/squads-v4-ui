@@ -4098,10 +4098,10 @@
   resolved "https://registry.yarnpkg.com/@webpack-cli/serve/-/serve-3.0.1.tgz#bd8b1f824d57e30faa19eb78e4c0951056f72f00"
   integrity sha512-sbgw03xQaCLiT6gcY/6u3qBDn01CWw/nbaXl3gTdTFuJJ75Gffv3E3DBpgvY2fkkrdS1fpjaXNOmJlnbtKauKg==
 
-"@x1-labs/spl-stake-pool@^1.1.15":
-  version "1.1.15"
-  resolved "https://registry.yarnpkg.com/@x1-labs/spl-stake-pool/-/spl-stake-pool-1.1.15.tgz#0c9089db15140dc7069a0d9c594776ff31b5f9ce"
-  integrity sha512-T76OfcYOUWRH5Lq+t24kf1TQeaifz6OwI665iiutp7exBEpW5UOYYPLqTikpFRiHTC+DXaE5FHQtTLoZ3g3dbg==
+"@x1-labs/spl-stake-pool@^1.1.18":
+  version "1.1.18"
+  resolved "https://registry.yarnpkg.com/@x1-labs/spl-stake-pool/-/spl-stake-pool-1.1.18.tgz#41b36e843913271b9cf43d59457d4402aae073e9"
+  integrity sha512-ZQYkqApeXCSSW2dRPL+bu3XuNx29ilYAA+Crrg1gdrOSW9S6rJqXubC16k7CJBBq6xfXSzvI5UNveEcpabzc9Q==
   dependencies:
     "@solana/buffer-layout" "^4.0.1"
     "@solana/spl-token" "0.4.13"

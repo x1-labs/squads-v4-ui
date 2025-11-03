@@ -7,6 +7,7 @@ export interface StakePoolInfo {
   name: string;
   poolMint: string;
   reserveStake: string;
+  tokenProgramId: string;
   tokenSymbol?: string;
   totalStaked?: number;
   userBalance?: number;
@@ -24,53 +25,37 @@ function loadStakePoolsFromEnv(): StakePoolInfo[] {
   // or REACT_APP_STAKE_POOL_<NUMBER>_ADDRESS, etc.
 
   // First, try to load APP_STAKE_ format
-  const appStakeKeys = Object.keys(stakePools).filter(key => key.startsWith('APP_STAKE_'));
+  const appStakeKeys = Object.keys(stakePools).filter((key) => key.startsWith('APP_STAKE_'));
   const stakeNames = new Set<string>();
 
   // Extract unique stake names from APP_STAKE_ format
-  appStakeKeys.forEach(key => {
-    const match = key.match(/^APP_STAKE_(.+?)_(ADDRESS|MINT|RESERVE|NAME)$/);
+  appStakeKeys.forEach((key) => {
+    const match = key.match(/^APP_STAKE_(.+?)_(ADDRESS|MINT|RESERVE|NAME|TOKEN_PROGRAM_ID)$/);
     if (match) {
       stakeNames.add(match[1]);
     }
   });
 
   // Load pools with APP_STAKE_ format
-  stakeNames.forEach(stakeName => {
+  stakeNames.forEach((stakeName) => {
     const address = stakePools[`APP_STAKE_${stakeName}_ADDRESS`];
     const mint = stakePools[`APP_STAKE_${stakeName}_MINT`];
     const reserve = stakePools[`APP_STAKE_${stakeName}_RESERVE`];
     const name = stakePools[`APP_STAKE_${stakeName}_NAME`] || stakeName.replace(/_/g, ' ');
     const tokenSymbol = stakePools[`APP_STAKE_${stakeName}_SYMBOL`];
+    const tokenProgramId = stakePools[`APP_STAKE_${stakeName}_TOKEN_PROGRAM_ID`];
 
     if (address && mint && reserve) {
       pools.push({
         address,
         name,
         tokenSymbol,
+        tokenProgramId,
         poolMint: mint,
         reserveStake: reserve,
       });
     }
   });
-
-  // Also check for APP_STAKE_POOL_ format for backward compatibility
-  for (let i = 1; i <= 10; i++) {
-    const prefix = `APP_STAKE_POOL_${i}`;
-    const address = stakePools[`${prefix}_ADDRESS`];
-    const mint = stakePools[`${prefix}_MINT`];
-    const reserve = stakePools[`${prefix}_RESERVE`];
-    const name = stakePools[`${prefix}_NAME`] || `Stake Pool ${i}`;
-
-    if (address && mint && reserve) {
-      pools.push({
-        address,
-        name,
-        poolMint: mint,
-        reserveStake: reserve,
-      });
-    }
-  }
 
   return pools;
 }
@@ -79,9 +64,10 @@ export const TESTNET_STAKE_POOLS: StakePoolInfo[] = loadStakePoolsFromEnv();
 
 export async function getPoolTokenAccount(
   walletAddress: PublicKey,
-  poolMint: PublicKey
+  poolMint: PublicKey,
+  tokenProgramId = TOKEN_PROGRAM_ID
 ): Promise<PublicKey> {
-  return getAssociatedTokenAddress(poolMint, walletAddress, true, TOKEN_PROGRAM_ID);
+  return getAssociatedTokenAddress(poolMint, walletAddress, true, tokenProgramId);
 }
 
 export async function getStakePoolsForDisplay(
@@ -94,6 +80,7 @@ export async function getStakePoolsForDisplay(
   for (const pool of pools) {
     try {
       const poolMint = new PublicKey(pool.poolMint);
+      const tokenProgramId = new PublicKey(pool.tokenProgramId);
 
       // Fetch token metadata to get the symbol
       try {
@@ -108,7 +95,11 @@ export async function getStakePoolsForDisplay(
       // If vault address provided, fetch user balances
       if (vaultAddress) {
         try {
-          const poolTokenAccount = await getPoolTokenAccount(vaultAddress, poolMint);
+          const poolTokenAccount = await getPoolTokenAccount(
+            vaultAddress,
+            poolMint,
+            tokenProgramId
+          );
           const tokenAccountInfo = await connection.getTokenAccountBalance(poolTokenAccount);
 
           if (tokenAccountInfo && tokenAccountInfo.value) {

@@ -218,7 +218,7 @@ registry.register({
 // X1 SPL Stake Pool Program (Fork)
 // ============================================
 registry.register({
-  programId: 'XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux',
+  programId: process.env.APP_STAKE_POOL_PROGRAM_ID || 'XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux',
   name: 'X1 Stake Pool',
   idl: stakePoolIdl,
   instructions: {

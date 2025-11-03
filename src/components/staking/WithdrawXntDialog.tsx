@@ -31,6 +31,7 @@ import { stakePoolInfo, getStakePoolAccount, StakePoolInstruction } from '@x1-la
 import * as splToken from '@solana/spl-token';
 import { useAccess } from '@/hooks/useAccess';
 import { createMemoInstruction } from '@/lib/utils/memoInstruction';
+import { useStakePoolProgramId } from '@/hooks/useSettings';
 
 export function WithdrawXntDialog() {
   const [isOpen, setIsOpen] = useState(false);
@@ -51,6 +52,7 @@ export function WithdrawXntDialog() {
   const { data: multisigInfo } = useMultisig();
   const queryClient = useQueryClient();
   const isMember = useAccess();
+  const { stakePoolProgramId } = useStakePoolProgramId();
 
   // Filter pools that have staked balance
   const stakedPools = stakePools?.filter((p) => p.userBalance && p.userBalance > 0) || [];
@@ -94,13 +96,13 @@ export function WithdrawXntDialog() {
       // Get the withdraw authority PDA
       const [withdrawAuthority] = PublicKey.findProgramAddressSync(
         [stakePoolAddress.toBuffer(), Buffer.from('withdraw')],
-        new PublicKey('XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux')
+        new PublicKey(stakePoolProgramId)
       );
 
       // Create the withdraw XNT instruction
       const withdrawInstructions = [
         StakePoolInstruction.withdrawSol({
-          programId: new PublicKey('XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux'),
+          programId: new PublicKey(stakePoolProgramId),
           stakePool: stakePoolAddress,
           sourcePoolAccount: poolTokenAccount,
           withdrawAuthority,

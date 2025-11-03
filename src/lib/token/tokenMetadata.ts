@@ -7,6 +7,14 @@ import {
   Metadata as MetaplexMetadata,
 } from '@metaplex-foundation/mpl-token-metadata';
 import { publicKey } from '@metaplex-foundation/umi';
+import {
+  getMint,
+  TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
+  ExtensionType,
+  getExtensionData,
+} from '@solana/spl-token';
+import { unpack } from '@solana/spl-token-metadata';
 
 export interface TokenMetadata {
   symbol?: string;
@@ -19,13 +27,95 @@ export interface TokenMetadata {
 const metadataCache = new Map<string, TokenMetadata>();
 
 /**
- * Fetch token metadata from on-chain Metaplex metadata account
+ * Determine which token program a mint belongs to
+ */
+async function getTokenProgram(mintAddress: PublicKey, connection: Connection): Promise<PublicKey> {
+  try {
+    // Try Token 2022 first
+    await getMint(connection, mintAddress, 'confirmed', TOKEN_2022_PROGRAM_ID);
+    return TOKEN_2022_PROGRAM_ID;
+  } catch {
+    // Fall back to Token Program
+    return TOKEN_PROGRAM_ID;
+  }
+}
+
+/**
+ * Fetch Token 2022 on-chain metadata
+ */
+async function getToken2022OnChainMetadata(
+  mintAddress: PublicKey,
+  connection: Connection
+): Promise<TokenMetadata | null> {
+  try {
+    // Get the mint account with Token 2022 program
+    const mintInfo = await getMint(connection, mintAddress, 'confirmed', TOKEN_2022_PROGRAM_ID);
+
+    // Check if the mint has metadata extension
+    if (!mintInfo.tlvData || mintInfo.tlvData.length === 0) {
+      return null;
+    }
+
+    // Extract metadata from the Token 2022 extension
+    const metadataExtension = getExtensionData(ExtensionType.TokenMetadata, mintInfo.tlvData);
+    if (!metadataExtension) return null;
+
+    // Parse the metadata extension buffer
+    const metadata = unpack(metadataExtension);
+    if (!metadata) return null;
+
+    const result: TokenMetadata = {
+      address: mintAddress.toBase58(),
+      name: metadata.name || undefined,
+      symbol: metadata.symbol || undefined,
+      logoURI: metadata.uri || undefined,
+    };
+
+    // If there's a URI, try to fetch additional metadata
+    if (metadata.uri) {
+      try {
+        const response = await fetch(metadata.uri);
+        if (response.ok) {
+          const contentType = response.headers.get('content-type');
+
+          if (contentType && contentType.includes('application/json')) {
+            const jsonMetadata = await response.json();
+            if (jsonMetadata.image) {
+              result.logoURI = jsonMetadata.image;
+            }
+            // Update fields from JSON if they exist
+            if (jsonMetadata.name) {
+              result.name = jsonMetadata.name;
+            }
+            if (jsonMetadata.symbol) {
+              result.symbol = jsonMetadata.symbol;
+            }
+          } else if (contentType && contentType.startsWith('image/')) {
+            // URI points directly to an image
+            result.logoURI = metadata.uri;
+          }
+        }
+      } catch (error) {
+        // Silently ignore URI fetch errors
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.debug('Failed to fetch Token 2022 metadata for', mintAddress.toBase58(), error);
+    return null;
+  }
+}
+
+/**
+ * Fetch token metadata supporting both Token Program and Token 2022
  */
 export async function getTokenMetadata(
   mintAddress: string | PublicKey,
   connection: Connection
 ): Promise<TokenMetadata> {
   const address = typeof mintAddress === 'string' ? mintAddress : mintAddress.toBase58();
+  const mintPublicKey = typeof mintAddress === 'string' ? new PublicKey(mintAddress) : mintAddress;
 
   if (metadataCache.has(address)) {
     return metadataCache.get(address)!;
@@ -39,6 +129,14 @@ export async function getTokenMetadata(
         ? localStorage.getItem('x-rpc-url')!
         : connection.rpcEndpoint;
 
+    // First, try Token 2022 on-chain metadata (faster and more reliable)
+    const token2022Metadata = await getToken2022OnChainMetadata(mintPublicKey, connection);
+    if (token2022Metadata) {
+      metadataCache.set(address, token2022Metadata);
+      return token2022Metadata;
+    }
+
+    // Fall back to Metaplex metadata for both Token Program and Token 2022 tokens
     const umi = createUmi(rpcUrl);
     const mint = publicKey(address);
     const metadataPda = findMetadataPda(umi, { mint });
@@ -85,7 +183,7 @@ export async function getTokenMetadata(
     metadataCache.set(address, metadata);
     return metadata;
   } catch (error) {
-    console.debug('Failed to fetch on-chain metadata for', address, error);
+    console.debug('Failed to fetch metadata for', address, error);
 
     const fallbackMetadata: TokenMetadata = {
       address,

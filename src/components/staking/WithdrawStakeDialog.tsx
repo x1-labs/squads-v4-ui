@@ -97,7 +97,8 @@ export function WithdrawStakeDialog({
   if (selectedAccountInfo) {
     const totalBalance = selectedAccountInfo.balance;
     const rentReserve = selectedAccountInfo.rentExemptReserve;
-    const isStaked = selectedAccountInfo.state === 'active' || selectedAccountInfo.state === 'activating';
+    const isStaked =
+      selectedAccountInfo.state === 'active' || selectedAccountInfo.state === 'activating';
     if (selectedAccountInfo.state === 'inactive') {
       // Inactive accounts can withdraw everything without buffer
       // For non-full withdrawal: lamports + reserve <= total_balance
@@ -118,7 +119,8 @@ export function WithdrawStakeDialog({
   const parsedAmount = parseFloat(amount);
   const isAmountValid =
     !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= maxWithdrawableWithRent + 0.001; // Small tolerance for floating point precision
-  const isClosingAccount = Math.abs(parsedAmount - maxWithdrawableWithRent) < 0.001 && maxWithdrawableWithRent > 0;
+  const isClosingAccount =
+    Math.abs(parsedAmount - maxWithdrawableWithRent) < 0.001 && maxWithdrawableWithRent > 0;
 
   const withdrawStake = async () => {
     if (!wallet.publicKey || !multisigAddress || !selectedAccountInfo) {
@@ -312,12 +314,14 @@ export function WithdrawStakeDialog({
                     {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
                   </span>
                 </div>
-                {maxWithdrawable === 0 && (selectedAccountInfo.state === 'active' || selectedAccountInfo.state === 'activating') && (
-                  <div className="mt-2 flex items-center gap-1 text-xs text-yellow-600">
-                    <AlertCircle className="h-3 w-3" />
-                    <span>Account balance too low for safe withdrawal</span>
-                  </div>
-                )}
+                {maxWithdrawable === 0 &&
+                  (selectedAccountInfo.state === 'active' ||
+                    selectedAccountInfo.state === 'activating') && (
+                    <div className="mt-2 flex items-center gap-1 text-xs text-yellow-600">
+                      <AlertCircle className="h-3 w-3" />
+                      <span>Account balance too low for safe withdrawal</span>
+                    </div>
+                  )}
                 {maxWithdrawable === 0 && selectedAccountInfo.state === 'deactivating' && (
                   <div className="mt-2 flex items-center gap-1 text-xs text-yellow-600">
                     <AlertCircle className="h-3 w-3" />
@@ -359,18 +363,19 @@ export function WithdrawStakeDialog({
                       Max • {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
                     </span>
                   </Button>
-                  {maxWithdrawableWithRent > maxWithdrawable && selectedAccountInfo.state !== 'deactivating' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setAmount(maxWithdrawableWithRent.toString())}
-                      className="w-full"
-                    >
-                      <span className="truncate">
-                        Close • {formatXNTCompact(maxWithdrawableWithRent * LAMPORTS_PER_SOL)}
-                      </span>
-                    </Button>
-                  )}
+                  {maxWithdrawableWithRent > maxWithdrawable &&
+                    selectedAccountInfo.state !== 'deactivating' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setAmount(maxWithdrawableWithRent.toString())}
+                        className="w-full"
+                      >
+                        <span className="truncate">
+                          Close • {formatXNTCompact(maxWithdrawableWithRent * LAMPORTS_PER_SOL)}
+                        </span>
+                      </Button>
+                    )}
                 </div>
               )}
             </div>
@@ -384,11 +389,14 @@ export function WithdrawStakeDialog({
                 </span>
               </div>
             )}
-            {selectedAccountInfo && maxWithdrawable > 0 && selectedAccountInfo.state === 'deactivating' && (
-              <div className="mt-1 text-xs text-muted-foreground">
-                💡 Includes 1% safety buffer for deactivating stakes to prevent Solana validation errors
-              </div>
-            )}
+            {selectedAccountInfo &&
+              maxWithdrawable > 0 &&
+              selectedAccountInfo.state === 'deactivating' && (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  💡 Includes 1% safety buffer for deactivating stakes to prevent Solana validation
+                  errors
+                </div>
+              )}
             {isClosingAccount && (
               <div className="flex items-center gap-2 rounded-lg bg-yellow-50 p-3 text-xs text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400">
                 <AlertCircle className="h-4 w-4 flex-shrink-0" />

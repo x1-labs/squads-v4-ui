@@ -225,7 +225,10 @@ export function ValidatorStakePanel() {
                         <div className="text-left sm:text-right">
                           <div className="space-y-1">
                             <p className="text-sm font-medium sm:text-base">
-                              {(account.state === 'inactive' ? account.balance : account.delegated).toLocaleString(undefined, {
+                              {(account.state === 'inactive'
+                                ? account.balance
+                                : account.delegated
+                              ).toLocaleString(undefined, {
                                 maximumFractionDigits: 2,
                               })}{' '}
                               XNT

@@ -31,6 +31,7 @@ import { stakePoolInfo, getStakePoolAccount, StakePoolInstruction } from '@x1-la
 import * as splToken from '@solana/spl-token';
 import { useAccess } from '@/hooks/useAccess';
 import { createMemoInstruction } from '@/lib/utils/memoInstruction';
+import { useStakePoolProgramId } from '@/hooks/useSettings';
 
 export function DepositXntDialog() {
   const [isOpen, setIsOpen] = useState(false);
@@ -52,6 +53,7 @@ export function DepositXntDialog() {
   const { data: multisigInfo } = useMultisig();
   const queryClient = useQueryClient();
   const isMember = useAccess();
+  const { stakePoolProgramId } = useStakePoolProgramId();
 
   const parsedAmount = parseFloat(amount);
   const isAmountValid = !isNaN(parsedAmount) && parsedAmount > 0;
@@ -75,20 +77,11 @@ export function DepositXntDialog() {
       const stakePoolAddress = new PublicKey(selectedPoolInfo.address);
       const lamports = Math.floor(parsedAmount * LAMPORTS_PER_SOL);
 
-      // First get stake pool info
       const poolInfo = await stakePoolInfo(connection as any, stakePoolAddress);
-
       if (!poolInfo) {
         throw new Error('Failed to fetch stake pool info');
       }
 
-      // Get pool mint from the stake pool info
-      const poolMint = poolInfo.poolMint;
-
-      // For multisig vaults, we need to create the deposit instruction directly
-      // without the ephemeral transfer account that the library uses
-
-      // Get the stake pool account data
       const stakePoolAccount = await getStakePoolAccount(connection as any, stakePoolAddress);
       const stakePool = stakePoolAccount.account.data;
 
@@ -96,6 +89,7 @@ export function DepositXntDialog() {
       let destinationTokenAccount: PublicKey;
       const tokenAccounts = await connection.getTokenAccountsByOwner(vaultAddress, {
         mint: stakePool.poolMint,
+        programId: stakePool.tokenProgramId,
       });
 
       const depositInstructions = [];
@@ -108,15 +102,17 @@ export function DepositXntDialog() {
         destinationTokenAccount = await splToken.getAssociatedTokenAddress(
           stakePool.poolMint,
           vaultAddress,
-          true // allowOwnerOffCurve - important for PDAs
+          true,
+          stakePool.tokenProgramId
         );
 
         depositInstructions.push(
           splToken.createAssociatedTokenAccountInstruction(
-            wallet.publicKey, // payer
+            wallet.publicKey,
             destinationTokenAccount,
-            vaultAddress, // owner
-            stakePool.poolMint
+            vaultAddress,
+            stakePool.poolMint,
+            stakePool.tokenProgramId
           )
         );
       }
@@ -124,14 +120,14 @@ export function DepositXntDialog() {
       // Get the withdraw authority PDA
       const [withdrawAuthority] = PublicKey.findProgramAddressSync(
         [stakePoolAddress.toBuffer(), Buffer.from('withdraw')],
-        new PublicKey('XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux')
+        new PublicKey(stakePoolProgramId)
       );
 
       // Create the deposit XNT instruction
       // For multisig vaults, the vault itself is the funding account
       depositInstructions.push(
         StakePoolInstruction.depositSol({
-          programId: new PublicKey('XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux'),
+          programId: new PublicKey(stakePoolProgramId),
           stakePool: stakePoolAddress,
           reserveStake: stakePool.reserveStake,
           fundingAccount: vaultAddress, // Vault is the source of funds
@@ -142,6 +138,7 @@ export function DepositXntDialog() {
           lamports,
           withdrawAuthority,
           depositAuthority: undefined,
+          tokenProgramId: stakePool.tokenProgramId,
         })
       );
 
@@ -236,7 +233,6 @@ export function DepositXntDialog() {
       setMemo('');
       setIsOpen(false);
 
-      // Invalidate queries to refresh data
       await queryClient.invalidateQueries({ queryKey: ['transactions'] });
       await queryClient.invalidateQueries({ queryKey: ['stakePools'] });
     } catch (error) {
