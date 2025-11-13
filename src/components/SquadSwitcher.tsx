@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { ChevronDown, Plus, Check, Trash2, Copy } from 'lucide-react';
+import { ChevronDown, Plus, Check, Trash2, Copy, Users } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { VaultSelector } from './VaultSelector';
 import { toast } from 'sonner';
@@ -74,18 +74,23 @@ export const SquadSwitcher = () => {
   };
 
   return (
-    <div className="mb-3 space-y-2">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="w-full justify-between">
-            <span
-              className={`truncate ${!selectedSquad || selectedSquad.name?.startsWith('Squad ') ? 'font-mono text-sm' : ''}`}
-            >
-              {getDisplayText()}
-            </span>
-            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </DropdownMenuTrigger>
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 px-3 text-xs font-medium text-muted-foreground">
+          <Users className="h-3.5 w-3.5" />
+          Multisig Account
+        </label>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="w-full justify-between bg-background/50 hover:bg-accent">
+              <span
+                className={`truncate ${!selectedSquad || selectedSquad.name?.startsWith('Squad ') ? 'font-mono text-sm' : ''}`}
+              >
+                {getDisplayText()}
+              </span>
+              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </DropdownMenuTrigger>
       <DropdownMenuContent className="w-[250px]">
         {squads.length > 0 && (
           <>
@@ -133,26 +138,32 @@ export const SquadSwitcher = () => {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-    {selectedSquad && <VaultSelector />}
-    {selectedSquad && multisigVault && (
-      <div className="rounded-lg border bg-muted/50 p-2">
-        <div className="mb-1 text-xs text-muted-foreground">Vault Address</div>
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-xs">
-            {multisigVault.toBase58().slice(0, 6)}...{multisigVault.toBase58().slice(-6)}
-          </span>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 w-6 p-0"
-            onClick={handleCopyVaultAddress}
-            title="Copy vault address"
-          >
-            <Copy className="h-3 w-3" />
-          </Button>
-        </div>
       </div>
-    )}
+      {selectedSquad && <VaultSelector />}
+      {selectedSquad && multisigVault && (
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 px-3 text-xs font-medium text-muted-foreground">
+            <Copy className="h-3.5 w-3.5" />
+            Vault Address
+          </label>
+          <div className="rounded-lg border bg-muted/50 p-2">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs">
+                {multisigVault.toBase58().slice(0, 6)}...{multisigVault.toBase58().slice(-6)}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0"
+                onClick={handleCopyVaultAddress}
+                title="Copy vault address"
+              >
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

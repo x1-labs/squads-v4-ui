@@ -6,6 +6,7 @@ import { SquadSwitcher } from './SquadSwitcher';
 import { MembershipWarning } from './MembershipWarning';
 import { MobileNav } from './MobileNav';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { NetworkSwitcher } from './NetworkSwitcher';
 
 export default function TabNav() {
   const location = useLocation();
@@ -80,7 +81,8 @@ export default function TabNav() {
               </li>
             </ul>
           </div>
-          <div>
+          <div className="space-y-4">
+            <NetworkSwitcher />
             <MembershipWarning />
             <SquadSwitcher />
             <ConnectWallet />

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronsUpDown, Wallet } from 'lucide-react';
 import { cn } from '~/lib/utils';
 import { Button } from '~/components/ui/button';
 import {
@@ -30,18 +30,23 @@ export function VaultSelector() {
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="w-full justify-between"
-        >
-          {selectedValue ? `Vault ${selectedValue}` : 'Select Vault Index...'}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
+    <div className="space-y-2">
+      <label className="flex items-center gap-2 px-3 text-xs font-medium text-muted-foreground">
+        <Wallet className="h-3.5 w-3.5" />
+        Vault Index
+      </label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full justify-between bg-background/50 hover:bg-accent"
+          >
+            {selectedValue ? `Vault ${selectedValue}` : 'Select Vault Index...'}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
       <PopoverContent className="w-full p-0">
         <Command>
           <CommandInput placeholder="Search Vault Index..." />
@@ -62,5 +67,6 @@ export function VaultSelector() {
         </Command>
       </PopoverContent>
     </Popover>
+    </div>
   );
 }
