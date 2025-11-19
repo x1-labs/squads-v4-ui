@@ -117,7 +117,12 @@ const ExecuteButton = ({
       }
     }
 
-    let transactions: VersionedTransaction[] = [];
+    // Store transaction building data so we can rebuild with fresh blockhash
+    type TxBuildData = {
+      instructions: TransactionInstruction[];
+      lookupTableAccounts?: AddressLookupTableAccount[];
+    };
+    const txBuildDataList: TxBuildData[] = [];
 
     const priorityFeeInstruction = ComputeBudgetProgram.setComputeUnitPrice({
       microLamports: priorityFeeLamports,
@@ -127,18 +132,15 @@ const ExecuteButton = ({
       units: computeUnitBudget,
     });
 
-    const instructions: TransactionInstruction[] = [];
+    const baseInstructions: TransactionInstruction[] = [];
     if (priorityFeeLamports != 5000) {
-      instructions.push(priorityFeeInstruction);
+      baseInstructions.push(priorityFeeInstruction);
     }
     if (computeUnitBudget != 200_000) {
-      instructions.push(computeUnitInstruction);
+      baseInstructions.push(computeUnitInstruction);
     }
 
-    // Get blockhash for building transactions (will be refreshed before signing)
-    console.log('[ExecuteButton] Fetching initial blockhash');
-    let blockhash = (await connection.getLatestBlockhash()).blockhash;
-    console.log('[ExecuteButton] Got initial blockhash:', blockhash);
+    console.log('[ExecuteButton] Building transaction data');
 
     if (txType == 'vault') {
       const resp = await multisig.instructions.vaultTransactionExecute({
@@ -149,16 +151,10 @@ const ExecuteButton = ({
         transactionIndex: bigIntTransactionIndex,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
-      instructions.push(resp.instruction);
-      transactions.push(
-        new VersionedTransaction(
-          new TransactionMessage({
-            instructions: instructions,
-            payerKey: member,
-            recentBlockhash: blockhash,
-          }).compileToV0Message(resp.lookupTableAccounts)
-        )
-      );
+      txBuildDataList.push({
+        instructions: [...baseInstructions, resp.instruction],
+        lookupTableAccounts: resp.lookupTableAccounts,
+      });
     } else if (txType == 'config') {
       const executeIx = multisig.instructions.configTransactionExecute({
         multisigPda: new PublicKey(multisigPda),
@@ -168,16 +164,10 @@ const ExecuteButton = ({
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
 
-      instructions.push(executeIx);
-      transactions.push(
-        new VersionedTransaction(
-          new TransactionMessage({
-            instructions: instructions,
-            payerKey: member,
-            recentBlockhash: blockhash,
-          }).compileToV0Message()
-        )
-      );
+      txBuildDataList.push({
+        instructions: [...baseInstructions, executeIx],
+        lookupTableAccounts: undefined,
+      });
     } else if (txType == 'batch' && txData) {
       const executedBatchIndex = txData.executedTransactionIndex;
       const batchSize = txData.size;
@@ -188,37 +178,34 @@ const ExecuteButton = ({
         );
       }
 
-      transactions.push(
-        ...(await Promise.all(
-          range(executedBatchIndex + 1, batchSize).map(async (batchIndex) => {
-            const { instruction: transactionExecuteIx, lookupTableAccounts } =
-              await multisig.instructions.batchExecuteTransaction({
-                // @ts-ignore
-                connection,
-                member,
-                batchIndex: bigIntTransactionIndex,
-                transactionIndex: batchIndex,
-                multisigPda: new PublicKey(multisigPda),
-                programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-              });
+      const batchBuildData = await Promise.all(
+        range(executedBatchIndex + 1, batchSize).map(async (batchIndex) => {
+          const { instruction: transactionExecuteIx, lookupTableAccounts } =
+            await multisig.instructions.batchExecuteTransaction({
+              // @ts-ignore
+              connection,
+              member,
+              batchIndex: bigIntTransactionIndex,
+              transactionIndex: batchIndex,
+              multisigPda: new PublicKey(multisigPda),
+              programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+            });
 
-            const message = new TransactionMessage({
-              payerKey: member,
-              recentBlockhash: blockhash,
-              instructions: [priorityFeeInstruction, computeUnitInstruction, transactionExecuteIx],
-            }).compileToV0Message(lookupTableAccounts);
-
-            return new VersionedTransaction(message);
-          })
-        ))
+          return {
+            instructions: [priorityFeeInstruction, computeUnitInstruction, transactionExecuteIx],
+            lookupTableAccounts,
+          };
+        })
       );
+
+      txBuildDataList.push(...batchBuildData);
     }
 
-    console.log('[ExecuteButton] Built', transactions.length, 'transaction(s)');
+    console.log('[ExecuteButton] Built', txBuildDataList.length, 'transaction(s) data');
 
-    // Get FRESH blockhash right before signing
+    // Get FRESH blockhash right before building and signing transactions
     // This is critical because user approval can take 30+ seconds
-    console.log('[ExecuteButton] Fetching FRESH blockhash before signing');
+    console.log('[ExecuteButton] Fetching FRESH blockhash for transaction building');
     const startFreshBlockhash = Date.now();
     const freshBlockhash = (await connection.getLatestBlockhash('finalized')).blockhash;
     console.log(
@@ -229,14 +216,16 @@ const ExecuteButton = ({
       'ms'
     );
 
-    // Update all transactions with fresh blockhash
-    console.log('[ExecuteButton] Updating transactions with fresh blockhash');
-    transactions = transactions.map((tx) => {
-      const message = TransactionMessage.decompile(tx.message);
-      message.recentBlockhash = freshBlockhash;
-      // Preserve address lookup tables if they exist
-      const addressTableLookups = tx.message.addressTableLookups || [];
-      return new VersionedTransaction(message.compileToV0Message(addressTableLookups));
+    // Build transactions with fresh blockhash
+    console.log('[ExecuteButton] Building transactions with fresh blockhash');
+    const transactions = txBuildDataList.map((buildData) => {
+      return new VersionedTransaction(
+        new TransactionMessage({
+          instructions: buildData.instructions,
+          payerKey: member,
+          recentBlockhash: freshBlockhash,
+        }).compileToV0Message(buildData.lookupTableAccounts)
+      );
     });
 
     console.log(
