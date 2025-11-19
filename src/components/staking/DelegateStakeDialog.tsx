@@ -161,13 +161,22 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
 
     const transaction = new VersionedTransaction(message);
 
-    console.log('[DelegateStakeDialog] Sending transaction to wallet');
-    const signature = await wallet.sendTransaction(transaction, connection, {
+    // Sign transaction first, then send manually
+    // This avoids "Plugin Closed" issues with some wallets (especially Backpack)
+    console.log('[DelegateStakeDialog] Requesting wallet signature');
+    if (!wallet.signTransaction) {
+      throw new Error('Wallet does not support transaction signing');
+    }
+
+    const signedTransaction = await wallet.signTransaction(transaction);
+    console.log('[DelegateStakeDialog] Transaction signed, sending to network');
+
+    const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
       skipPreflight: false,
       maxRetries: 3,
     });
 
-    console.log('Transaction signature', signature);
+    console.log('[DelegateStakeDialog] Transaction signature:', signature);
     toast.loading('Confirming...', { id: 'transaction' });
 
     const sent = await waitForConfirmation(connection, [signature]);
