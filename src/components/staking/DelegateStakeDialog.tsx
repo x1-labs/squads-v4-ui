@@ -107,12 +107,13 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
       new PublicKey(multisigAddress)
     );
 
-    const blockhash = (await connection.getLatestBlockhash()).blockhash;
+    // Get initial blockhash for building the stake message
+    const initialBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
     const stakeMessage = new TransactionMessage({
       instructions,
       payerKey: vaultAddress,
-      recentBlockhash: blockhash,
+      recentBlockhash: initialBlockhash,
     });
 
     const transactionIndex = Number(multisigInfo.transactionIndex) + 1;
@@ -147,16 +148,23 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
 
+    // Get FRESH blockhash right before sending
+    console.log('[DelegateStakeDialog] Fetching fresh blockhash');
+    const freshBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    console.log('[DelegateStakeDialog] Got fresh blockhash:', freshBlockhash);
+
     const message = new TransactionMessage({
       instructions: [multisigTransactionIx, proposalIx, approveIx],
       payerKey: wallet.publicKey,
-      recentBlockhash: blockhash,
+      recentBlockhash: freshBlockhash,
     }).compileToV0Message();
 
     const transaction = new VersionedTransaction(message);
 
+    console.log('[DelegateStakeDialog] Sending transaction to wallet');
     const signature = await wallet.sendTransaction(transaction, connection, {
-      skipPreflight: true,
+      skipPreflight: false,
+      maxRetries: 3,
     });
 
     console.log('Transaction signature', signature);
