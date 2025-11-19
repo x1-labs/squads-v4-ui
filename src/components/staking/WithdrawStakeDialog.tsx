@@ -100,11 +100,11 @@ export function WithdrawStakeDialog({
     const isStaked =
       selectedAccountInfo.state === 'active' || selectedAccountInfo.state === 'activating';
     if (selectedAccountInfo.state === 'inactive') {
-      // Inactive accounts can withdraw everything without buffer
-      // For non-full withdrawal: lamports + reserve <= total_balance
-      // Max safe withdrawal = total_balance - reserve
-      maxWithdrawable = Math.max(0, totalBalance - rentReserve);
-      // For full withdrawal (account closure): can withdraw everything
+      // Inactive (fully deactivated/undelegated) accounts can withdraw everything
+      // The only valid withdrawal is the full balance (which closes the account)
+      // Partial withdrawals will fail with "insufficient funds" because the remaining
+      // balance would be less than rent-exempt reserve
+      maxWithdrawable = totalBalance;
       maxWithdrawableWithRent = totalBalance;
     } else if (selectedAccountInfo.state === 'deactivating') {
       // Deactivating accounts can only withdraw the inactive portion
@@ -117,10 +117,16 @@ export function WithdrawStakeDialog({
   }
 
   const parsedAmount = parseFloat(amount);
+
+  // For display and button click, convert exact lamports to SOL with full precision
+  const maxWithdrawableExact = selectedAccountInfo
+    ? Number(BigInt(selectedAccountInfo.balanceLamports)) / LAMPORTS_PER_SOL
+    : maxWithdrawable;
+
   const isAmountValid =
-    !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= maxWithdrawableWithRent + 0.001; // Small tolerance for floating point precision
+    !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= maxWithdrawableExact + 0.000000001; // Small tolerance for floating point precision
   const isClosingAccount =
-    Math.abs(parsedAmount - maxWithdrawableWithRent) < 0.001 && maxWithdrawableWithRent > 0;
+    Math.abs(parsedAmount - maxWithdrawableExact) < 0.000000001 && maxWithdrawableExact > 0;
 
   const withdrawStake = async () => {
     if (!wallet.publicKey || !multisigAddress || !selectedAccountInfo) {
@@ -133,7 +139,63 @@ export function WithdrawStakeDialog({
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     })[0];
 
-    const lamports = parsedAmount * LAMPORTS_PER_SOL;
+    // For full withdrawals of inactive accounts, fetch the account balance one more time
+    // to get the most up-to-date value using raw RPC to preserve precision
+    let lamports: number | bigint;
+    const isFullWithdrawal = Math.abs(parsedAmount - selectedAccountInfo.balance) < 0.001;
+
+    if (isFullWithdrawal && selectedAccountInfo.state === 'inactive') {
+      // For very large balances (>9 quadrillion lamports), we need to make a raw RPC call
+      // to get lamports as a string before JavaScript converts it to a Number
+      try {
+        const response = await fetch(connection.rpcEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'getAccountInfo',
+            params: [selectedAccountInfo.address, { encoding: 'base64' }],
+          }),
+        });
+
+        // Get raw text to avoid JSON.parse converting large numbers
+        const responseText = await response.text();
+        console.log('Raw RPC response (first 500 chars):', responseText.substring(0, 500));
+
+        // Extract lamports value using regex to preserve it as a string
+        const lamportsMatch = responseText.match(/"lamports":(\d+)/);
+        if (lamportsMatch && lamportsMatch[1]) {
+          const lamportsString = lamportsMatch[1];
+          const lamportsBigInt = BigInt(lamportsString);
+
+          // Check if the value is safe to convert to Number
+          if (lamportsBigInt <= BigInt(Number.MAX_SAFE_INTEGER)) {
+            lamports = Number(lamportsBigInt);
+            console.log('Fresh account lamports (safe to use as Number):', lamports);
+          } else {
+            // For very large values, keep as BigInt to preserve precision
+            // Our createWithdrawStakeInstruction now supports bigint
+            lamports = lamportsBigInt;
+            console.log(
+              'Fresh account lamports (using BigInt for precision):',
+              lamportsString,
+              '→',
+              lamportsBigInt.toString()
+            );
+          }
+        } else {
+          throw new Error('Could not extract lamports from RPC response');
+        }
+      } catch (error) {
+        console.error('Failed to fetch lamports via raw RPC, falling back:', error);
+        lamports = selectedAccountInfo.balanceLamports;
+      }
+    } else {
+      lamports = isFullWithdrawal
+        ? selectedAccountInfo.balanceLamports
+        : Math.floor(parsedAmount * LAMPORTS_PER_SOL);
+    }
 
     const withdrawInstruction = createWithdrawStakeInstruction(
       new PublicKey(selectedAccountInfo.address),
@@ -352,15 +414,38 @@ export function WithdrawStakeDialog({
                 className="text-lg"
               />
               {selectedAccountInfo && maxWithdrawable > 0 && (
-                <div className="grid grid-cols-2 gap-2">
+                <div
+                  className={
+                    maxWithdrawableWithRent > maxWithdrawable &&
+                    selectedAccountInfo.state !== 'deactivating'
+                      ? 'grid grid-cols-2 gap-2'
+                      : ''
+                  }
+                >
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setAmount(maxWithdrawable.toFixed(2))}
+                    onClick={() => {
+                      // For inactive accounts, use exact lamports to avoid floating point errors
+                      if (
+                        selectedAccountInfo.state === 'inactive' &&
+                        selectedAccountInfo.balanceLamports
+                      ) {
+                        const lamports = BigInt(selectedAccountInfo.balanceLamports);
+                        const wholeSol = lamports / BigInt(LAMPORTS_PER_SOL);
+                        const remainder = lamports % BigInt(LAMPORTS_PER_SOL);
+                        // Convert to SOL with full precision: "wholePart.fractionalPart"
+                        const fractional = remainder.toString().padStart(9, '0');
+                        setAmount(`${wholeSol}.${fractional}`);
+                      } else {
+                        setAmount(maxWithdrawable.toString());
+                      }
+                    }}
                     className="w-full"
                   >
                     <span className="truncate">
-                      Max • {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
+                      {selectedAccountInfo.state === 'inactive' ? 'Withdraw All & Close' : 'Max'} •{' '}
+                      {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
                     </span>
                   </Button>
                   {maxWithdrawableWithRent > maxWithdrawable &&

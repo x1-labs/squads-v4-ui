@@ -12,6 +12,7 @@ import { getStakeActivation } from '@anza-xyz/solana-rpc-get-stake-activation';
 export interface StakeAccountInfo {
   address: string;
   balance: number;
+  balanceLamports: number; // Store original lamports to avoid floating point errors
   delegated: number;
   state: 'activating' | 'active' | 'deactivating' | 'inactive';
   delegatedValidator?: string;
@@ -27,7 +28,7 @@ export async function getStakeAccountsForVault(
   vaultAddress: PublicKey
 ): Promise<StakeAccountInfo[]> {
   try {
-    const accounts = await connection.getParsedProgramAccounts(StakeProgram.programId, {
+    const accounts = (await connection.getParsedProgramAccounts(StakeProgram.programId, {
       filters: [
         {
           memcmp: {
@@ -36,7 +37,8 @@ export async function getStakeAccountsForVault(
           },
         },
       ],
-    });
+      // Disable JSON parsing to get raw response with string lamports
+    })) as any;
 
     const stakeAccounts: StakeAccountInfo[] = [];
 
@@ -53,8 +55,8 @@ export async function getStakeAccountsForVault(
 
         // Handle edge case where activationEpoch is max u64 value
         // This indicates the stake is actually active from epoch 0
-        if (stake?.delegation?.activationEpoch === "18446744073709551615") {
-          stake.delegation.activationEpoch = "0";
+        if (stake?.delegation?.activationEpoch === '18446744073709551615') {
+          stake.delegation.activationEpoch = '0';
           stakeActivation.status = 'active';
           stakeActivation.active = BigInt(stake.delegation.stake);
           stakeActivation.inactive = BigInt(account.account.lamports) - stakeActivation.active;
@@ -65,9 +67,18 @@ export async function getStakeAccountsForVault(
         else if (stakeActivation.status === 'activating') state = 'activating';
         else if (stakeActivation.status === 'deactivating') state = 'deactivating';
 
+        console.log(
+          'Raw lamports for',
+          account.pubkey.toBase58(),
+          ':',
+          account.account.lamports,
+          typeof account.account.lamports
+        );
+
         stakeAccounts.push({
           address: account.pubkey.toBase58(),
           balance: account.account.lamports / LAMPORTS_PER_SOL,
+          balanceLamports: account.account.lamports,
           delegated: stake.delegation.stake / LAMPORTS_PER_SOL,
           state: state as 'activating' | 'active' | 'deactivating' | 'inactive',
           delegatedValidator: stake.delegation?.voter,
@@ -87,6 +98,7 @@ export async function getStakeAccountsForVault(
         stakeAccounts.push({
           address: account.pubkey.toBase58(),
           balance: account.account.lamports / LAMPORTS_PER_SOL,
+          balanceLamports: account.account.lamports,
           delegated: delegated,
           state: 'inactive',
           rentExemptReserve: meta.rentExemptReserve / LAMPORTS_PER_SOL,
@@ -150,8 +162,42 @@ export function createDeactivateStakeInstruction(
 export function createWithdrawStakeInstruction(
   stakeAccount: PublicKey,
   vaultAddress: PublicKey,
-  lamports: number
+  lamports: number | bigint
 ): TransactionInstruction {
+  // If lamports is provided as bigint, we need to manually construct the instruction
+  // to preserve precision for very large values (>Number.MAX_SAFE_INTEGER)
+  if (typeof lamports === 'bigint') {
+    // Manually construct the withdraw instruction with proper u64 serialization
+    const type = 4; // Withdraw instruction discriminator
+    const data = Buffer.alloc(12);
+    data.writeUInt32LE(type, 0);
+    // Write lamports as u64 (little-endian)
+    data.writeBigUInt64LE(lamports, 4);
+
+    const keys = [
+      { pubkey: stakeAccount, isSigner: false, isWritable: true },
+      { pubkey: vaultAddress, isSigner: false, isWritable: true },
+      {
+        pubkey: new PublicKey('SysvarC1ock11111111111111111111111111111111'),
+        isSigner: false,
+        isWritable: false,
+      },
+      {
+        pubkey: new PublicKey('SysvarStakeHistory1111111111111111111111111'),
+        isSigner: false,
+        isWritable: false,
+      },
+      { pubkey: vaultAddress, isSigner: true, isWritable: false },
+    ];
+
+    return new TransactionInstruction({
+      keys,
+      programId: StakeProgram.programId,
+      data,
+    });
+  }
+
+  // For regular numbers, use the standard StakeProgram helper
   return StakeProgram.withdraw({
     stakePubkey: stakeAccount,
     authorizedPubkey: vaultAddress,
@@ -168,20 +214,27 @@ export async function createSplitStakeInstructions(
   connection: Connection
 ): Promise<{ instructions: TransactionInstruction[]; newStakeAccount: PublicKey }> {
   // Calculate the new stake account address using the seed
-  const newStakeAccount = await PublicKey.createWithSeed(vaultAddress, seed, StakeProgram.programId);
+  const newStakeAccount = await PublicKey.createWithSeed(
+    vaultAddress,
+    seed,
+    StakeProgram.programId
+  );
 
   // Get rent exempt reserve for the split transaction (optional parameter)
   const rentExemptReserve = await connection.getMinimumBalanceForRentExemption(StakeProgram.space);
 
   // Create split with seed instruction - this handles both account creation and splitting
-  const splitTransaction = StakeProgram.splitWithSeed({
-    stakePubkey: sourceStakeAccount,
-    authorizedPubkey: vaultAddress,
-    splitStakePubkey: newStakeAccount,
-    basePubkey: vaultAddress,
-    seed,
-    lamports,
-  }, rentExemptReserve);
+  const splitTransaction = StakeProgram.splitWithSeed(
+    {
+      stakePubkey: sourceStakeAccount,
+      authorizedPubkey: vaultAddress,
+      splitStakePubkey: newStakeAccount,
+      basePubkey: vaultAddress,
+      seed,
+      lamports,
+    },
+    rentExemptReserve
+  );
 
   return {
     instructions: splitTransaction.instructions,
@@ -217,7 +270,10 @@ export function getCompatibleMergeAccounts(
       (destinationAccount.state === 'active' || destinationAccount.state === 'activating') &&
       (sourceAccount.state === 'active' || sourceAccount.state === 'activating');
 
-    if (bothActiveOrActivating && destinationAccount.delegatedValidator !== sourceAccount.delegatedValidator) {
+    if (
+      bothActiveOrActivating &&
+      destinationAccount.delegatedValidator !== sourceAccount.delegatedValidator
+    ) {
       return false;
     }
 

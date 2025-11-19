@@ -7,11 +7,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useRpcUrl } from '@/hooks/useSettings';
 
 type NetworkConfig = {
   id: string;
   name: string;
   url: string;
+  rpcUrl: string;
 };
 
 const NETWORKS: NetworkConfig[] = [
@@ -19,34 +21,46 @@ const NETWORKS: NetworkConfig[] = [
     id: 'x1-mainnet',
     name: 'X1 Mainnet',
     url: 'https://multisig.mainnet.x1.xyz',
+    rpcUrl: 'https://rpc.mainnet.x1.xyz',
   },
   {
     id: 'x1-testnet',
     name: 'X1 Testnet',
     url: 'https://multisig.testnet.x1.xyz',
+    rpcUrl: 'https://rpc.testnet.x1.xyz',
   },
   {
     id: 'solana-mainnet',
     name: 'Solana Mainnet',
     url: 'https://multisig.solana-mainnet.x1.xyz',
+    rpcUrl: 'https://api.mainnet-beta.solana.com',
   },
 ];
 
-const getCurrentNetwork = (): NetworkConfig => {
+const getCurrentNetwork = (currentRpcUrl: string): NetworkConfig => {
   const hostname = window.location.hostname;
 
-  // Find network based on hostname
-  const network = NETWORKS.find(n => n.url.includes(hostname));
+  // First, try to match by RPC URL
+  const networkByRpc = NETWORKS.find(
+    (n) => currentRpcUrl.includes(n.rpcUrl) || n.rpcUrl.includes(currentRpcUrl.replace(/\/$/, ''))
+  );
+  if (networkByRpc) {
+    return networkByRpc;
+  }
 
-  // Default to X1 Testnet for localhost/development
-  return network || NETWORKS[1];
+  // Fall back to hostname matching
+  const network = NETWORKS.find((n) => n.url.includes(hostname));
+
+  // Default to X1 Mainnet for localhost/development
+  return network || NETWORKS[0];
 };
 
 export const NetworkSwitcher: React.FC = () => {
-  const currentNetwork = getCurrentNetwork();
+  const { rpcUrl } = useRpcUrl();
+  const currentNetwork = getCurrentNetwork(rpcUrl || '');
 
   const handleNetworkChange = (networkId: string) => {
-    const network = NETWORKS.find(n => n.id === networkId);
+    const network = NETWORKS.find((n) => n.id === networkId);
     if (network && network.id !== currentNetwork.id) {
       // Redirect to the selected network, preserving the current path
       const currentPath = window.location.pathname + window.location.hash;
