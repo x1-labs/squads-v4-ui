@@ -57,6 +57,15 @@ const ExecuteButton = ({
   const queryClient = useQueryClient();
 
   const executeTransaction = async () => {
+    console.log('[ExecuteButton] Starting execution process', {
+      multisigPda,
+      transactionIndex,
+      proposalStatus,
+      wallet: wallet.publicKey?.toBase58(),
+      priorityFeeLamports,
+      computeUnitBudget,
+    });
+
     // Clear any previous errors
     setErrorMessage(null);
 
@@ -126,7 +135,10 @@ const ExecuteButton = ({
       instructions.push(computeUnitInstruction);
     }
 
+    // Get blockhash for building transactions (will be refreshed before signing)
+    console.log('[ExecuteButton] Fetching initial blockhash');
     let blockhash = (await connection.getLatestBlockhash()).blockhash;
+    console.log('[ExecuteButton] Got initial blockhash:', blockhash);
 
     if (txType == 'vault') {
       const resp = await multisig.instructions.vaultTransactionExecute({
@@ -202,17 +214,54 @@ const ExecuteButton = ({
       );
     }
 
+    console.log('[ExecuteButton] Built', transactions.length, 'transaction(s)');
+
+    // Get FRESH blockhash right before signing
+    // This is critical because user approval can take 30+ seconds
+    console.log('[ExecuteButton] Fetching FRESH blockhash before signing');
+    const startFreshBlockhash = Date.now();
+    const freshBlockhash = (await connection.getLatestBlockhash('finalized')).blockhash;
+    console.log(
+      '[ExecuteButton] Got fresh blockhash:',
+      freshBlockhash,
+      'in',
+      Date.now() - startFreshBlockhash,
+      'ms'
+    );
+
+    // Update all transactions with fresh blockhash
+    console.log('[ExecuteButton] Updating transactions with fresh blockhash');
+    transactions = transactions.map((tx) => {
+      const message = TransactionMessage.decompile(tx.message);
+      message.recentBlockhash = freshBlockhash;
+      // Preserve address lookup tables if they exist
+      const addressTableLookups = tx.message.addressTableLookups || [];
+      return new VersionedTransaction(message.compileToV0Message(addressTableLookups));
+    });
+
+    console.log(
+      '[ExecuteButton] Requesting wallet signatures for',
+      transactions.length,
+      'transaction(s)'
+    );
+    const startSign = Date.now();
     const signedTransactions = await wallet.signAllTransactions(transactions);
+    console.log('[ExecuteButton] Got signatures in', Date.now() - startSign, 'ms');
 
     let signatures = [];
 
     for (let i = 0; i < signedTransactions.length; i++) {
       const signedTx = signedTransactions[i];
+      console.log(
+        `[ExecuteButton] Processing transaction ${i + 1} of ${signedTransactions.length}`
+      );
       try {
         // First simulate the transaction to catch errors early
+        console.log(`[ExecuteButton] Simulating transaction ${i + 1}`);
         const simulation = await connection.simulateTransaction(signedTx, {
           commitment: 'processed',
         });
+        console.log(`[ExecuteButton] Simulation result for tx ${i + 1}:`, simulation.value);
 
         if (simulation.value.err) {
           console.error('Simulation error:', simulation.value.err);
@@ -278,13 +327,22 @@ const ExecuteButton = ({
         }
 
         // If simulation passes, send the transaction
+        console.log(`[ExecuteButton] Sending transaction ${i + 1} to network`);
+        const startSend = Date.now();
         const signature = await connection.sendRawTransaction(signedTx.serialize(), {
           skipPreflight: false,
           preflightCommitment: 'processed',
+          maxRetries: 3,
         });
+        console.log(
+          `[ExecuteButton] Transaction ${i + 1} sent! Signature:`,
+          signature,
+          'Time:',
+          Date.now() - startSend,
+          'ms'
+        );
 
         signatures.push(signature);
-        console.log('Transaction signature', signature);
 
         if (signedTransactions.length === 1) {
           toast.loading('Confirming transaction...', {
@@ -296,7 +354,8 @@ const ExecuteButton = ({
           });
         }
       } catch (error: any) {
-        console.error('Transaction error:', error);
+        console.error(`[ExecuteButton] Transaction ${i + 1} error:`, error);
+        console.error(`[ExecuteButton] Error stack:`, error?.stack);
 
         // Check for common RPC errors
         if (error.message?.includes('blockhash not found')) {
@@ -345,8 +404,20 @@ const ExecuteButton = ({
       throw new Error('No transactions were sent successfully');
     }
 
+    console.log(
+      '[ExecuteButton] Waiting for confirmations for',
+      signatures.length,
+      'transaction(s)'
+    );
+    const startConfirm = Date.now();
     const confirmations = await waitForConfirmation(connection, signatures);
-    console.log('Confirmation results:', confirmations);
+    console.log(
+      '[ExecuteButton] Confirmation results:',
+      confirmations,
+      'Time:',
+      Date.now() - startConfirm,
+      'ms'
+    );
 
     // Check if any transactions failed
     const failedTxs = confirmations.filter((status) => {
@@ -379,9 +450,11 @@ const ExecuteButton = ({
     }
 
     // All transactions succeeded
+    console.log('[ExecuteButton] All transactions confirmed successfully');
     closeDialog();
 
     // Invalidate all relevant queries to refresh data
+    console.log('[ExecuteButton] Invalidating queries');
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['transactions'] }),
       queryClient.invalidateQueries({ queryKey: ['multisig'] }),
@@ -390,11 +463,13 @@ const ExecuteButton = ({
     ]);
 
     // Force a page reload after a short delay to ensure all data is fresh
+    console.log('[ExecuteButton] Scheduling page reload');
     setTimeout(() => {
       window.location.reload();
     }, 1500);
 
     // Return success result
+    console.log('[ExecuteButton] Execution completed successfully');
     return {
       success: true,
       signatures,
