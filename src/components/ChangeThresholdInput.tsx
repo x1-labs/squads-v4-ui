@@ -93,8 +93,16 @@ const ChangeThresholdInput = ({ multisigPda, transactionIndex }: ChangeThreshold
     }).compileToV0Message();
 
     const transaction = new VersionedTransaction(message);
-    const signature = await wallet.sendTransaction(transaction, connection, {
-      skipPreflight: true,
+
+    // Sign transaction first, then send manually to avoid "Plugin Closed" errors
+    if (!wallet.signTransaction) {
+      throw new Error('Wallet does not support transaction signing');
+    }
+
+    const signedTransaction = await wallet.signTransaction(transaction);
+    const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+      skipPreflight: false,
+      maxRetries: 3,
     });
     console.log('Transaction signature', signature);
     toast.loading('Confirming...', {
