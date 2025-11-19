@@ -50,7 +50,8 @@ function loadStakePoolsFromEnv(): StakePoolInfo[] {
         address,
         name,
         tokenSymbol,
-        tokenProgramId,
+        // Default to TOKEN_PROGRAM_ID if not specified
+        tokenProgramId: tokenProgramId || TOKEN_PROGRAM_ID.toBase58(),
         poolMint: mint,
         reserveStake: reserve,
       });
@@ -79,6 +80,16 @@ export async function getStakePoolsForDisplay(
   // Fetch metadata and balances for each pool
   for (const pool of pools) {
     try {
+      // Validate pool data before creating PublicKeys
+      if (!pool.poolMint) {
+        console.error(`Pool ${pool.name} is missing poolMint`);
+        continue;
+      }
+      if (!pool.tokenProgramId) {
+        console.error(`Pool ${pool.name} is missing tokenProgramId`);
+        continue;
+      }
+
       const poolMint = new PublicKey(pool.poolMint);
       const tokenProgramId = new PublicKey(pool.tokenProgramId);
 
