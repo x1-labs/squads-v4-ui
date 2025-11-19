@@ -116,7 +116,7 @@ const CancelButton = ({
       // This minimizes the time between getting blockhash and wallet approval
       console.log('[CancelButton] Fetching FRESH blockhash for sending');
       const startFreshBlockhash = Date.now();
-      const { blockhash: freshBlockhash } = await connection.getLatestBlockhash('finalized');
+      const { blockhash: freshBlockhash } = await connection.getLatestBlockhash();
       console.log(
         '[CancelButton] Got fresh blockhash:',
         freshBlockhash,

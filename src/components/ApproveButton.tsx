@@ -129,7 +129,7 @@ const ApproveButton = ({
       // This minimizes the time between getting blockhash and wallet approval
       console.log('[ApproveButton] Fetching FRESH blockhash for sending');
       const startFreshBlockhash = Date.now();
-      const { blockhash: freshBlockhash } = await connection.getLatestBlockhash('finalized');
+      const { blockhash: freshBlockhash } = await connection.getLatestBlockhash();
       console.log(
         '[ApproveButton] Got fresh blockhash:',
         freshBlockhash,

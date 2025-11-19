@@ -207,7 +207,7 @@ const ExecuteButton = ({
     // This is critical because user approval can take 30+ seconds
     console.log('[ExecuteButton] Fetching FRESH blockhash for transaction building');
     const startFreshBlockhash = Date.now();
-    const freshBlockhash = (await connection.getLatestBlockhash('finalized')).blockhash;
+    const freshBlockhash = (await connection.getLatestBlockhash()).blockhash;
     console.log(
       '[ExecuteButton] Got fresh blockhash:',
       freshBlockhash,
