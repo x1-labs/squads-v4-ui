@@ -37,8 +37,23 @@ export function StakingPanel() {
                     className="flex items-center justify-between rounded-lg bg-muted/30 p-3 transition-colors hover:bg-muted/50"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-emerald-500">
-                        <span className="text-xs font-bold text-white">SP</span>
+                      {pool.logoURI ? (
+                        <img
+                          src={pool.logoURI}
+                          alt={pool.name}
+                          className="h-10 w-10 rounded-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        className={`flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-green-500 to-emerald-500 ${pool.logoURI ? 'hidden' : ''}`}
+                      >
+                        <span className="text-xs font-bold text-white">
+                          {pool.tokenSymbol?.slice(0, 2) || 'SP'}
+                        </span>
                       </div>
                       <div>
                         <p className="font-medium">{pool.name}</p>

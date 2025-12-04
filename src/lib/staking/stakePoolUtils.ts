@@ -9,6 +9,7 @@ export interface StakePoolInfo {
   reserveStake: string;
   tokenProgramId: string;
   tokenSymbol?: string;
+  logoURI?: string;
   totalStaked?: number;
   userBalance?: number;
 }
@@ -93,11 +94,14 @@ export async function getStakePoolsForDisplay(
       const poolMint = new PublicKey(pool.poolMint);
       const tokenProgramId = new PublicKey(pool.tokenProgramId);
 
-      // Fetch token metadata to get the symbol
+      // Fetch token metadata to get the symbol and logo
       try {
         const metadata = await getTokenMetadata(poolMint, connection);
         if (metadata.symbol) {
           pool.tokenSymbol = metadata.symbol;
+        }
+        if (metadata.logoURI) {
+          pool.logoURI = metadata.logoURI;
         }
       } catch (error) {
         console.debug('Failed to fetch metadata for pool token:', pool.poolMint);
