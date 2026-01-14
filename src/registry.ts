@@ -140,11 +140,19 @@ registry.register({
       summary: SplMintSummary,
       tags: { label: 'Mint Tokens', color: 'green', variant: 'subtle' },
     },
+    MintToChecked: {
+      summary: SplMintSummary,
+      tags: { label: 'Mint Tokens', color: 'green', variant: 'subtle' },
+    },
     'Mint To Checked': {
       summary: SplMintSummary,
       tags: { label: 'Mint Tokens', color: 'green', variant: 'subtle' },
     },
     Burn: {
+      summary: SplBurnSummary,
+      tags: { label: 'Burn Tokens', color: 'red', variant: 'subtle' },
+    },
+    BurnChecked: {
       summary: SplBurnSummary,
       tags: { label: 'Burn Tokens', color: 'red', variant: 'subtle' },
     },
