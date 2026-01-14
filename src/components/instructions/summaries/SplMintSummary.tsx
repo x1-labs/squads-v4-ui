@@ -14,15 +14,48 @@ export const SplMintSummary: React.FC<InstructionSummaryProps> = ({ instruction,
   const [destinationOwner, setDestinationOwner] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const data = instruction.data as MintToData | undefined;
-  if (!data?.amount || !data?.mint || !data?.destination) {
+  // Debug log the instruction structure
+  console.log('SplMintSummary instruction:', {
+    instructionName: instruction.instructionName,
+    data: instruction.data,
+    args: instruction.args,
+    accounts: instruction.accounts,
+  });
+
+  // Try to get data from instruction.data first, then fall back to args/accounts
+  const typedData = instruction.data as MintToData | undefined;
+
+  // Get amount - from typed data or args
+  const amount = typedData?.amount || instruction.args?.amount;
+  if (!amount) {
+    console.log('SplMintSummary: No amount found, returning null');
     return null;
   }
 
-  const mintAddress = data.mint;
-  const destinationAccount = data.destination;
-  const authority = data.authority;
-  const decimals = data.decimals || 0;
+  // Get accounts - from typed data or instruction.accounts array
+  // MintTo/MintToChecked accounts: [mint, destination, authority]
+  const mintAddress =
+    typedData?.mint ||
+    instruction.accounts?.find((a) => a.name?.toLowerCase() === 'mint')?.pubkey ||
+    instruction.accounts?.[0]?.pubkey;
+
+  const destinationAccount =
+    typedData?.destination ||
+    instruction.accounts?.find((a) => a.name?.toLowerCase() === 'destination')?.pubkey ||
+    instruction.accounts?.[1]?.pubkey;
+
+  const authority =
+    typedData?.authority ||
+    instruction.accounts?.find((a) => a.name?.toLowerCase() === 'authority')?.pubkey ||
+    instruction.accounts?.[2]?.pubkey;
+
+  // Get decimals - from typed data or args
+  const decimals = typedData?.decimals ?? instruction.args?.decimals ?? 0;
+
+  if (!mintAddress || !destinationAccount) {
+    console.log('SplMintSummary: Missing mint or destination, returning null');
+    return null;
+  }
 
   useEffect(() => {
     const fetchData = async () => {
@@ -51,7 +84,7 @@ export const SplMintSummary: React.FC<InstructionSummaryProps> = ({ instruction,
     }
   }, [mintAddress, connection]);
 
-  const formattedAmount = formatTokenAmount(data.amount, decimals);
+  const formattedAmount = formatTokenAmount(amount, decimals);
   const tokenSymbol = tokenMetadata?.symbol || 'tokens';
   const tokenName = tokenMetadata?.name;
 
@@ -100,9 +133,11 @@ export const SplMintSummary: React.FC<InstructionSummaryProps> = ({ instruction,
             </div>
 
             {/* Authority */}
-            <div className="mt-2 border-t border-border/50 pt-2">
-              <AddressWithButtons address={authority} label="Mint Authority" />
-            </div>
+            {authority && (
+              <div className="mt-2 border-t border-border/50 pt-2">
+                <AddressWithButtons address={authority} label="Mint Authority" />
+              </div>
+            )}
 
             {/* Token mint */}
             <div className="border-t border-border/50 pt-2">
