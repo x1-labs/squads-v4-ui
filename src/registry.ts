@@ -19,6 +19,8 @@ import { CreateAccountWithSeedSummary } from './components/instructions/summarie
 import { UpdateCommissionSummary } from './components/instructions/summaries/UpdateCommissionSummary';
 import { VoteWithdrawSummary } from './components/instructions/summaries/VoteWithdrawSummary';
 import { VoteAuthorizeSummary } from './components/instructions/summaries/VoteAuthorizeSummary';
+import { SplMintSummary } from './components/instructions/summaries/SplMintSummary';
+import { SplBurnSummary } from './components/instructions/summaries/SplBurnSummary';
 
 // Import IDLs
 import squadsV4Idl from './lib/idls/squads-v4.json';
@@ -131,9 +133,23 @@ registry.register({
       tags: { label: 'Token Transfer', color: 'purple', variant: 'subtle' },
     },
     MintTo: {
+      summary: SplMintSummary,
+      tags: { label: 'Mint Tokens', color: 'green', variant: 'subtle' },
+    },
+    'Mint To': {
+      summary: SplMintSummary,
+      tags: { label: 'Mint Tokens', color: 'green', variant: 'subtle' },
+    },
+    'Mint To Checked': {
+      summary: SplMintSummary,
       tags: { label: 'Mint Tokens', color: 'green', variant: 'subtle' },
     },
     Burn: {
+      summary: SplBurnSummary,
+      tags: { label: 'Burn Tokens', color: 'red', variant: 'subtle' },
+    },
+    'Burn Checked': {
+      summary: SplBurnSummary,
       tags: { label: 'Burn Tokens', color: 'red', variant: 'subtle' },
     },
     Approve: {
