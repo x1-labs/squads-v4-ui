@@ -14,15 +14,47 @@ export const SplBurnSummary: React.FC<InstructionSummaryProps> = ({ instruction,
   const [accountOwner, setAccountOwner] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const data = instruction.data as BurnData | undefined;
-  if (!data?.amount || !data?.account) {
+  // Debug log the instruction structure
+  console.log('SplBurnSummary instruction:', {
+    instructionName: instruction.instructionName,
+    data: instruction.data,
+    args: instruction.args,
+    accounts: instruction.accounts,
+  });
+
+  // Try to get data from instruction.data first, then fall back to args/accounts
+  const typedData = instruction.data as BurnData | undefined;
+
+  // Get amount - from typed data or args
+  const amount = typedData?.amount || instruction.args?.amount;
+  if (!amount) {
+    console.log('SplBurnSummary: No amount found, returning null');
     return null;
   }
 
-  const tokenAccount = data.account;
-  const mintAddress = data.mint;
-  const authority = data.authority;
-  const decimals = data.decimals || 0;
+  // Get accounts - from typed data or instruction.accounts array
+  // Burn/BurnChecked accounts: [account, mint, authority]
+  const tokenAccount =
+    typedData?.account ||
+    instruction.accounts?.find((a) => a.name?.toLowerCase() === 'account')?.pubkey ||
+    instruction.accounts?.[0]?.pubkey;
+
+  const mintAddress =
+    typedData?.mint ||
+    instruction.accounts?.find((a) => a.name?.toLowerCase() === 'mint')?.pubkey ||
+    instruction.accounts?.[1]?.pubkey;
+
+  const authority =
+    typedData?.authority ||
+    instruction.accounts?.find((a) => a.name?.toLowerCase() === 'authority')?.pubkey ||
+    instruction.accounts?.[2]?.pubkey;
+
+  // Get decimals - from typed data or args
+  const decimals = typedData?.decimals ?? instruction.args?.decimals ?? 0;
+
+  if (!tokenAccount) {
+    return null;
+  }
 
   useEffect(() => {
     const fetchData = async () => {
@@ -49,7 +81,7 @@ export const SplBurnSummary: React.FC<InstructionSummaryProps> = ({ instruction,
     }
   }, [mintAddress, connection]);
 
-  const formattedAmount = formatTokenAmount(data.amount, decimals);
+  const formattedAmount = formatTokenAmount(amount, decimals);
   const tokenSymbol = tokenMetadata?.symbol || 'tokens';
   const tokenName = tokenMetadata?.name;
 
@@ -95,9 +127,11 @@ export const SplBurnSummary: React.FC<InstructionSummaryProps> = ({ instruction,
             </div>
 
             {/* Authority */}
-            <div className="mt-2 border-t border-border/50 pt-2">
-              <AddressWithButtons address={authority} label="Authority" />
-            </div>
+            {authority && (
+              <div className="mt-2 border-t border-border/50 pt-2">
+                <AddressWithButtons address={authority} label="Authority" />
+              </div>
+            )}
 
             {/* Token mint */}
             {mintAddress && (
