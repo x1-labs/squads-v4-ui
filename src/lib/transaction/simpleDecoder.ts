@@ -3,7 +3,7 @@ import * as multisig from '@sqds/multisig';
 import { BorshInstructionCoder } from '@coral-xyz/anchor';
 import { idlManager } from '../idls/idlManager';
 import { IdlFormat, isAnchorCompatible } from '../idls/idlFormats';
-import { InstructionData } from './instructionTypes';
+import { InstructionData, MintToData, BurnData } from './instructionTypes';
 import { formatInstructionTitle } from '../utils/instructionFormatters';
 
 export interface DecodedInstruction {
@@ -1316,17 +1316,35 @@ export class SimpleDecoder {
       case 7: // MintTo
         instructionName = 'Mint To';
         if (data.length >= 9) {
+          const amount = data.readBigUInt64LE(1);
           args = {
-            amount: data.readBigUInt64LE(1).toString(),
+            amount: amount.toString(),
           };
+          // Create typed data for MintTo
+          // Accounts: [mint, destination, authority]
+          instructionData = {
+            mint: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
+            destination: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
+            authority: accountKeys[2]?.pubkey?.toBase58() || 'Unknown',
+            amount,
+          } as MintToData;
         }
         break;
       case 8: // Burn
         instructionName = 'Burn';
         if (data.length >= 9) {
+          const amount = data.readBigUInt64LE(1);
           args = {
-            amount: data.readBigUInt64LE(1).toString(),
+            amount: amount.toString(),
           };
+          // Create typed data for Burn
+          // Accounts: [account, mint, authority]
+          instructionData = {
+            account: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
+            mint: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
+            authority: accountKeys[2]?.pubkey?.toBase58() || 'Unknown',
+            amount,
+          } as BurnData;
         }
         break;
       case 9: // CloseAccount
@@ -1371,19 +1389,41 @@ export class SimpleDecoder {
       case 14: // MintToChecked
         instructionName = 'Mint To Checked';
         if (data.length >= 10) {
+          const amount = data.readBigUInt64LE(1);
+          const decimals = data[9];
           args = {
-            amount: data.readBigUInt64LE(1).toString(),
-            decimals: data[9],
+            amount: amount.toString(),
+            decimals,
           };
+          // Create typed data for MintToChecked
+          // Accounts: [mint, destination, authority]
+          instructionData = {
+            mint: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
+            destination: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
+            authority: accountKeys[2]?.pubkey?.toBase58() || 'Unknown',
+            amount,
+            decimals,
+          } as MintToData;
         }
         break;
       case 15: // BurnChecked
         instructionName = 'Burn Checked';
         if (data.length >= 10) {
+          const amount = data.readBigUInt64LE(1);
+          const decimals = data[9];
           args = {
-            amount: data.readBigUInt64LE(1).toString(),
-            decimals: data[9],
+            amount: amount.toString(),
+            decimals,
           };
+          // Create typed data for BurnChecked
+          // Accounts: [account, mint, authority]
+          instructionData = {
+            account: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
+            mint: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
+            authority: accountKeys[2]?.pubkey?.toBase58() || 'Unknown',
+            amount,
+            decimals,
+          } as BurnData;
         }
         break;
       case 16: // InitializeAccount2
