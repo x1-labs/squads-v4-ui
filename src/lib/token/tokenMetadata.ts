@@ -1,11 +1,6 @@
 import { Connection, PublicKey } from '@solana/web3.js';
 import { createUmi } from '@metaplex-foundation/umi-bundle-defaults';
-import { fromWeb3JsPublicKey, toWeb3JsPublicKey } from '@metaplex-foundation/umi-web3js-adapters';
-import {
-  fetchMetadata,
-  findMetadataPda,
-  Metadata as MetaplexMetadata,
-} from '@metaplex-foundation/mpl-token-metadata';
+import { safeFetchMetadata, findMetadataPda } from '@metaplex-foundation/mpl-token-metadata';
 import { publicKey } from '@metaplex-foundation/umi';
 import {
   getMint,
@@ -13,6 +8,7 @@ import {
   TOKEN_PROGRAM_ID,
   ExtensionType,
   getExtensionData,
+  Mint,
 } from '@solana/spl-token';
 import { unpack } from '@solana/spl-token-metadata';
 
@@ -24,33 +20,54 @@ export interface TokenMetadata {
   address: string;
 }
 
+interface MintWithProgram {
+  mintInfo: Mint;
+  programId: PublicKey;
+}
+
 const metadataCache = new Map<string, TokenMetadata>();
 
 /**
- * Determine which token program a mint belongs to
+ * Determine which token program a mint belongs to and return the mint info
  */
-async function getTokenProgram(mintAddress: PublicKey, connection: Connection): Promise<PublicKey> {
+async function getMintWithProgram(
+  mintAddress: PublicKey,
+  connection: Connection
+): Promise<MintWithProgram | null> {
+  // First, get the account info to check the owner (single RPC call)
+  const accountInfo = await connection.getAccountInfo(mintAddress, 'confirmed');
+  if (!accountInfo) {
+    return null;
+  }
+
+  // Determine the program based on the account owner
+  let programId: PublicKey;
+  if (accountInfo.owner.equals(TOKEN_2022_PROGRAM_ID)) {
+    programId = TOKEN_2022_PROGRAM_ID;
+  } else if (accountInfo.owner.equals(TOKEN_PROGRAM_ID)) {
+    programId = TOKEN_PROGRAM_ID;
+  } else {
+    // Not a token mint
+    return null;
+  }
+
+  // Now fetch the mint data with the correct program
   try {
-    // Try Token 2022 first
-    await getMint(connection, mintAddress, 'confirmed', TOKEN_2022_PROGRAM_ID);
-    return TOKEN_2022_PROGRAM_ID;
+    const mintInfo = await getMint(connection, mintAddress, 'confirmed', programId);
+    return { mintInfo, programId };
   } catch {
-    // Fall back to Token Program
-    return TOKEN_PROGRAM_ID;
+    return null;
   }
 }
 
 /**
- * Fetch Token 2022 on-chain metadata
+ * Extract Token 2022 on-chain metadata from mint info
  */
-async function getToken2022OnChainMetadata(
+function extractToken2022Metadata(
   mintAddress: PublicKey,
-  connection: Connection
-): Promise<TokenMetadata | null> {
+  mintInfo: Mint
+): TokenMetadata | null {
   try {
-    // Get the mint account with Token 2022 program
-    const mintInfo = await getMint(connection, mintAddress, 'confirmed', TOKEN_2022_PROGRAM_ID);
-
     // Check if the mint has metadata extension
     if (!mintInfo.tlvData || mintInfo.tlvData.length === 0) {
       return null;
@@ -64,47 +81,48 @@ async function getToken2022OnChainMetadata(
     const metadata = unpack(metadataExtension);
     if (!metadata) return null;
 
-    const result: TokenMetadata = {
+    return {
       address: mintAddress.toBase58(),
       name: metadata.name || undefined,
       symbol: metadata.symbol || undefined,
       logoURI: metadata.uri || undefined,
     };
-
-    // If there's a URI, try to fetch additional metadata
-    if (metadata.uri) {
-      try {
-        const response = await fetch(metadata.uri);
-        if (response.ok) {
-          const contentType = response.headers.get('content-type');
-
-          if (contentType && contentType.includes('application/json')) {
-            const jsonMetadata = await response.json();
-            if (jsonMetadata.image) {
-              result.logoURI = jsonMetadata.image;
-            }
-            // Update fields from JSON if they exist
-            if (jsonMetadata.name) {
-              result.name = jsonMetadata.name;
-            }
-            if (jsonMetadata.symbol) {
-              result.symbol = jsonMetadata.symbol;
-            }
-          } else if (contentType && contentType.startsWith('image/')) {
-            // URI points directly to an image
-            result.logoURI = metadata.uri;
-          }
-        }
-      } catch (error) {
-        // Silently ignore URI fetch errors
-      }
-    }
-
-    return result;
-  } catch (error) {
-    console.debug('Failed to fetch Token 2022 metadata for', mintAddress.toBase58(), error);
+  } catch {
     return null;
   }
+}
+
+/**
+ * Fetch additional metadata from URI (for both Token 2022 and Metaplex)
+ */
+async function fetchUriMetadata(
+  baseMetadata: TokenMetadata,
+  uri: string
+): Promise<TokenMetadata> {
+  try {
+    const response = await fetch(uri);
+    if (response.ok) {
+      const contentType = response.headers.get('content-type');
+
+      if (contentType && contentType.includes('application/json')) {
+        const jsonMetadata = await response.json();
+        if (jsonMetadata.image) {
+          baseMetadata.logoURI = jsonMetadata.image;
+        }
+        if (jsonMetadata.name) {
+          baseMetadata.name = jsonMetadata.name;
+        }
+        if (jsonMetadata.symbol) {
+          baseMetadata.symbol = jsonMetadata.symbol;
+        }
+      } else if (contentType && contentType.startsWith('image/')) {
+        baseMetadata.logoURI = uri;
+      }
+    }
+  } catch {
+    // Silently ignore URI fetch errors
+  }
+  return baseMetadata;
 }
 
 /**
@@ -129,20 +147,40 @@ export async function getTokenMetadata(
         ? localStorage.getItem('x-rpc-url')!
         : connection.rpcEndpoint;
 
-    // First, try Token 2022 on-chain metadata (faster and more reliable)
-    const token2022Metadata = await getToken2022OnChainMetadata(mintPublicKey, connection);
-    if (token2022Metadata) {
-      metadataCache.set(address, token2022Metadata);
-      return token2022Metadata;
+    // First, determine which token program owns this mint
+    const mintWithProgram = await getMintWithProgram(mintPublicKey, connection);
+
+    // If it's a Token 2022 token, try to get on-chain metadata first
+    if (mintWithProgram && mintWithProgram.programId.equals(TOKEN_2022_PROGRAM_ID)) {
+      const token2022Metadata = extractToken2022Metadata(mintPublicKey, mintWithProgram.mintInfo);
+      if (token2022Metadata) {
+        // Fetch additional metadata from URI if available
+        if (token2022Metadata.logoURI) {
+          await fetchUriMetadata(token2022Metadata, token2022Metadata.logoURI);
+        }
+        metadataCache.set(address, token2022Metadata);
+        return token2022Metadata;
+      }
     }
 
     // Fall back to Metaplex metadata for both Token Program and Token 2022 tokens
     const umi = createUmi(rpcUrl);
     const mint = publicKey(address);
     const metadataPda = findMetadataPda(umi, { mint });
-    const metadataAccount = await fetchMetadata(umi, metadataPda);
+    const metadataAccount = await safeFetchMetadata(umi, metadataPda);
 
-    const metadata: TokenMetadata = {
+    // If no Metaplex metadata exists, return fallback
+    if (!metadataAccount) {
+      const fallbackMetadata: TokenMetadata = {
+        address,
+        symbol: address.slice(0, 4) + '...',
+        name: 'Unknown Token',
+      };
+      metadataCache.set(address, fallbackMetadata);
+      return fallbackMetadata;
+    }
+
+    let metadata: TokenMetadata = {
       address,
       name: metadataAccount.name || undefined,
       symbol: metadataAccount.symbol || undefined,
@@ -150,34 +188,7 @@ export async function getTokenMetadata(
     };
 
     if (metadataAccount.uri) {
-      try {
-        // For localnet, we might not be able to fetch external URIs
-        // but we'll try anyway in case it's pointing to a local server
-        const response = await fetch(metadataAccount.uri);
-        if (response.ok) {
-          const contentType = response.headers.get('content-type');
-
-          // Check if the response is JSON
-          if (contentType && contentType.includes('application/json')) {
-            const jsonMetadata = await response.json();
-            if (jsonMetadata.image) {
-              metadata.logoURI = jsonMetadata.image;
-            }
-            // Update name and symbol if they exist in JSON
-            if (jsonMetadata.name) {
-              metadata.name = jsonMetadata.name;
-            }
-            if (jsonMetadata.symbol) {
-              metadata.symbol = jsonMetadata.symbol;
-            }
-          } else if (contentType && contentType.startsWith('image/')) {
-            // If the URI points directly to an image, use it as the logo
-            metadata.logoURI = metadataAccount.uri;
-          }
-        }
-      } catch (error) {
-        // Silently ignore - this is common when URIs point to images or are unreachable
-      }
+      metadata = await fetchUriMetadata(metadata, metadataAccount.uri);
     }
 
     metadataCache.set(address, metadata);
