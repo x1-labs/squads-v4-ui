@@ -33,7 +33,7 @@ interface CreateSquadFormData {
 }
 
 export default function CreateSquadForm({}: {}) {
-  const { publicKey, connected, sendTransaction } = useWallet();
+  const { publicKey, connected, signTransaction } = useWallet();
 
   const { connection, programId } = useMultisigData();
   const { setMultisigAddress } = useMultisigAddress();
@@ -58,51 +58,49 @@ export default function CreateSquadForm({}: {}) {
 
   async function submitHandler() {
     if (!connected) throw new Error('Please connect your wallet.');
-    try {
-      const createKey = Keypair.generate();
+    if (!signTransaction) throw new Error('Wallet does not support transaction signing');
 
-      const { transaction, multisig } = await createMultisig(
-        connection,
-        publicKey!,
-        formState.values.members.memberData,
-        formState.values.threshold,
-        createKey.publicKey,
-        formState.values.rentCollector,
-        formState.values.configAuthority,
-        programId.toBase58()
-      );
+    const createKey = Keypair.generate();
 
-      const signature = await sendTransaction(transaction, connection, {
-        skipPreflight: true,
-        signers: [createKey],
-      });
-      console.log('Transaction signature', signature);
-      toast.loading('Confirming...', {
-        id: 'create',
-      });
+    const { transaction, multisig } = await createMultisig(
+      connection,
+      publicKey!,
+      formState.values.members.memberData,
+      formState.values.threshold,
+      createKey.publicKey,
+      formState.values.rentCollector,
+      formState.values.configAuthority,
+      programId.toBase58()
+    );
 
-      let sent = false;
-      const maxAttempts = 10;
-      const delayMs = 1000;
-      for (let attempt = 0; attempt <= maxAttempts && !sent; attempt++) {
-        const status = await connection.getSignatureStatus(signature);
-        if (status?.value?.confirmationStatus === 'finalized') {
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-          sent = true;
-        } else {
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-        }
+    // Sign with createKey first, then wallet, to avoid "Plugin Closed" errors
+    transaction.partialSign(createKey);
+    const signedTransaction = await signTransaction(transaction);
+    const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+      skipPreflight: false,
+      maxRetries: 3,
+    });
+    console.log('Transaction signature', signature);
+    toast.loading('Confirming...', {
+      id: 'create',
+    });
+
+    let sent = false;
+    const maxAttempts = 10;
+    const delayMs = 1000;
+    for (let attempt = 0; attempt <= maxAttempts && !sent; attempt++) {
+      const status = await connection.getSignatureStatus(signature);
+      if (status?.value?.confirmationStatus === 'finalized') {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        sent = true;
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
-
-      setMultisigAddress.mutate(multisig.toBase58());
-
-      return { signature, multisig: multisig.toBase58() };
-    } catch (error: any) {
-      console.error(error);
-      return error;
-    } finally {
-      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
+
+    setMultisigAddress.mutate(multisig.toBase58());
+
+    return { signature, multisig: multisig.toBase58() };
   }
 
   return (
