@@ -62,9 +62,8 @@ export const NetworkSwitcher: React.FC = () => {
   const handleNetworkChange = (networkId: string) => {
     const network = NETWORKS.find((n) => n.id === networkId);
     if (network && network.id !== currentNetwork.id) {
-      // Redirect to the selected network, preserving the current path
-      const currentPath = window.location.pathname + window.location.hash;
-      window.location.href = network.url + currentPath;
+      // Redirect to the root of the selected network (multisigs are network-specific)
+      window.location.href = network.url;
     }
   };
 
