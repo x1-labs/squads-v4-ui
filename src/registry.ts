@@ -19,12 +19,36 @@ import { CreateAccountWithSeedSummary } from './components/instructions/summarie
 import { UpdateCommissionSummary } from './components/instructions/summaries/UpdateCommissionSummary';
 import { VoteWithdrawSummary } from './components/instructions/summaries/VoteWithdrawSummary';
 import { VoteAuthorizeSummary } from './components/instructions/summaries/VoteAuthorizeSummary';
+import { BridgeOutSummary } from './components/instructions/summaries/BridgeOutSummary';
+import { BridgeInSummary } from './components/instructions/summaries/BridgeInSummary';
+import { BridgeClaimSummary } from './components/instructions/summaries/BridgeClaimSummary';
+import { BridgePauseSummary } from './components/instructions/summaries/BridgePauseSummary';
+import { BridgeUnpauseSummary } from './components/instructions/summaries/BridgeUnpauseSummary';
+import {
+  BridgeInitializeSummary,
+  BridgeTransferAdminSummary,
+  BridgeSetGuardiansSummary,
+  BridgeSetRoleSummary,
+  BridgeSetFeesSummary,
+  BridgeRegisterTokenSummary,
+  BridgeDeregisterTokenSummary,
+  BridgeUpdateTokenRegistrySummary,
+  BridgeSetTokenFeesSummary,
+  BridgeSetWhaleLimitsSummary,
+  BridgeInitializeVaultSummary,
+  BridgeInitializeRolesSummary,
+  BridgeSetVaultBalanceSummary,
+  BridgeMigrateConfigSummary,
+  BridgeMigrateTokenRegistrySummary,
+  BridgeTransferMintAuthoritySummary,
+} from './components/instructions/summaries/warp-bridge';
 
 // Import IDLs
 import squadsV4Idl from './lib/idls/squads-v4.json';
 import delegationProgramIdl from './lib/idls/delegation_program.json';
 import tokenProgramIdl from './lib/idls/token_program.json';
 import stakePoolIdl from './lib/idls/stake_pool.json';
+import warpBridgeIdl from './lib/idls/warp_bridge.json';
 // Stake program IDL is registered but uses custom parsing
 
 // ============================================
@@ -229,6 +253,105 @@ registry.register({
     withdrawSol: {
       summary: StakePoolWithdrawSummary,
       tags: { label: 'Stake Withdraw', color: 'orange', variant: 'subtle' },
+    },
+  },
+});
+
+// ============================================
+// Warp Bridge
+// ============================================
+registry.register({
+  programId: '6JbPTuxVuoTgyQeXFb9MH8C8nUY8NBbLP1Lu4B13JfMD',
+  name: 'Warp Bridge',
+  idl: warpBridgeIdl,
+  instructions: {
+    // Core bridge operations
+    bridge_out: {
+      summary: BridgeOutSummary,
+      tags: { label: 'Bridge Out', color: 'orange', variant: 'subtle' },
+    },
+    bridge_in: {
+      summary: BridgeInSummary,
+      tags: { label: 'Bridge In', color: 'green', variant: 'subtle' },
+    },
+    claim: {
+      summary: BridgeClaimSummary,
+      tags: { label: 'Claim', color: 'blue', variant: 'subtle' },
+    },
+    // Token management
+    register_token: {
+      summary: BridgeRegisterTokenSummary,
+      tags: { label: 'Register Token', color: 'cyan', variant: 'subtle' },
+    },
+    deregister_token: {
+      summary: BridgeDeregisterTokenSummary,
+      tags: { label: 'Deregister Token', color: 'red', variant: 'subtle' },
+    },
+    update_token_registry: {
+      summary: BridgeUpdateTokenRegistrySummary,
+      tags: { label: 'Update Token', color: 'blue', variant: 'subtle' },
+    },
+    set_token_fees: {
+      summary: BridgeSetTokenFeesSummary,
+      tags: { label: 'Set Token Fees', color: 'gray', variant: 'subtle' },
+    },
+    set_whale_limits: {
+      summary: BridgeSetWhaleLimitsSummary,
+      tags: { label: 'Set Whale Limits', color: 'amber', variant: 'subtle' },
+    },
+    // Admin operations
+    initialize: {
+      summary: BridgeInitializeSummary,
+      tags: { label: 'Initialize', color: 'purple', variant: 'subtle' },
+    },
+    initialize_roles: {
+      summary: BridgeInitializeRolesSummary,
+      tags: { label: 'Initialize Roles', color: 'indigo', variant: 'subtle' },
+    },
+    initialize_vault: {
+      summary: BridgeInitializeVaultSummary,
+      tags: { label: 'Initialize Vault', color: 'teal', variant: 'subtle' },
+    },
+    pause: {
+      summary: BridgePauseSummary,
+      tags: { label: 'Pause Bridge', color: 'red', variant: 'subtle' },
+    },
+    unpause: {
+      summary: BridgeUnpauseSummary,
+      tags: { label: 'Unpause Bridge', color: 'green', variant: 'subtle' },
+    },
+    set_fees: {
+      summary: BridgeSetFeesSummary,
+      tags: { label: 'Set Fees', color: 'gray', variant: 'subtle' },
+    },
+    set_guardians: {
+      summary: BridgeSetGuardiansSummary,
+      tags: { label: 'Set Guardians', color: 'blue', variant: 'subtle' },
+    },
+    set_role: {
+      summary: BridgeSetRoleSummary,
+      tags: { label: 'Set Role', color: 'indigo', variant: 'subtle' },
+    },
+    set_vault_balance: {
+      summary: BridgeSetVaultBalanceSummary,
+      tags: { label: 'Set Vault Balance', color: 'teal', variant: 'subtle' },
+    },
+    transfer_admin: {
+      summary: BridgeTransferAdminSummary,
+      tags: { label: 'Transfer Admin', color: 'purple', variant: 'subtle' },
+    },
+    transfer_mint_authority: {
+      summary: BridgeTransferMintAuthoritySummary,
+      tags: { label: 'Transfer Mint Auth', color: 'red', variant: 'subtle' },
+    },
+    // Migration operations
+    migrate_config: {
+      summary: BridgeMigrateConfigSummary,
+      tags: { label: 'Migrate Config', color: 'yellow', variant: 'subtle' },
+    },
+    migrate_token_registry: {
+      summary: BridgeMigrateTokenRegistrySummary,
+      tags: { label: 'Migrate Token', color: 'yellow', variant: 'subtle' },
     },
   },
 });

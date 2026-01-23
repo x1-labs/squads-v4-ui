@@ -1,0 +1,2773 @@
+{
+  "address": "6JbPTuxVuoTgyQeXFb9MH8C8nUY8NBbLP1Lu4B13JfMD",
+  "metadata": {
+    "name": "warp_bridge",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Warp Bridge - Universal Cross-Chain Token Bridge"
+  },
+  "instructions": [
+    {
+      "name": "bridge_in",
+      "docs": [
+        "Bridge tokens in (mint wrapped or release native)"
+      ],
+      "discriminator": [
+        145,
+        137,
+        30,
+        58,
+        180,
+        249,
+        105,
+        181
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "incoming_msg",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  118,
+                  116,
+                  95,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "recipient",
+          "docs": [
+            "Recipient account - must match sender from source chain (bridge to self)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "recipient_token_account",
+          "docs": [
+            "Recipient's token account"
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_mint",
+          "docs": [
+            "Token mint"
+          ],
+          "writable": true
+        },
+        {
+          "name": "mint_authority",
+          "docs": [
+            "Mint authority PDA (only for wrapped tokens, i.e., when is_native = false)",
+            "Derived from local_mint which is the wrapped mint on this chain"
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Vault for releasing native tokens (only used when is_native = true)"
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "Vault token account (only for releasing on native chain)"
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "instruction_sysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "source_seq",
+          "type": "u64"
+        },
+        {
+          "name": "sender",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "source_timestamp",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "bridge_out",
+      "docs": [
+        "Bridge tokens out (burn wrapped or lock native)",
+        "Recipient on destination chain is always the same as sender (bridge to self)",
+        "seq = slot * 1000 + ix_index (computed client-side)"
+      ],
+      "discriminator": [
+        27,
+        194,
+        57,
+        119,
+        215,
+        165,
+        247,
+        150
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "outgoing_msg",
+          "docs": [
+            "Outgoing message PDA, seeded by seq (slot * 1000 + ix_index)"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  118,
+                  116,
+                  95,
+                  111,
+                  117,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sender",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "sender_token_account",
+          "docs": [
+            "Sender's token account"
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_mint",
+          "docs": [
+            "Token mint"
+          ],
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Vault for holding locked tokens (only for native tokens)",
+            "Created during register_token for native tokens"
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "Vault token account (only for native tokens)",
+            "Created during register_token for native tokens"
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "fee_collector",
+          "docs": [
+            "Fee collector account (receives SOL fees)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "fee_collector_token_account",
+          "docs": [
+            "Fee collector token account (receives token fees)",
+            "Must match token_registry.fee_collector_ata if token fees are configured",
+            "Validation done in handler"
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "seq",
+          "type": "u64"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "claim",
+      "docs": [
+        "Claim delayed whale transfer"
+      ],
+      "discriminator": [
+        62,
+        198,
+        214,
+        193,
+        213,
+        159,
+        108,
+        210
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "incoming_msg",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  118,
+                  116,
+                  95,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "claimer",
+          "docs": [
+            "Claimer must be the original sender/recipient"
+          ],
+          "signer": true
+        },
+        {
+          "name": "claimer_token_account",
+          "docs": [
+            "Claimer's token account"
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_mint",
+          "docs": [
+            "Token mint"
+          ],
+          "writable": true
+        },
+        {
+          "name": "mint_authority",
+          "docs": [
+            "Mint authority PDA (only for wrapped tokens, i.e., when is_native = false)"
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Vault for releasing native tokens (only used when is_native = true)"
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "Vault token account (only for releasing on native chain)"
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "source_seq",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "deregister_token",
+      "docs": [
+        "Admin: Deregister a token (closes TokenRegistryEntry PDA)",
+        "Use for removing test tokens or cleaning up before migration.",
+        "WARNING: This is irreversible - the symbol becomes available for re-registration."
+      ],
+      "discriminator": [
+        248,
+        154,
+        118,
+        193,
+        60,
+        39,
+        15,
+        250
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "local_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "local_mint",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "initialize",
+      "docs": [
+        "Initialize the Warp Bridge"
+      ],
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "guardians",
+          "type": {
+            "vec": "pubkey"
+          }
+        },
+        {
+          "name": "threshold",
+          "type": "u8"
+        },
+        {
+          "name": "flat_fee_lamports",
+          "type": "u64"
+        },
+        {
+          "name": "percentage_fee_bps",
+          "type": "u16"
+        },
+        {
+          "name": "fee_collector",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "initialize_roles",
+      "docs": [
+        "Initialize the Roles account (admin only)"
+      ],
+      "discriminator": [
+        164,
+        43,
+        91,
+        219,
+        220,
+        247,
+        50,
+        96
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "roles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_vault",
+      "docs": [
+        "Initialize vault for a native token (after registration)"
+      ],
+      "discriminator": [
+        48,
+        191,
+        163,
+        44,
+        71,
+        129,
+        63,
+        164
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "local_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "local_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint"
+        },
+        {
+          "name": "vault_token_account",
+          "docs": [
+            "Vault's token account - ATA owned by Vault PDA"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "vault"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "token_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "local_mint",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "migrate_config",
+      "docs": [
+        "Admin: Migrate Config account to new size"
+      ],
+      "discriminator": [
+        92,
+        131,
+        58,
+        105,
+        210,
+        154,
+        224,
+        193
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "migrate_token_registry",
+      "docs": [
+        "Admin: Migrate TokenRegistryEntry account to new size"
+      ],
+      "discriminator": [
+        51,
+        161,
+        60,
+        6,
+        41,
+        96,
+        125,
+        204
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "local_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "local_mint",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "pause",
+      "docs": [
+        "Pause the bridge (admin or pauser role)"
+      ],
+      "discriminator": [
+        211,
+        22,
+        221,
+        251,
+        74,
+        121,
+        193,
+        47
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "roles",
+          "docs": [
+            "Roles account (optional - may not exist on older deployments)"
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "Authority - must be admin or have pauser role"
+          ],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "reason",
+          "type": {
+            "defined": {
+              "name": "PauseReason"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "register_token",
+      "docs": [
+        "Register a new token"
+      ],
+      "discriminator": [
+        32,
+        146,
+        36,
+        240,
+        80,
+        183,
+        36,
+        84
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "local_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "local_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "is_native",
+          "type": "bool"
+        },
+        {
+          "name": "decimals",
+          "type": "u8"
+        },
+        {
+          "name": "symbol",
+          "type": "string"
+        },
+        {
+          "name": "daily_cap",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_fees",
+      "docs": [
+        "Admin: Update SOL fees (legacy)"
+      ],
+      "discriminator": [
+        137,
+        178,
+        49,
+        58,
+        0,
+        245,
+        242,
+        190
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "flat_fee_lamports",
+          "type": "u64"
+        },
+        {
+          "name": "percentage_fee_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "set_guardians",
+      "docs": [
+        "Admin: Update guardians and threshold"
+      ],
+      "discriminator": [
+        166,
+        69,
+        140,
+        183,
+        157,
+        169,
+        253,
+        40
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "guardians",
+          "type": {
+            "vec": "pubkey"
+          }
+        },
+        {
+          "name": "threshold",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "set_role",
+      "docs": [
+        "Set a role (admin only)"
+      ],
+      "discriminator": [
+        77,
+        78,
+        62,
+        233,
+        192,
+        61,
+        199,
+        190
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "roles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "role_type",
+          "type": {
+            "defined": {
+              "name": "RoleType"
+            }
+          }
+        },
+        {
+          "name": "pubkey",
+          "type": {
+            "option": "pubkey"
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_token_fees",
+      "docs": [
+        "Admin: Set token-based fees for a specific token"
+      ],
+      "discriminator": [
+        222,
+        207,
+        9,
+        153,
+        99,
+        97,
+        24,
+        74
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "local_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "local_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "flat_fee_amount",
+          "type": "u64"
+        },
+        {
+          "name": "percentage_fee_bps",
+          "type": "u16"
+        },
+        {
+          "name": "fee_collector_ata",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_vault_balance",
+      "docs": [
+        "Admin: Set vault balance (for migration)"
+      ],
+      "discriminator": [
+        63,
+        79,
+        5,
+        140,
+        144,
+        95,
+        116,
+        2
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.token_mint",
+                "account": "Vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "total_locked",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_whale_limits",
+      "docs": [
+        "Admin: Set whale limits for a specific token"
+      ],
+      "discriminator": [
+        92,
+        17,
+        33,
+        97,
+        211,
+        63,
+        129,
+        131
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "local_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "local_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "whale_threshold",
+          "type": "u64"
+        },
+        {
+          "name": "whale_delay_seconds",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "transfer_admin",
+      "docs": [
+        "Admin: Transfer admin authority to a new address (e.g., multisig)",
+        "CRITICAL: This is irreversible without the new admin's cooperation.",
+        "Double-check the new_admin address before calling."
+      ],
+      "discriminator": [
+        42,
+        242,
+        66,
+        106,
+        228,
+        10,
+        111,
+        156
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "new_admin",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "transfer_mint_authority",
+      "docs": [
+        "Admin: Transfer mint authority for a wrapped token to a new address.",
+        "This allows migrating a token to a new bridge program.",
+        "CRITICAL: This is irreversible - the bridge will no longer be able to mint this token."
+      ],
+      "discriminator": [
+        87,
+        237,
+        187,
+        84,
+        168,
+        175,
+        241,
+        75
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "local_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint_authority",
+          "docs": [
+            "The mint authority PDA (current authority)"
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "local_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint",
+          "docs": [
+            "The token mint"
+          ],
+          "writable": true
+        },
+        {
+          "name": "new_authority",
+          "docs": [
+            "New mint authority address"
+          ]
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "local_mint",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "unpause",
+      "docs": [
+        "Unpause the bridge (admin only)"
+      ],
+      "discriminator": [
+        169,
+        144,
+        4,
+        38,
+        10,
+        141,
+        188,
+        255
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_token_registry",
+      "docs": [
+        "Admin: Update token registry entry"
+      ],
+      "discriminator": [
+        253,
+        125,
+        64,
+        166,
+        85,
+        74,
+        141,
+        217
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "local_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "local_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "paused",
+          "type": {
+            "option": "bool"
+          }
+        },
+        {
+          "name": "daily_cap",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "min_amount",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "max_amount",
+          "type": {
+            "option": "u64"
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Config",
+      "discriminator": [
+        155,
+        12,
+        170,
+        224,
+        30,
+        250,
+        204,
+        130
+      ]
+    },
+    {
+      "name": "IncomingMsg",
+      "discriminator": [
+        186,
+        123,
+        27,
+        122,
+        46,
+        210,
+        13,
+        119
+      ]
+    },
+    {
+      "name": "OutgoingMsg",
+      "discriminator": [
+        220,
+        126,
+        40,
+        45,
+        89,
+        122,
+        253,
+        155
+      ]
+    },
+    {
+      "name": "Roles",
+      "discriminator": [
+        177,
+        37,
+        17,
+        201,
+        242,
+        158,
+        212,
+        65
+      ]
+    },
+    {
+      "name": "TokenRegistryEntry",
+      "discriminator": [
+        197,
+        52,
+        73,
+        21,
+        191,
+        239,
+        42,
+        134
+      ]
+    },
+    {
+      "name": "Vault",
+      "discriminator": [
+        211,
+        8,
+        232,
+        43,
+        2,
+        152,
+        117,
+        119
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "BelowMinimum",
+      "msg": "Amount below minimum limit"
+    },
+    {
+      "code": 6001,
+      "name": "AboveMaximum",
+      "msg": "Amount above maximum limit"
+    }
+  ],
+  "types": [
+    {
+      "name": "Config",
+      "docs": [
+        "Global configuration for the Warp Bridge"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "docs": [
+              "Admin authority (can pause, set guardians, modify fees)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "paused",
+            "docs": [
+              "Bridge paused flag"
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "guardians",
+            "docs": [
+              "Guardian public keys (up to 5)"
+            ],
+            "type": {
+              "array": [
+                "pubkey",
+                5
+              ]
+            }
+          },
+          {
+            "name": "num_guardians",
+            "docs": [
+              "Number of active guardians"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "threshold",
+            "docs": [
+              "Threshold (t-of-n signatures required)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "out_seq_counter",
+            "docs": [
+              "Outgoing message sequence counter"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "in_seq_counter",
+            "docs": [
+              "Incoming message sequence counter"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "flat_fee_lamports",
+            "docs": [
+              "Flat fee in lamports (charged per bridge operation)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "percentage_fee_bps",
+            "docs": [
+              "Percentage fee (basis points, e.g., 30 = 0.30%)"
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "fee_collector",
+            "docs": [
+              "Fee collector account"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "Bump seed for PDA derivation"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "paused_at",
+            "docs": [
+              "Timestamp when bridge was paused (0 if not paused)"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "paused_by",
+            "docs": [
+              "Pubkey that initiated the pause (zeroed if not paused)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "pause_reason",
+            "docs": [
+              "Reason for pause"
+            ],
+            "type": {
+              "defined": {
+                "name": "PauseReason"
+              }
+            }
+          },
+          {
+            "name": "_reserved",
+            "docs": [
+              "Reserved space for future fields"
+            ],
+            "type": {
+              "array": [
+                "u64",
+                2
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "IncomingMsg",
+      "docs": [
+        "Incoming message (tokens arriving on this chain)",
+        "Recipient is always the same as sender (bridge to self)"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "source_seq",
+            "docs": [
+              "Sequence number from source chain"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "sender",
+            "docs": [
+              "Sender on source chain (also recipient on this chain)"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "token_mint",
+            "docs": [
+              "Token mint on this chain"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Amount (in token decimals)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "source_timestamp",
+            "docs": [
+              "Timestamp of original send"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "executed_timestamp",
+            "docs": [
+              "Timestamp of execution on this chain"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "operation",
+            "docs": [
+              "Operation type: 0 = mint wrapped, 1 = release native"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "processed",
+            "docs": [
+              "Processed flag (prevents replay)"
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "Bump seed for PDA derivation"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "claimable_after",
+            "docs": [
+              "Timestamp after which tokens can be claimed (0 = immediate/already released)",
+              "Used for whale transfers that require delayed claiming"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "claimed",
+            "docs": [
+              "Whether tokens have been claimed (for delayed transfers)",
+              "For immediate transfers, this is set to true on bridge_in"
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OutgoingMsg",
+      "docs": [
+        "Outgoing message (tokens leaving this chain)",
+        "Recipient on destination chain is always the same as sender (bridge to self)"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "seq",
+            "docs": [
+              "Sequence number (monotonically increasing)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "sender",
+            "docs": [
+              "Sender on this chain (also recipient on destination chain)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "token_mint",
+            "docs": [
+              "Token mint on this chain"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Amount (in token decimals)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Timestamp"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "fee_paid",
+            "docs": [
+              "Fee paid (in lamports)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "operation",
+            "docs": [
+              "Operation type: 0 = burn wrapped, 1 = lock native"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "Bump seed for PDA derivation"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PauseReason",
+      "docs": [
+        "Reason for bridge pause - used for observability and UX"
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "None"
+          },
+          {
+            "name": "Manual"
+          },
+          {
+            "name": "AnomalyDetected"
+          },
+          {
+            "name": "FrequencySpike"
+          },
+          {
+            "name": "VolumeSpike"
+          },
+          {
+            "name": "LargeTransfer"
+          },
+          {
+            "name": "EmergencyHalt"
+          },
+          {
+            "name": "Other",
+            "fields": [
+              {
+                "name": "code",
+                "type": "u16"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "RoleType",
+      "docs": [
+        "Role type for set_role instruction"
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pauser"
+          },
+          {
+            "name": "FeeManager"
+          },
+          {
+            "name": "Registrar"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Roles",
+      "docs": [
+        "Role-based access control for bridge operations",
+        "Separate from Config for easy extensibility",
+        "PDA: seeds = [b\"roles\"]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pauser",
+            "docs": [
+              "Can pause/unpause bridge and tokens"
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "fee_manager",
+            "docs": [
+              "Can adjust fee parameters (future use)"
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "registrar",
+            "docs": [
+              "Can register new tokens (future use)"
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "Bump seed for PDA derivation"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "docs": [
+              "Reserved space for future roles"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                128
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokenRegistryEntry",
+      "docs": [
+        "Token registration entry",
+        "Each token gets one registry entry PDA per chain",
+        "Derived as [\"token_registry\", local_mint]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "local_mint",
+            "docs": [
+              "The token mint on this chain"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "decimals",
+            "docs": [
+              "Token decimals"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "is_native",
+            "docs": [
+              "Is this the native chain for this token?",
+              "- true: This chain holds the native token, we lock/release from vault",
+              "- false: This chain holds the wrapped token, we mint/burn"
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "symbol",
+            "docs": [
+              "Token symbol (e.g., \"USDC\", \"WBTC\") - used to link tokens across chains"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                12
+              ]
+            }
+          },
+          {
+            "name": "paused",
+            "docs": [
+              "Paused flag (can be set by admin to disable bridging)",
+              "Default is false (unpaused)"
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "daily_cap",
+            "docs": [
+              "Daily cap in token units (0 = no cap)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "daily_volume",
+            "docs": [
+              "Current daily volume (resets at midnight UTC)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "last_reset",
+            "docs": [
+              "Last reset timestamp"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "min_amount",
+            "docs": [
+              "Minimum amount per transaction (0 = no minimum)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_amount",
+            "docs": [
+              "Maximum amount per transaction (0 = no maximum)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "Bump seed for PDA derivation"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "flat_fee_amount",
+            "docs": [
+              "Flat fee in token units (charged per bridge-out operation)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "percentage_fee_bps",
+            "docs": [
+              "Percentage fee in basis points (e.g., 30 = 0.30%)"
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "fee_collector_ata",
+            "docs": [
+              "Token account to receive fees (ATA for this token)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "whale_threshold",
+            "docs": [
+              "Whale threshold - transfers >= this amount require delayed claim",
+              "0 = no whale delay"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "whale_delay_seconds",
+            "docs": [
+              "Delay in seconds for whale transfers"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "_reserved",
+            "docs": [
+              "Reserved space for future fields"
+            ],
+            "type": {
+              "array": [
+                "u64",
+                2
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Vault",
+      "docs": [
+        "Token vault for holding locked SPL tokens",
+        "One vault per token mint"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "token_mint",
+            "docs": [
+              "Token mint this vault holds"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "total_locked",
+            "docs": [
+              "Total amount locked in vault"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "Bump seed for PDA derivation"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}
