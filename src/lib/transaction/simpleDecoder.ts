@@ -1156,6 +1156,13 @@ export class SimpleDecoder {
             additionalBytes: data.readUInt32LE(4),
           };
         }
+        // Extract key addresses for the summary component
+        instructionData = {
+          programData: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
+          program: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
+          payer: accountKeys[3]?.pubkey?.toBase58() || 'Unknown',
+          additionalBytes: data.length >= 8 ? data.readUInt32LE(4) : 0,
+        };
         break;
 
       case 7: // SetAuthorityChecked

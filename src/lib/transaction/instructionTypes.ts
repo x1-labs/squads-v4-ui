@@ -69,6 +69,13 @@ export interface ProgramUpgradeData {
   authority: string;
 }
 
+export interface ExtendProgramData {
+  programData: string;
+  program: string;
+  payer: string;
+  additionalBytes: number;
+}
+
 // Union type for all instruction data types
 export type InstructionData =
   | XntTransferData
@@ -80,4 +87,5 @@ export type InstructionData =
   | BatchTransactionData
   | ComputeBudgetData
   | MemoData
-  | ProgramUpgradeData;
+  | ProgramUpgradeData
+  | ExtendProgramData;

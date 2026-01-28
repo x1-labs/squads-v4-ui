@@ -8,6 +8,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Suspense, useState } from 'react';
 import { useProgram } from '../hooks/useProgram';
 import CreateProgramUpgradeInput from '../components/CreateProgramUpgradeInput';
+import ExtendProgramInput from '../components/ExtendProgramInput';
 import { useMultisigData } from '@/hooks/useMultisigData';
 
 const ProgramsPage = () => {
@@ -149,6 +150,24 @@ const ProgramsPage = () => {
                   </CardHeader>
                   <CardContent>
                     <CreateProgramUpgradeInput
+                      programInfos={programInfos}
+                      transactionIndex={
+                        Number(multisigConfig ? multisigConfig.transactionIndex : 0) + 1
+                      }
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="flex-1">
+                <Card className="h-full">
+                  <CardHeader>
+                    <CardTitle>Extend program</CardTitle>
+                    <CardDescription>
+                      Increase program account size for larger deployments.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ExtendProgramInput
                       programInfos={programInfos}
                       transactionIndex={
                         Number(multisigConfig ? multisigConfig.transactionIndex : 0) + 1

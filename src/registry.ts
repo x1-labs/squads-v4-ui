@@ -22,6 +22,7 @@ import { VoteAuthorizeSummary } from './components/instructions/summaries/VoteAu
 import { BridgeOutSummary } from './components/instructions/summaries/BridgeOutSummary';
 import { BridgeInSummary } from './components/instructions/summaries/BridgeInSummary';
 import { ProgramUpgradeSummary } from './components/instructions/summaries/ProgramUpgradeSummary';
+import { ExtendProgramSummary } from './components/instructions/summaries/ExtendProgramSummary';
 import { BridgeClaimSummary } from './components/instructions/summaries/BridgeClaimSummary';
 import { BridgePauseSummary } from './components/instructions/summaries/BridgePauseSummary';
 import { BridgeUnpauseSummary } from './components/instructions/summaries/BridgeUnpauseSummary';
@@ -100,6 +101,7 @@ registry.register({
       tags: { label: 'Close', color: 'red', variant: 'subtle' },
     },
     'Extend Program': {
+      summary: ExtendProgramSummary,
       tags: { label: 'Extend Program', color: 'cyan', variant: 'subtle' },
     },
   },
