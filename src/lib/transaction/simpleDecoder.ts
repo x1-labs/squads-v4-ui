@@ -483,6 +483,7 @@ export class SimpleDecoder {
       'Vote111111111111111111111111111111111111111', // Vote
       'Stake11111111111111111111111111111111111111', // Stake
       'Config1111111111111111111111111111111111111', // Config
+      'BPFLoaderUpgradeab1e11111111111111111111111', // BPF Upgradeable Loader
     ];
     return knownPrograms.includes(programIdStr);
   }
@@ -603,6 +604,11 @@ export class SimpleDecoder {
     // Vote Program
     if (programIdStr === 'Vote111111111111111111111111111111111111111') {
       return this.parseVoteInstruction(data, accountKeys);
+    }
+
+    // BPF Upgradeable Loader
+    if (programIdStr === 'BPFLoaderUpgradeab1e11111111111111111111111') {
+      return this.parseBpfLoaderUpgradeableInstruction(data, accountKeys);
     }
 
     // Fallback
@@ -1072,6 +1078,149 @@ export class SimpleDecoder {
         return ['Stake Account', 'Authority Base', 'Clock Sysvar', 'New Authority'];
       case 12: // SetLockupChecked
         return ['Stake Account', 'Custodian', 'New Custodian'];
+      default:
+        return [];
+    }
+  }
+
+  /**
+   * Parse BPF Upgradeable Loader instructions
+   */
+  private parseBpfLoaderUpgradeableInstruction(
+    data: Buffer,
+    accountKeys: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>
+  ): DecodedInstruction {
+    const instructionType = data.readUInt32LE(0);
+    let instructionName = 'Unknown BPF Loader Instruction';
+    let args: any = {};
+    let instructionData: InstructionData | undefined;
+
+    // BPF Upgradeable Loader instruction types:
+    // 0: InitializeBuffer
+    // 1: Write
+    // 2: DeployWithMaxDataLen
+    // 3: Upgrade
+    // 4: SetAuthority
+    // 5: Close
+    // 6: ExtendProgram
+    // 7: SetAuthorityChecked
+
+    switch (instructionType) {
+      case 0: // InitializeBuffer
+        instructionName = 'Initialize Buffer';
+        break;
+
+      case 1: // Write
+        instructionName = 'Write';
+        if (data.length > 8) {
+          args = {
+            offset: data.readUInt32LE(4),
+            dataLength: data.length - 8,
+          };
+        }
+        break;
+
+      case 2: // DeployWithMaxDataLen
+        instructionName = 'Deploy Program';
+        if (data.length >= 12) {
+          args = {
+            maxDataLen: data.readBigUInt64LE(4).toString(),
+          };
+        }
+        break;
+
+      case 3: // Upgrade
+        instructionName = 'Upgrade';
+        // Extract key addresses for the summary component
+        instructionData = {
+          programData: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
+          program: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
+          buffer: accountKeys[2]?.pubkey?.toBase58() || 'Unknown',
+          spillAddress: accountKeys[3]?.pubkey?.toBase58() || 'Unknown',
+          authority: accountKeys[6]?.pubkey?.toBase58() || 'Unknown',
+        };
+        break;
+
+      case 4: // SetAuthority
+        instructionName = 'Set Authority';
+        break;
+
+      case 5: // Close
+        instructionName = 'Close';
+        break;
+
+      case 6: // ExtendProgram
+        instructionName = 'Extend Program';
+        if (data.length >= 8) {
+          args = {
+            additionalBytes: data.readUInt32LE(4),
+          };
+        }
+        break;
+
+      case 7: // SetAuthorityChecked
+        instructionName = 'Set Authority Checked';
+        break;
+    }
+
+    // Map account names based on instruction type
+    const accountNames = this.getBpfLoaderAccountNames(instructionType);
+
+    return {
+      programId: 'BPFLoaderUpgradeab1e11111111111111111111111',
+      programName: 'BPF Upgradeable Loader',
+      instructionName,
+      instructionTitle: instructionName,
+      data: instructionData,
+      accounts: accountKeys.map((key, i) => ({
+        name: accountNames[i] || `Account ${i}`,
+        pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
+        isSigner: key.isSigner || false,
+        isWritable: key.isWritable || false,
+      })),
+      args,
+      rawData: data.toString('hex').slice(0, 100),
+    };
+  }
+
+  /**
+   * Get account names for BPF Loader Upgradeable instructions
+   */
+  private getBpfLoaderAccountNames(instructionType: number): string[] {
+    switch (instructionType) {
+      case 0: // InitializeBuffer
+        return ['Buffer', 'Authority'];
+      case 1: // Write
+        return ['Buffer', 'Authority'];
+      case 2: // DeployWithMaxDataLen
+        return [
+          'Payer',
+          'Program Data',
+          'Program',
+          'Buffer',
+          'Rent Sysvar',
+          'Clock Sysvar',
+          'System Program',
+          'Authority',
+        ];
+      case 3: // Upgrade
+        return [
+          'Program Data',
+          'Program',
+          'Buffer',
+          'Spill Address',
+          'Rent Sysvar',
+          'Clock Sysvar',
+          'Authority',
+        ];
+      case 4: // SetAuthority
+        return ['Account', 'Current Authority', 'New Authority'];
+      case 5: // Close
+        return ['Account', 'Recipient', 'Authority', 'Program'];
+      case 6: // ExtendProgram
+        return ['Program Data', 'Program', 'System Program', 'Payer'];
+      case 7: // SetAuthorityChecked
+        return ['Account', 'Current Authority', 'New Authority'];
       default:
         return [];
     }

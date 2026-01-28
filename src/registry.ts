@@ -21,6 +21,7 @@ import { VoteWithdrawSummary } from './components/instructions/summaries/VoteWit
 import { VoteAuthorizeSummary } from './components/instructions/summaries/VoteAuthorizeSummary';
 import { BridgeOutSummary } from './components/instructions/summaries/BridgeOutSummary';
 import { BridgeInSummary } from './components/instructions/summaries/BridgeInSummary';
+import { ProgramUpgradeSummary } from './components/instructions/summaries/ProgramUpgradeSummary';
 import { BridgeClaimSummary } from './components/instructions/summaries/BridgeClaimSummary';
 import { BridgePauseSummary } from './components/instructions/summaries/BridgePauseSummary';
 import { BridgeUnpauseSummary } from './components/instructions/summaries/BridgeUnpauseSummary';
@@ -71,6 +72,35 @@ registry.register({
     },
     Allocate: {
       tags: { label: 'Allocate', color: 'gray', variant: 'subtle' },
+    },
+  },
+});
+
+// ============================================
+// BPF Upgradeable Loader
+// ============================================
+registry.register({
+  programId: 'BPFLoaderUpgradeab1e11111111111111111111111',
+  name: 'BPF Upgradeable Loader',
+  instructions: {
+    Upgrade: {
+      summary: ProgramUpgradeSummary,
+      tags: { label: 'Program Upgrade', color: 'purple', variant: 'subtle' },
+    },
+    'Set Authority': {
+      tags: { label: 'Set Authority', color: 'blue', variant: 'subtle' },
+    },
+    'Initialize Buffer': {
+      tags: { label: 'Initialize Buffer', color: 'gray', variant: 'subtle' },
+    },
+    'Deploy Program': {
+      tags: { label: 'Deploy Program', color: 'green', variant: 'subtle' },
+    },
+    Close: {
+      tags: { label: 'Close', color: 'red', variant: 'subtle' },
+    },
+    'Extend Program': {
+      tags: { label: 'Extend Program', color: 'cyan', variant: 'subtle' },
     },
   },
 });

@@ -61,6 +61,14 @@ export interface MemoData {
   memo: string;
 }
 
+export interface ProgramUpgradeData {
+  programData: string;
+  program: string;
+  buffer: string;
+  spillAddress: string;
+  authority: string;
+}
+
 // Union type for all instruction data types
 export type InstructionData =
   | XntTransferData
@@ -71,4 +79,5 @@ export type InstructionData =
   | ConfigTransactionData
   | BatchTransactionData
   | ComputeBudgetData
-  | MemoData;
+  | MemoData
+  | ProgramUpgradeData;
