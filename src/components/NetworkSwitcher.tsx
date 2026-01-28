@@ -38,7 +38,7 @@ const NETWORKS: NetworkConfig[] = [
 ];
 
 const getCurrentNetwork = (currentRpcUrl: string): NetworkConfig => {
-  const hostname = window.location.hostname;
+  const hostname = window.location.hostname.toLowerCase();
 
   // First, try to match by RPC URL
   const networkByRpc = NETWORKS.find(
@@ -48,11 +48,26 @@ const getCurrentNetwork = (currentRpcUrl: string): NetworkConfig => {
     return networkByRpc;
   }
 
-  // Fall back to hostname matching
-  const network = NETWORKS.find((n) => n.url.includes(hostname));
+  // Try exact URL match first
+  const exactMatch = NETWORKS.find((n) => n.url.includes(hostname));
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  // Fall back to detecting network name in hostname (for Vercel preview branches etc.)
+  // Check most specific patterns first
+  if (hostname.includes('solana-mainnet') || hostname.includes('solana_mainnet')) {
+    return NETWORKS.find((n) => n.id === 'solana-mainnet') || NETWORKS[0];
+  }
+  if (hostname.includes('testnet')) {
+    return NETWORKS.find((n) => n.id === 'x1-testnet') || NETWORKS[0];
+  }
+  if (hostname.includes('mainnet')) {
+    return NETWORKS.find((n) => n.id === 'x1-mainnet') || NETWORKS[0];
+  }
 
   // Default to X1 Mainnet for localhost/development
-  return network || NETWORKS[0];
+  return NETWORKS[0];
 };
 
 export const NetworkSwitcher: React.FC = () => {
