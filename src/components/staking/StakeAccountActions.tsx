@@ -13,11 +13,11 @@ import { WithdrawStakeDialog } from './WithdrawStakeDialog';
 import { RedelegateStakeDialog } from './RedelegateStakeDialog';
 import { SplitStakeDialog } from './SplitStakeDialog';
 import { MergeStakeDialog } from './MergeStakeDialog';
-import { StakeAccountInfo, getCompatibleMergeAccounts, createDeactivateStakeInstruction, createWithdrawStakeInstruction } from '@/lib/staking/validatorStakeUtils';
+import { StakeAccountInfo, getCompatibleMergeAccounts, createDeactivateStakeInstruction, createWithdrawStakeInstruction, createMergeStakeInstruction, createSplitStakeInstructions } from '@/lib/staking/validatorStakeUtils';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';
 
@@ -38,7 +38,7 @@ export function StakeAccountActions({
   const [splitOpen, setSplitOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const { addItem } = useBatchTransactions();
-  const { multisigAddress, programId } = useMultisigData();
+  const { multisigAddress, programId, connection } = useMultisigData();
 
   const validatorAddresses = account.delegatedValidator ? [account.delegatedValidator] : [];
   const { data: validatorMetadata } = useValidatorsMetadata(validatorAddresses);
@@ -111,6 +111,66 @@ export function StakeAccountActions({
     toast.success('Added withdrawal to batch queue');
   };
 
+  const addMergeToBatch = () => {
+    const vaultAddress = getVaultAddress();
+    if (!vaultAddress) return;
+
+    const compatible = getCompatibleMergeAccounts(account, allStakeAccounts);
+    if (compatible.length === 0) return;
+
+    for (const source of compatible) {
+      const instruction = createMergeStakeInstruction(
+        new PublicKey(account.address),
+        new PublicKey(source.address),
+        vaultAddress
+      );
+
+      addItem({
+        type: 'merge',
+        label: `Merge into ${getValidatorLabel()}`,
+        description: `${source.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT from ${source.address.slice(0, 8)}...`,
+        instructions: [instruction],
+        vaultIndex,
+      });
+    }
+
+    toast.success(`Added ${compatible.length} merge operation${compatible.length > 1 ? 's' : ''} to batch queue`);
+  };
+
+  const addSplitToBatch = async () => {
+    const vaultAddress = getVaultAddress();
+    if (!vaultAddress) return;
+
+    const maxSplitable = account.balance - account.rentExemptReserve - 0.1;
+    if (maxSplitable <= 0) return;
+
+    const splitAmount = Math.floor((maxSplitable / 2) * LAMPORTS_PER_SOL);
+    const seed = `split-${Date.now()}`.substring(0, 32);
+
+    try {
+      const { instructions } = await createSplitStakeInstructions(
+        new PublicKey(account.address),
+        vaultAddress,
+        splitAmount,
+        seed,
+        connection
+      );
+
+      const splitXnt = splitAmount / LAMPORTS_PER_SOL;
+      addItem({
+        type: 'split',
+        label: `Split ${getValidatorLabel()}`,
+        description: `${splitXnt.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT (50%) from ${account.address.slice(0, 8)}...`,
+        instructions,
+        vaultIndex,
+      });
+
+      toast.success('Added split (50%) to batch queue');
+    } catch (error: any) {
+      toast.error(`Failed to prepare split: ${error?.message || error}`);
+    }
+  };
+
   return (
     <>
       <DropdownMenu>
@@ -163,7 +223,7 @@ export function StakeAccountActions({
           </DropdownMenuItem>
 
           {/* Batch actions */}
-          {(canBatchUnstake || canBatchWithdraw) && (
+          {(canBatchUnstake || canBatchWithdraw || canSplit || canMerge) && (
             <>
               <DropdownMenuSeparator />
               {canBatchUnstake && (
@@ -182,6 +242,24 @@ export function StakeAccountActions({
                 >
                   <Layers className="mr-2 h-4 w-4" />
                   Add Withdraw to Batch
+                </DropdownMenuItem>
+              )}
+              {canSplit && (
+                <DropdownMenuItem
+                  onClick={addSplitToBatch}
+                  className="cursor-pointer"
+                >
+                  <Layers className="mr-2 h-4 w-4" />
+                  Add Split (50%) to Batch
+                </DropdownMenuItem>
+              )}
+              {canMerge && (
+                <DropdownMenuItem
+                  onClick={addMergeToBatch}
+                  className="cursor-pointer"
+                >
+                  <Layers className="mr-2 h-4 w-4" />
+                  Add Merge to Batch
                 </DropdownMenuItem>
               )}
             </>

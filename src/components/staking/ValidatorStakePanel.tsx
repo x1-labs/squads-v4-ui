@@ -8,10 +8,10 @@ import { Skeleton } from '../ui/skeleton';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
-import { Layers, ArrowDown, Wallet } from 'lucide-react';
+import { Layers, ArrowDown, Wallet, Merge as MergeIcon } from 'lucide-react';
 import { StakeAccountActions } from './StakeAccountActions';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
-import { StakeAccountInfo, createDeactivateStakeInstruction, createWithdrawStakeInstruction } from '@/lib/staking/validatorStakeUtils';
+import { StakeAccountInfo, createDeactivateStakeInstruction, createWithdrawStakeInstruction, createMergeStakeInstruction, getCompatibleMergeAccounts } from '@/lib/staking/validatorStakeUtils';
 import { PublicKey } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';
@@ -183,6 +183,67 @@ export function ValidatorStakePanel() {
     setBatchMode(false);
   };
 
+  const batchMerge = () => {
+    const vaultAddress = getVaultAddress();
+    if (!vaultAddress || !stakeAccounts) return;
+
+    const selected = sortedAccounts.filter((a) => selectedAccounts.has(a.address));
+    if (selected.length < 2) {
+      toast.error('Select at least 2 accounts to merge');
+      return;
+    }
+
+    // Group selected accounts by validator + state compatibility
+    // For each group, merge smaller accounts into the largest
+    const groups = new Map<string, StakeAccountInfo[]>();
+    for (const account of selected) {
+      const key = `${account.delegatedValidator || 'none'}-${account.state}`;
+      const group = groups.get(key) || [];
+      group.push(account);
+      groups.set(key, group);
+    }
+
+    let mergeCount = 0;
+    for (const group of groups.values()) {
+      if (group.length < 2) continue;
+
+      // Sort by balance descending - largest is the destination
+      const sorted = [...group].sort((a, b) => b.balance - a.balance);
+      const destination = sorted[0];
+
+      for (let i = 1; i < sorted.length; i++) {
+        const source = sorted[i];
+        // Verify compatibility using the existing utility
+        const compatible = getCompatibleMergeAccounts(destination, [source]);
+        if (compatible.length === 0) continue;
+
+        const instruction = createMergeStakeInstruction(
+          new PublicKey(destination.address),
+          new PublicKey(source.address),
+          vaultAddress
+        );
+
+        addItem({
+          type: 'merge',
+          label: `Merge into ${getValidatorLabel(destination)}`,
+          description: `${source.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT from ${source.address.slice(0, 8)}...`,
+          instructions: [instruction],
+          vaultIndex,
+        });
+        mergeCount++;
+      }
+    }
+
+    if (mergeCount === 0) {
+      toast.error('No compatible merge pairs found among selected accounts');
+      return;
+    }
+
+    toast.success(`Added ${mergeCount} merge operation${mergeCount > 1 ? 's' : ''} to batch queue`);
+    setSelectedAccounts(new Set());
+    setBatchMode(false);
+  };
+
   // Count eligible accounts for each batch action among selected
   const selectedList = sortedAccounts.filter((a) => selectedAccounts.has(a.address));
   const unstakeEligibleCount = selectedList.filter(
@@ -191,6 +252,21 @@ export function ValidatorStakePanel() {
   const withdrawEligibleCount = selectedList.filter(
     (a) => a.state === 'inactive' || a.state === 'deactivating'
   ).length;
+
+  // Count merge-eligible: need at least 2 selected accounts that share validator+state
+  const mergeEligibleCount = (() => {
+    if (selectedList.length < 2) return 0;
+    const groups = new Map<string, number>();
+    for (const a of selectedList) {
+      const key = `${a.delegatedValidator || 'none'}-${a.state}`;
+      groups.set(key, (groups.get(key) || 0) + 1);
+    }
+    let count = 0;
+    for (const size of groups.values()) {
+      if (size >= 2) count += size - 1; // each group produces (n-1) merges
+    }
+    return count;
+  })();
 
   return (
     <Card>
@@ -285,6 +361,16 @@ export function ValidatorStakePanel() {
                 >
                   <Wallet className="mr-1.5 h-3.5 w-3.5" />
                   Batch Withdraw{withdrawEligibleCount > 0 ? ` (${withdrawEligibleCount})` : ''}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={batchMerge}
+                  disabled={mergeEligibleCount === 0}
+                  className="h-8"
+                >
+                  <MergeIcon className="mr-1.5 h-3.5 w-3.5" />
+                  Batch Merge{mergeEligibleCount > 0 ? ` (${mergeEligibleCount})` : ''}
                 </Button>
               </div>
             </div>
