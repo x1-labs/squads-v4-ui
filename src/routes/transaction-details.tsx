@@ -271,10 +271,7 @@ export default function TransactionDetailsPage() {
     });
 
     if (added) {
-      toast.success(`Added #${txIndex} to batch execute`);
       navigate(`/${multisigAddress}/transactions`);
-    } else {
-      toast.info('Already in batch');
     }
   };
 

@@ -242,10 +242,7 @@ function ActionButtons({
     });
 
     if (added) {
-      toast.success(`Added #${transactionIndex} to batch execute`);
       navigate(`/${multisigPda}/transactions`);
-    } else {
-      toast.info('Already in batch');
     }
   };
 
