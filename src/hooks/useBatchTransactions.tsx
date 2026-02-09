@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 import { TransactionInstruction } from '@solana/web3.js';
 
 export type BatchItemType =
@@ -19,7 +19,8 @@ export interface BatchItem {
   vaultIndex: number;
 }
 
-export const MAX_BATCH_ITEMS = 10;
+/** Max inner instructions that fit in a single vault transaction (2 delegates = 6 works, 3 = 9 fails) */
+export const MAX_BATCH_INSTRUCTIONS = 6;
 
 interface BatchTransactionsContextType {
   items: BatchItem[];
@@ -27,6 +28,8 @@ interface BatchTransactionsContextType {
   removeItem: (id: string) => void;
   clearAll: () => void;
   itemCount: number;
+  instructionCount: number;
+  remainingInstructions: number;
 }
 
 const BatchTransactionsContext = createContext<BatchTransactionsContextType | null>(null);
@@ -39,7 +42,8 @@ export function BatchTransactionsProvider({ children }: { children: ReactNode })
   const addItem = useCallback((item: Omit<BatchItem, 'id'>): boolean => {
     let added = false;
     setItems((prev) => {
-      if (prev.length >= MAX_BATCH_ITEMS) return prev;
+      const currentIxCount = prev.reduce((sum, i) => sum + i.instructions.length, 0);
+      if (currentIxCount + item.instructions.length > MAX_BATCH_INSTRUCTIONS) return prev;
       const id = `batch-${nextId++}-${Date.now()}`;
       added = true;
       return [...prev, { ...item, id }];
@@ -55,6 +59,11 @@ export function BatchTransactionsProvider({ children }: { children: ReactNode })
     setItems([]);
   }, []);
 
+  const instructionCount = useMemo(
+    () => items.reduce((sum, item) => sum + item.instructions.length, 0),
+    [items]
+  );
+
   return (
     <BatchTransactionsContext.Provider
       value={{
@@ -63,6 +72,8 @@ export function BatchTransactionsProvider({ children }: { children: ReactNode })
         removeItem,
         clearAll,
         itemCount: items.length,
+        instructionCount,
+        remainingInstructions: Math.max(0, MAX_BATCH_INSTRUCTIONS - instructionCount),
       }}
     >
       {children}

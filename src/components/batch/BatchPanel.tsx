@@ -2,7 +2,11 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { useBatchTransactions, BatchItem } from '@/hooks/useBatchTransactions';
+import {
+  useBatchTransactions,
+  BatchItem,
+  MAX_BATCH_INSTRUCTIONS,
+} from '@/hooks/useBatchTransactions';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
@@ -40,7 +44,7 @@ const typeIcons: Record<string, React.ReactNode> = {
 };
 
 export function BatchPanel() {
-  const { items, removeItem, clearAll, itemCount } = useBatchTransactions();
+  const { items, removeItem, clearAll, itemCount, instructionCount } = useBatchTransactions();
   const { connection, programId, multisigAddress } = useMultisigData();
   const wallet = useWallet();
   const walletModal = useWalletModal();
@@ -125,8 +129,11 @@ export function BatchPanel() {
           <div className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">Batch Queue</CardTitle>
-            <Badge variant="secondary" className="ml-1">
-              {itemCount}
+            <Badge
+              variant={instructionCount >= MAX_BATCH_INSTRUCTIONS ? 'destructive' : 'secondary'}
+              className="ml-1"
+            >
+              {instructionCount}/{MAX_BATCH_INSTRUCTIONS} ix
             </Badge>
           </div>
           <Button

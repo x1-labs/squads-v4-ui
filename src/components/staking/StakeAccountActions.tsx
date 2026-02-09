@@ -63,7 +63,7 @@ export function StakeAccountActions({
     if (added) {
       toast.success('Added unstake to batch queue');
     } else {
-      toast.error('Batch queue is full');
+      toast.error('Not enough instruction space in batch');
     }
   };
 
@@ -73,7 +73,7 @@ export function StakeAccountActions({
     if (added) {
       toast.success('Added withdrawal to batch queue');
     } else {
-      toast.error('Batch queue is full');
+      toast.error('Not enough instruction space in batch');
     }
   };
 
@@ -89,9 +89,9 @@ export function StakeAccountActions({
       else break;
     }
     if (count === 0) {
-      toast.error('Batch queue is full');
+      toast.error('Not enough instruction space in batch');
     } else if (count < compatible.length) {
-      toast.warning(`Added ${count} of ${compatible.length} merge operations (batch limit reached)`);
+      toast.warning(`Added ${count} of ${compatible.length} merge operations (instruction limit reached)`);
     } else {
       toast.success(
         `Added ${count} merge operation${count > 1 ? 's' : ''} to batch queue`

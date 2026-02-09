@@ -78,7 +78,7 @@ export function BatchSplitDialog({
       });
 
       if (!added) {
-        toast.error('Batch queue is full');
+        toast.error('Not enough instruction space in batch');
         return;
       }
 

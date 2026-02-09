@@ -63,7 +63,7 @@ export function BatchDelegateDialog({
 
       const added = addItem(item);
       if (!added) {
-        toast.error('Batch queue is full');
+        toast.error('Not enough instruction space in batch');
         return;
       }
 
