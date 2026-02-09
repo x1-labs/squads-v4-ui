@@ -14,6 +14,8 @@ import { useMultisigData } from '@/hooks/useMultisigData';
 import { useLocation } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { BatchApprovalPanel } from '@/components/batch/BatchApprovalPanel';
+import { BatchExecutePanel } from '@/components/batch/BatchExecutePanel';
 
 const TRANSACTIONS_PER_PAGE = 10;
 
@@ -83,6 +85,9 @@ export default function TransactionsPage() {
             </div>
             <CreateTransaction />
           </div>
+
+          <BatchApprovalPanel />
+          <BatchExecutePanel />
 
           <Suspense>
             {/* Desktop Table View */}

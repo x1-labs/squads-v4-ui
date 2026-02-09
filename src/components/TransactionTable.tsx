@@ -5,6 +5,7 @@ import CancelButton from './CancelButton';
 import ReviewButton from './ReviewButton';
 import { ApprovalStatus } from './ApprovalStatus';
 import { TableBody, TableCell, TableRow } from './ui/table';
+import { SplitButton } from './ui/split-button';
 import { useNavigate } from 'react-router-dom';
 import { useMultisig } from '@/hooks/useServices';
 import { toast } from 'sonner';
@@ -12,6 +13,7 @@ import { TransactionTagList } from './TransactionTag';
 import { TransactionTag } from '@/lib/instructions/types';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess } from '@/hooks/useAccess';
+import { useBatchExecutes } from '@/hooks/useBatchExecutes';
 
 // Format address to show first 8 and last 8 characters
 function formatAddress(address: string): string {
@@ -26,6 +28,7 @@ interface ActionButtonsProps {
   proposalStatus: string;
   programId: string;
   proposal: multisig.generated.Proposal | null;
+  tags?: TransactionTag[];
 }
 
 export default function TransactionTable({
@@ -173,6 +176,7 @@ export default function TransactionTable({
                   proposalStatus={transaction.proposal?.status.__kind || 'None'}
                   programId={programId ? programId : multisig.PROGRAM_ID.toBase58()}
                   proposal={transaction.proposal}
+                  tags={transaction.tags}
                 />
               )}
             </TableCell>
@@ -190,8 +194,11 @@ function ActionButtons({
   proposalStatus,
   programId,
   proposal,
+  tags,
 }: ActionButtonsProps) {
   const wallet = useWallet();
+  const navigate = useNavigate();
+  const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
 
   // Check if current user has already rejected or cancelled
   const hasUserRejected = proposal?.rejected?.some((member) =>
@@ -208,6 +215,24 @@ function ActionButtons({
   const showExecute = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
   const showCancel = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
 
+  const handleAddToExecuteBatch = () => {
+    const label = tags && tags.length > 0
+      ? tags.map(t => t.label).join(', ')
+      : 'Transaction';
+
+    const added = addToBatchExecute({
+      transactionIndex,
+      label,
+    });
+
+    if (added) {
+      toast.success(`Added #${transactionIndex} to batch execute`);
+      navigate(`/${multisigPda}/transactions`);
+    } else {
+      toast.info('Already in batch');
+    }
+  };
+
   return (
     <div className="flex items-center justify-end gap-1">
       {showReject && <ReviewButton multisigPda={multisigPda} transactionPda={transactionPda} />}
@@ -220,12 +245,20 @@ function ActionButtons({
         />
       )}
       {showExecute && (
-        <ExecuteButton
-          multisigPda={multisigPda}
-          transactionIndex={transactionIndex}
-          proposalStatus={proposalStatus}
-          programId={programId}
-        />
+        <SplitButton
+          items={[{
+            label: isInBatchExecute(transactionIndex) ? 'In Batch' : 'Batch Execute',
+            onClick: handleAddToExecuteBatch,
+            disabled: isInBatchExecute(transactionIndex),
+          }]}
+        >
+          <ExecuteButton
+            multisigPda={multisigPda}
+            transactionIndex={transactionIndex}
+            proposalStatus={proposalStatus}
+            programId={programId}
+          />
+        </SplitButton>
       )}
       {showCancel && (
         <CancelButton

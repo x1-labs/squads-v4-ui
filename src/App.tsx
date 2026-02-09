@@ -22,6 +22,8 @@ import './styles/global.css'; // ✅ Load Tailwind styles
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AutoAddEnvSquads } from './components/AutoAddEnvSquads';
 import { BatchTransactionsProvider } from './hooks/useBatchTransactions';
+import { BatchApprovalsProvider } from './hooks/useBatchApprovals';
+import { BatchExecutesProvider } from './hooks/useBatchExecutes';
 
 const App = () => {
   const queryClient = new QueryClient();
@@ -32,6 +34,8 @@ const App = () => {
       <QueryClientProvider client={queryClient}>
         <Wallet>
           <BatchTransactionsProvider>
+          <BatchApprovalsProvider>
+          <BatchExecutesProvider>
           <BrowserRouter>
             <div className="flex h-screen min-w-full flex-col bg-background dark:bg-background md:flex-row">
               <Suspense fallback={null}>
@@ -71,6 +75,8 @@ const App = () => {
               />
             </div>
           </BrowserRouter>
+          </BatchExecutesProvider>
+          </BatchApprovalsProvider>
           </BatchTransactionsProvider>
         </Wallet>
       </QueryClientProvider>

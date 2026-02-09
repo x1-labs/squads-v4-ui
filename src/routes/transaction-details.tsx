@@ -20,11 +20,9 @@ import { extractTransactionTags } from '@/lib/instructions/extractor';
 import { TransactionTag } from '@/lib/instructions/types';
 import { TransactionTagList } from '@/components/TransactionTag';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useAccess } from '@/hooks/useAccess';
-import { useQueryClient } from '@tanstack/react-query';
-import { submitBatchApprovals, ApprovalItem } from '@/lib/transaction/batchApprovals';
-import { submitBatchExecutes, ExecuteItem } from '@/lib/transaction/batchExecutes';
+import { useBatchApprovals } from '@/hooks/useBatchApprovals';
+import { useBatchExecutes } from '@/hooks/useBatchExecutes';
 import { toast } from 'sonner';
 
 export default function TransactionDetailsPage() {
@@ -36,10 +34,9 @@ export default function TransactionDetailsPage() {
   const { data: multisigConfig } = useMultisig();
   const { selectSquad, addSquad } = useSquadConfig();
   const wallet = useWallet();
-  const walletModal = useWalletModal();
   const isMember = useAccess();
-  const queryClient = useQueryClient();
-  const [isBatchLoading, setIsBatchLoading] = useState(false);
+  const { addItem: addToBatchApproval, hasItem: isInBatchApproval } = useBatchApprovals();
+  const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
 
   // Create connection with the configured RPC URL
   const connection = useMemo(() => {
@@ -233,141 +230,46 @@ export default function TransactionDetailsPage() {
 
   const actualProgramId = programId?.toBase58() || multisig.PROGRAM_ID.toBase58();
 
-  const handleBatchApprove = async () => {
-    if (!wallet.publicKey) {
-      walletModal.setVisible(true);
-      return;
-    }
-    if (!multisigAddress || !multisigConfig) return;
+  const handleAddToBatch = () => {
+    if (transactionIndex === null) return;
 
-    setIsBatchLoading(true);
-    const toastId = 'batch-approve';
-    try {
-      toast.loading('Scanning pending proposals...', { id: toastId });
+    const txIndex = Number(transactionIndex);
+    const label = tags.length > 0
+      ? tags.map(t => t.label).join(', ')
+      : 'Transaction';
 
-      const pid = programId || multisig.PROGRAM_ID;
-      const multisigPubkey = new PublicKey(multisigAddress);
-      const startIdx = Number(multisigConfig.staleTransactionIndex) + 1;
-      const endIdx = Number(multisigConfig.transactionIndex);
+    const added = addToBatchApproval({
+      transactionIndex: txIndex,
+      proposalStatus: proposalStatus,
+      label,
+    });
 
-      const items: ApprovalItem[] = [];
-      const promises = [];
-      for (let i = startIdx; i <= endIdx; i++) {
-        const [proposalPda] = multisig.getProposalPda({
-          multisigPda: multisigPubkey,
-          transactionIndex: BigInt(i),
-          programId: pid,
-        });
-        promises.push(
-          multisig.accounts.Proposal.fromAccountAddress(connection as any, proposalPda)
-            .then((p) => ({ index: i, proposal: p, status: p.status.__kind }))
-            .catch(() => ({ index: i, proposal: null, status: 'None' as const }))
-        );
-      }
-
-      const results = await Promise.all(promises);
-      for (const r of results) {
-        if (!['None', 'Draft', 'Active'].includes(r.status)) continue;
-        if (
-          r.proposal?.approved?.some((m: PublicKey) =>
-            wallet.publicKey ? m.equals(wallet.publicKey) : false
-          )
-        ) continue;
-        items.push({ transactionIndex: r.index, proposalStatus: r.status });
-      }
-
-      if (items.length === 0) {
-        toast.info('No pending proposals to approve', { id: toastId });
-        return;
-      }
-
-      toast.loading(`Approving ${items.length} proposals...`, { id: toastId });
-      await submitBatchApprovals(items, connection, multisigAddress, pid, wallet);
-      toast.success(`Approved ${items.length} proposals`, { id: toastId });
-
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
-        queryClient.invalidateQueries({ queryKey: ['multisig'] }),
-        queryClient.invalidateQueries({ queryKey: ['proposal'] }),
-      ]);
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (error: any) {
-      const msg = error?.message || String(error);
-      if (msg.includes('User rejected')) {
-        toast.dismiss(toastId);
-      } else {
-        toast.error(msg.length > 200 ? msg.substring(0, 200) + '...' : msg, { id: toastId });
-      }
-    } finally {
-      setIsBatchLoading(false);
+    if (added) {
+      toast.success(`Added #${txIndex} to batch approval`);
+      navigate(`/${multisigAddress}/transactions`);
+    } else {
+      toast.info('Already in batch');
     }
   };
 
-  const handleBatchExecute = async () => {
-    if (!wallet.publicKey) {
-      walletModal.setVisible(true);
-      return;
-    }
-    if (!multisigAddress || !multisigConfig) return;
+  const handleAddToExecuteBatch = () => {
+    if (transactionIndex === null) return;
 
-    setIsBatchLoading(true);
-    const toastId = 'batch-execute';
-    try {
-      toast.loading('Scanning approved proposals...', { id: toastId });
+    const txIndex = Number(transactionIndex);
+    const label = tags.length > 0
+      ? tags.map(t => t.label).join(', ')
+      : 'Transaction';
 
-      const pid = programId || multisig.PROGRAM_ID;
-      const multisigPubkey = new PublicKey(multisigAddress);
-      const startIdx = Number(multisigConfig.staleTransactionIndex) + 1;
-      const endIdx = Number(multisigConfig.transactionIndex);
+    const added = addToBatchExecute({
+      transactionIndex: txIndex,
+      label,
+    });
 
-      const items: ExecuteItem[] = [];
-      const promises = [];
-      for (let i = startIdx; i <= endIdx; i++) {
-        const [proposalPda] = multisig.getProposalPda({
-          multisigPda: multisigPubkey,
-          transactionIndex: BigInt(i),
-          programId: pid,
-        });
-        promises.push(
-          multisig.accounts.Proposal.fromAccountAddress(connection as any, proposalPda)
-            .then((p) => ({ index: i, status: p.status.__kind }))
-            .catch(() => ({ index: i, status: 'None' as const }))
-        );
-      }
-
-      const results = await Promise.all(promises);
-      for (const r of results) {
-        if (r.status === 'Approved') {
-          items.push({ transactionIndex: r.index });
-        }
-      }
-
-      if (items.length === 0) {
-        toast.info('No approved proposals to execute', { id: toastId });
-        return;
-      }
-
-      await submitBatchExecutes(
-        items, connection, multisigAddress, pid, wallet,
-        (msg) => toast.loading(msg, { id: toastId })
-      );
-      toast.success(`Executed ${items.length} transactions`, { id: toastId });
-
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
-        queryClient.invalidateQueries({ queryKey: ['multisig'] }),
-        queryClient.invalidateQueries({ queryKey: ['proposal'] }),
-      ]);
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (error: any) {
-      const msg = error?.message || String(error);
-      if (msg.includes('User rejected')) {
-        toast.dismiss(toastId);
-      } else {
-        toast.error(msg.length > 200 ? msg.substring(0, 200) + '...' : msg, { id: toastId });
-      }
-    } finally {
-      setIsBatchLoading(false);
+    if (added) {
+      toast.success(`Added #${txIndex} to batch execute`);
+      navigate(`/${multisigAddress}/transactions`);
+    } else {
+      toast.info('Already in batch');
     }
   };
 
@@ -418,8 +320,11 @@ export default function TransactionDetailsPage() {
             <div className="flex flex-wrap gap-2">
               {showApprove && (
                 <SplitButton
-                  items={[{ label: 'Approve All Pending', onClick: handleBatchApprove, disabled: isBatchLoading }]}
-                  disabled={isBatchLoading}
+                  items={[{
+                    label: isInBatchApproval(Number(transactionIndex)) ? 'In Batch' : 'Batch Approval',
+                    onClick: handleAddToBatch,
+                    disabled: isInBatchApproval(Number(transactionIndex)),
+                  }]}
                 >
                   <ApproveButton
                     multisigPda={multisigAddress}
@@ -439,8 +344,11 @@ export default function TransactionDetailsPage() {
               )}
               {showExecute && (
                 <SplitButton
-                  items={[{ label: 'Execute All Approved', onClick: handleBatchExecute, disabled: isBatchLoading }]}
-                  disabled={isBatchLoading}
+                  items={[{
+                    label: isInBatchExecute(Number(transactionIndex)) ? 'In Batch' : 'Batch Execute',
+                    onClick: handleAddToExecuteBatch,
+                    disabled: isInBatchExecute(Number(transactionIndex)),
+                  }]}
                 >
                   <ExecuteButton
                     multisigPda={multisigAddress}

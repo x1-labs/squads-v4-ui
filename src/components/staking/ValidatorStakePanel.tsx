@@ -7,29 +7,13 @@ import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { Skeleton } from '../ui/skeleton';
 import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
-import { Checkbox } from '../ui/checkbox';
-import { Layers, ArrowDown, Wallet, Merge as MergeIcon } from 'lucide-react';
 import { StakeAccountActions } from './StakeAccountActions';
-import { useBatchTransactions } from '@/hooks/useBatchTransactions';
-import { StakeAccountInfo } from '@/lib/staking/validatorStakeUtils';
-import {
-  getStakeAccountLabel,
-  buildUnstakeBatchItem,
-  buildWithdrawBatchItem,
-  buildBulkMergeBatchItems,
-  countMergeEligible,
-} from '@/lib/staking/batchStakeActions';
-import { toast } from 'sonner';
 import { SplitButton } from '../ui/split-button';
 
 export function ValidatorStakePanel() {
-  const { vaultIndex, multisigVault } = useMultisigData();
+  const { vaultIndex } = useMultisigData();
   const { data: stakeAccounts, isLoading } = useStakeAccounts(vaultIndex);
-  const [batchMode, setBatchMode] = useState(false);
-  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [batchDelegateOpen, setBatchDelegateOpen] = useState(false);
-  const { addItem } = useBatchTransactions();
 
   // Get unique validator addresses
   const validatorAddresses =
@@ -76,100 +60,6 @@ export function ValidatorStakePanel() {
     }
   };
 
-  const toggleBatchMode = () => {
-    if (batchMode) {
-      setSelectedAccounts(new Set());
-    }
-    setBatchMode(!batchMode);
-  };
-
-  const toggleAccount = (address: string) => {
-    setSelectedAccounts((prev) => {
-      const next = new Set(prev);
-      if (next.has(address)) {
-        next.delete(address);
-      } else {
-        next.add(address);
-      }
-      return next;
-    });
-  };
-
-  const selectAll = () => {
-    if (!stakeAccounts) return;
-    setSelectedAccounts(new Set(stakeAccounts.map((a) => a.address)));
-  };
-
-  const selectNone = () => {
-    setSelectedAccounts(new Set());
-  };
-
-  const exitBatchMode = () => {
-    setSelectedAccounts(new Set());
-    setBatchMode(false);
-  };
-
-  const batchUnstake = () => {
-    if (!multisigVault) return;
-    const selected = sortedAccounts.filter((a) => selectedAccounts.has(a.address));
-    const eligible = selected.filter((a) => a.state === 'active' || a.state === 'activating');
-    if (eligible.length === 0) {
-      toast.error('No selected accounts are eligible for unstaking (must be active or activating)');
-      return;
-    }
-    for (const account of eligible) {
-      const label = getStakeAccountLabel(account, validatorMetadata);
-      addItem(buildUnstakeBatchItem(account, multisigVault, vaultIndex, label));
-    }
-    toast.success(`Added ${eligible.length} unstake operation${eligible.length > 1 ? 's' : ''} to batch queue`);
-    exitBatchMode();
-  };
-
-  const batchWithdraw = () => {
-    if (!multisigVault) return;
-    const selected = sortedAccounts.filter((a) => selectedAccounts.has(a.address));
-    const eligible = selected.filter((a) => a.state === 'inactive' || a.state === 'deactivating');
-    if (eligible.length === 0) {
-      toast.error('No selected accounts are eligible for withdrawal (must be inactive or deactivating)');
-      return;
-    }
-    for (const account of eligible) {
-      const label = getStakeAccountLabel(account, validatorMetadata);
-      addItem(buildWithdrawBatchItem(account, multisigVault, vaultIndex, label));
-    }
-    toast.success(`Added ${eligible.length} withdraw operation${eligible.length > 1 ? 's' : ''} to batch queue`);
-    exitBatchMode();
-  };
-
-  const batchMerge = () => {
-    if (!multisigVault) return;
-    const selected = sortedAccounts.filter((a) => selectedAccounts.has(a.address));
-    if (selected.length < 2) {
-      toast.error('Select at least 2 accounts to merge');
-      return;
-    }
-    const mergeItems = buildBulkMergeBatchItems(selected, multisigVault, vaultIndex, validatorMetadata);
-    if (mergeItems.length === 0) {
-      toast.error('No compatible merge pairs found among selected accounts');
-      return;
-    }
-    for (const item of mergeItems) {
-      addItem(item);
-    }
-    toast.success(`Added ${mergeItems.length} merge operation${mergeItems.length > 1 ? 's' : ''} to batch queue`);
-    exitBatchMode();
-  };
-
-  // Count eligible accounts for each batch action among selected
-  const selectedList = sortedAccounts.filter((a) => selectedAccounts.has(a.address));
-  const unstakeEligibleCount = selectedList.filter(
-    (a) => a.state === 'active' || a.state === 'activating'
-  ).length;
-  const withdrawEligibleCount = selectedList.filter(
-    (a) => a.state === 'inactive' || a.state === 'deactivating'
-  ).length;
-  const mergeEligibleCount = countMergeEligible(selectedList);
-
   return (
   <>
     <Card>
@@ -180,24 +70,12 @@ export function ValidatorStakePanel() {
               <CardTitle>Validator Staking</CardTitle>
               <CardDescription>Stake XNT directly to validators</CardDescription>
             </div>
-            <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:gap-2">
-              {stakeAccounts && stakeAccounts.length > 1 && (
-                <Button
-                  variant={batchMode ? 'secondary' : 'outline'}
-                  onClick={toggleBatchMode}
-                  size="sm"
-                >
-                  <Layers className="mr-1.5 h-4 w-4" />
-                  {batchMode ? 'Cancel' : 'Batch'}
-                </Button>
-              )}
-              <SplitButton
-                size="default"
-                items={[{ label: 'Batch Stake', onClick: () => setBatchDelegateOpen(true) }]}
-              >
-                <DelegateStakeDialog vaultIndex={vaultIndex} />
-              </SplitButton>
-            </div>
+            <SplitButton
+              size="default"
+              items={[{ label: 'Batch Stake', onClick: () => setBatchDelegateOpen(true) }]}
+            >
+              <DelegateStakeDialog vaultIndex={vaultIndex} />
+            </SplitButton>
           </div>
           {/* Summary Stats */}
           {totals.totalBalance > 0 && (
@@ -235,55 +113,6 @@ export function ValidatorStakePanel() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {/* Batch selection controls */}
-          {batchMode && stakeAccounts && stakeAccounts.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
-              <span className="text-sm font-medium">
-                {selectedAccounts.size} selected
-              </span>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" onClick={selectAll} className="h-7 text-xs">
-                  All
-                </Button>
-                <Button variant="ghost" size="sm" onClick={selectNone} className="h-7 text-xs">
-                  None
-                </Button>
-              </div>
-              <div className="ml-auto flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={batchUnstake}
-                  disabled={unstakeEligibleCount === 0}
-                  className="h-8"
-                >
-                  <ArrowDown className="mr-1.5 h-3.5 w-3.5" />
-                  Batch Unstake{unstakeEligibleCount > 0 ? ` (${unstakeEligibleCount})` : ''}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={batchWithdraw}
-                  disabled={withdrawEligibleCount === 0}
-                  className="h-8"
-                >
-                  <Wallet className="mr-1.5 h-3.5 w-3.5" />
-                  Batch Withdraw{withdrawEligibleCount > 0 ? ` (${withdrawEligibleCount})` : ''}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={batchMerge}
-                  disabled={mergeEligibleCount === 0}
-                  className="h-8"
-                >
-                  <MergeIcon className="mr-1.5 h-3.5 w-3.5" />
-                  Batch Merge{mergeEligibleCount > 0 ? ` (${mergeEligibleCount})` : ''}
-                </Button>
-              </div>
-            </div>
-          )}
-
           {isLoading ? (
             <div className="space-y-2">
               <Skeleton className="h-16 w-full" />
@@ -296,25 +125,14 @@ export function ValidatorStakePanel() {
                   <div
                     key={account.address}
                     className={`space-y-3 rounded-lg p-3 transition-colors ${
-                      batchMode && selectedAccounts.has(account.address)
-                        ? 'bg-primary/10 ring-1 ring-primary/30'
-                        : account.state === 'inactive'
-                          ? 'bg-muted/20 opacity-75 hover:bg-muted/30'
-                          : 'bg-muted/30 hover:bg-muted/50'
-                    } ${batchMode ? 'cursor-pointer' : ''}`}
-                    onClick={batchMode ? () => toggleAccount(account.address) : undefined}
+                      account.state === 'inactive'
+                        ? 'bg-muted/20 opacity-75 hover:bg-muted/30'
+                        : 'bg-muted/30 hover:bg-muted/50'
+                    }`}
                   >
                     {/* Header with stake account info and action button */}
                     <div className="flex items-start justify-between gap-2 sm:items-center">
                       <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
-                        {batchMode && (
-                          <Checkbox
-                            checked={selectedAccounts.has(account.address)}
-                            onCheckedChange={() => toggleAccount(account.address)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="mt-0.5 sm:mt-0"
-                          />
-                        )}
                         <p className="break-all font-mono text-xs sm:break-normal">
                           {account.address.slice(0, 6)}...{account.address.slice(-6)}
                         </p>
@@ -325,15 +143,13 @@ export function ValidatorStakePanel() {
                           {account.state}
                         </Badge>
                       </div>
-                      {!batchMode && (
-                        <div className="flex-shrink-0">
-                          <StakeAccountActions
-                            account={account}
-                            vaultIndex={vaultIndex}
-                            allStakeAccounts={stakeAccounts || []}
-                          />
-                        </div>
-                      )}
+                      <div className="flex-shrink-0">
+                        <StakeAccountActions
+                          account={account}
+                          vaultIndex={vaultIndex}
+                          allStakeAccounts={stakeAccounts || []}
+                        />
+                      </div>
                     </div>
 
                     {/* Content section */}
