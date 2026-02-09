@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { Input } from '../ui/input';
 import {
   useBatchTransactions,
   BatchItem,
@@ -52,6 +53,7 @@ export function BatchPanel() {
   const isMember = useAccess();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [progress, setProgress] = useState<BatchProgress | null>(null);
+  const [memo, setMemo] = useState('');
 
   if (itemCount === 0) {
     return null;
@@ -87,11 +89,13 @@ export function BatchPanel() {
         multisigAddress,
         programId,
         wallet,
-        (p) => setProgress({ ...p })
+        (p) => setProgress({ ...p }),
+        memo
       );
 
       toast.success(`Proposal created with ${itemCount} operations`);
       clearAll();
+      setMemo('');
       await queryClient.invalidateQueries({ queryKey: ['transactions'] });
       await queryClient.invalidateQueries({ queryKey: ['stakeAccounts'] });
     } catch (error: any) {
@@ -179,6 +183,20 @@ export function BatchPanel() {
             </div>
           </div>
         )}
+
+        {/* Memo */}
+        <div className="space-y-1">
+          <Input
+            placeholder="Memo (optional)"
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            maxLength={200}
+            disabled={isSubmitting}
+          />
+          {memo.length > 0 && (
+            <p className="text-xs text-muted-foreground">{memo.length}/200 characters</p>
+          )}
+        </div>
 
         {/* Submit button */}
         <Button

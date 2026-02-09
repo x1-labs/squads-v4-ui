@@ -8,6 +8,7 @@ import {
 } from '@solana/web3.js';
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { waitForConfirmation } from '~/lib/transactionConfirmation';
+import { addMemoToInstructions } from '~/lib/utils/memoInstruction';
 
 export interface BatchProposalItem {
   instructions: TransactionInstruction[];
@@ -30,7 +31,8 @@ export async function submitBatchProposal(
   multisigPda: string,
   programId: PublicKey,
   wallet: WalletContextState,
-  onProgress: (progress: BatchProgress) => void
+  onProgress: (progress: BatchProgress) => void,
+  memo?: string
 ): Promise<void> {
   if (!wallet.publicKey || !wallet.signTransaction) {
     throw new Error('Wallet must be connected');
@@ -69,6 +71,10 @@ export async function submitBatchProposal(
   const allInstructions: TransactionInstruction[] = [];
   for (const item of items) {
     allInstructions.push(...item.instructions);
+  }
+
+  if (memo) {
+    addMemoToInstructions(allInstructions, memo, vaultAddress);
   }
 
   console.log('[BatchProposal] Total inner instructions:', allInstructions.length);
