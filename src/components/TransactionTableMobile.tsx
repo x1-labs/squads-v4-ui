@@ -4,6 +4,7 @@ import RejectButton from './RejectButton';
 import CancelButton from './CancelButton';
 import ReviewButton from './ReviewButton';
 import { ApprovalStatus } from './ApprovalStatus';
+import { Badge } from './ui/badge';
 import { useNavigate } from 'react-router-dom';
 import { useMultisig } from '@/hooks/useServices';
 import { toast } from 'sonner';
@@ -11,6 +12,9 @@ import { TransactionTagList } from './TransactionTag';
 import { TransactionTag } from '@/lib/instructions/types';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess } from '@/hooks/useAccess';
+import { useBatchApprovals } from '@/hooks/useBatchApprovals';
+import { useBatchExecutes } from '@/hooks/useBatchExecutes';
+import { Layers } from 'lucide-react';
 
 // Format address to show first 8 and last 8 characters
 function formatAddress(address: string): string {
@@ -46,6 +50,8 @@ export default function TransactionTableMobile({
   const { data: multisigConfig } = useMultisig();
   const isMember = useAccess();
   const { connected } = useWallet();
+  const { hasItem: isInBatchApproval } = useBatchApprovals();
+  const { hasItem: isInBatchExecute } = useBatchExecutes();
 
   if (transactions.length === 0) {
     return (
@@ -103,6 +109,12 @@ export default function TransactionTableMobile({
                 >
                   {Number(transaction.index)}
                 </span>
+                {(isInBatchApproval(Number(transaction.index)) || isInBatchExecute(Number(transaction.index))) && (
+                  <Badge variant="secondary" className="gap-1 px-1.5 py-0.5 text-xs">
+                    <Layers className="h-3 w-3" />
+                    Batch
+                  </Badge>
+                )}
                 <div>
                   <p className="font-mono text-xs text-muted-foreground">
                     {formatAddress(transaction.transactionPda)}

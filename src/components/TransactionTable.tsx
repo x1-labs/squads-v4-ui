@@ -6,6 +6,7 @@ import ReviewButton from './ReviewButton';
 import { ApprovalStatus } from './ApprovalStatus';
 import { TableBody, TableCell, TableRow } from './ui/table';
 import { SplitButton } from './ui/split-button';
+import { Badge } from './ui/badge';
 import { useNavigate } from 'react-router-dom';
 import { useMultisig } from '@/hooks/useServices';
 import { toast } from 'sonner';
@@ -13,7 +14,9 @@ import { TransactionTagList } from './TransactionTag';
 import { TransactionTag } from '@/lib/instructions/types';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess } from '@/hooks/useAccess';
+import { useBatchApprovals } from '@/hooks/useBatchApprovals';
 import { useBatchExecutes } from '@/hooks/useBatchExecutes';
+import { Layers } from 'lucide-react';
 
 // Format address to show first 8 and last 8 characters
 function formatAddress(address: string): string {
@@ -50,6 +53,8 @@ export default function TransactionTable({
   const { data: multisigConfig } = useMultisig();
   const isMember = useAccess();
   const { connected } = useWallet();
+  const { hasItem: isInBatchApproval } = useBatchApprovals();
+  const { hasItem: isInBatchExecute } = useBatchExecutes();
 
   if (transactions.length === 0) {
     return (
@@ -114,13 +119,21 @@ export default function TransactionTable({
             <TableCell
               className={`font-mono text-sm ${isGreyedOut ? 'text-muted-foreground' : ''}`}
             >
-              <span
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                  isGreyedOut ? 'bg-muted/60' : 'bg-muted'
-                } text-xs font-semibold`}
-              >
-                {Number(transaction.index)}
-              </span>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                    isGreyedOut ? 'bg-muted/60' : 'bg-muted'
+                  } text-xs font-semibold`}
+                >
+                  {Number(transaction.index)}
+                </span>
+                {(isInBatchApproval(Number(transaction.index)) || isInBatchExecute(Number(transaction.index))) && (
+                  <Badge variant="secondary" className="gap-1 px-1.5 py-0.5 text-xs">
+                    <Layers className="h-3 w-3" />
+                    Batch
+                  </Badge>
+                )}
+              </div>
             </TableCell>
             <TableCell className={isGreyedOut ? 'text-muted-foreground' : ''}>
               <div className="flex flex-col gap-1.5">
