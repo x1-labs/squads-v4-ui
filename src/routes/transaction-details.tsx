@@ -11,6 +11,7 @@ import { useSquadConfig } from '@/hooks/useSquadConfig';
 import * as multisig from '@sqds/multisig';
 import { Button } from '@/components/ui/button';
 import ApproveButton from '@/components/ApproveButton';
+import BatchApproveButton from '@/components/BatchApproveButton';
 import RejectButton from '@/components/RejectButton';
 import ExecuteButton from '@/components/ExecuteButton';
 import CancelButton from '@/components/CancelButton';
@@ -268,12 +269,23 @@ export default function TransactionDetailsPage() {
           {transactionIndex !== null && multisigAddress && wallet.connected && isMember && (
             <div className="flex flex-wrap gap-2">
               {showApprove && (
-                <ApproveButton
-                  multisigPda={multisigAddress}
-                  transactionIndex={Number(transactionIndex)}
-                  proposalStatus={proposalStatus}
-                  programId={programId?.toBase58() || multisig.PROGRAM_ID.toBase58()}
-                />
+                <>
+                  <ApproveButton
+                    multisigPda={multisigAddress}
+                    transactionIndex={Number(transactionIndex)}
+                    proposalStatus={proposalStatus}
+                    programId={programId?.toBase58() || multisig.PROGRAM_ID.toBase58()}
+                  />
+                  {multisigConfig && (
+                    <BatchApproveButton
+                      multisigPda={multisigAddress}
+                      programId={programId?.toBase58() || multisig.PROGRAM_ID.toBase58()}
+                      connection={connection}
+                      staleTransactionIndex={Number(multisigConfig.staleTransactionIndex)}
+                      transactionIndex={Number(multisigConfig.transactionIndex)}
+                    />
+                  )}
+                </>
               )}
               {showReject && (
                 <RejectButton

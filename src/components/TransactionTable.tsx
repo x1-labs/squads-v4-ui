@@ -12,7 +12,6 @@ import { TransactionTagList } from './TransactionTag';
 import { TransactionTag } from '@/lib/instructions/types';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess } from '@/hooks/useAccess';
-import { Checkbox } from './ui/checkbox';
 
 // Format address to show first 8 and last 8 characters
 function formatAddress(address: string): string {
@@ -33,9 +32,6 @@ export default function TransactionTable({
   multisigPda,
   transactions,
   programId,
-  batchMode = false,
-  selectedTxs,
-  onToggleTx,
 }: {
   multisigPda: string;
   transactions: {
@@ -46,9 +42,6 @@ export default function TransactionTable({
     tags?: TransactionTag[];
   }[];
   programId?: string;
-  batchMode?: boolean;
-  selectedTxs?: Set<number>;
-  onToggleTx?: (index: number) => void;
 }) {
   const navigate = useNavigate();
   const { data: multisigConfig } = useMultisig();
@@ -107,50 +100,24 @@ export default function TransactionTable({
         const isCancelled = transaction.proposal?.status.__kind === 'Cancelled';
         const isRejected = transaction.proposal?.status.__kind === 'Rejected';
         const isGreyedOut = isExecuted || isCancelled || stale || isRejected;
-        const proposalStatus = transaction.proposal?.status.__kind || 'None';
-        const isApprovable = ['None', 'Draft', 'Active'].includes(proposalStatus) && !stale;
-        const txIndex = Number(transaction.index);
-        const isSelected = selectedTxs?.has(txIndex) ?? false;
         return (
           <TableRow
             key={index}
-            onClick={(e) => {
-              if (batchMode && isApprovable) {
-                const target = e.target as HTMLElement;
-                if (!target.closest('button')) {
-                  onToggleTx?.(txIndex);
-                  return;
-                }
-              }
-              handleRowClick(transaction.transactionPda, e);
-            }}
+            onClick={(e) => handleRowClick(transaction.transactionPda, e)}
             className={`cursor-pointer transition-colors ${
-              batchMode && isSelected
-                ? 'bg-primary/10 ring-1 ring-primary/30'
-                : isGreyedOut
-                  ? 'opacity-60 hover:bg-muted/30 hover:opacity-80'
-                  : 'hover:bg-muted/50'
+              isGreyedOut ? 'opacity-60 hover:bg-muted/30 hover:opacity-80' : 'hover:bg-muted/50'
             } group`}
           >
             <TableCell
               className={`font-mono text-sm ${isGreyedOut ? 'text-muted-foreground' : ''}`}
             >
-              <div className="flex items-center gap-2">
-                {batchMode && isApprovable && (
-                  <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={() => onToggleTx?.(txIndex)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                )}
-                <span
-                  className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                    isGreyedOut ? 'bg-muted/60' : 'bg-muted'
-                  } text-xs font-semibold`}
-                >
-                  {txIndex}
-                </span>
-              </div>
+              <span
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                  isGreyedOut ? 'bg-muted/60' : 'bg-muted'
+                } text-xs font-semibold`}
+              >
+                {Number(transaction.index)}
+              </span>
             </TableCell>
             <TableCell className={isGreyedOut ? 'text-muted-foreground' : ''}>
               <div className="flex flex-col gap-1.5">

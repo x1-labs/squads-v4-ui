@@ -11,7 +11,6 @@ import { TransactionTagList } from './TransactionTag';
 import { TransactionTag } from '@/lib/instructions/types';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess } from '@/hooks/useAccess';
-import { Checkbox } from './ui/checkbox';
 
 // Format address to show first 8 and last 8 characters
 function formatAddress(address: string): string {
@@ -32,9 +31,6 @@ export default function TransactionTableMobile({
   multisigPda,
   transactions,
   programId,
-  batchMode = false,
-  selectedTxs,
-  onToggleTx,
 }: {
   multisigPda: string;
   transactions: {
@@ -45,9 +41,6 @@ export default function TransactionTableMobile({
     tags?: TransactionTag[];
   }[];
   programId?: string;
-  batchMode?: boolean;
-  selectedTxs?: Set<number>;
-  onToggleTx?: (index: number) => void;
 }) {
   const navigate = useNavigate();
   const { data: multisigConfig } = useMultisig();
@@ -91,39 +84,18 @@ export default function TransactionTableMobile({
         const isCancelled = transaction.proposal?.status.__kind === 'Cancelled';
         const isRejected = transaction.proposal?.status.__kind === 'Rejected';
         const isGreyedOut = isExecuted || isCancelled || stale || isRejected;
-        const proposalStatus = transaction.proposal?.status.__kind || 'None';
-        const isApprovable = ['None', 'Draft', 'Active'].includes(proposalStatus) && !stale;
-        const txIndex = Number(transaction.index);
-        const isSelected = selectedTxs?.has(txIndex) ?? false;
 
         return (
           <div
             key={index}
-            onClick={() => {
-              if (batchMode && isApprovable) {
-                onToggleTx?.(txIndex);
-                return;
-              }
-              navigate(`/${multisigPda}/transactions/${transaction.transactionPda}`);
-            }}
-            className={`cursor-pointer rounded-lg border p-4 transition-colors ${
-              batchMode && isSelected
-                ? 'border-primary/30 bg-primary/10 ring-1 ring-primary/30'
-                : isGreyedOut
-                  ? 'border-border bg-card opacity-60 hover:opacity-80'
-                  : 'border-border bg-card hover:bg-muted/50'
+            onClick={() => navigate(`/${multisigPda}/transactions/${transaction.transactionPda}`)}
+            className={`cursor-pointer rounded-lg border border-border bg-card p-4 transition-colors ${
+              isGreyedOut ? 'opacity-60 hover:opacity-80' : 'hover:bg-muted/50'
             }`}
           >
             {/* Header Row */}
             <div className="mb-3 flex items-start justify-between">
               <div className="flex items-center gap-2">
-                {batchMode && isApprovable && (
-                  <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={() => onToggleTx?.(txIndex)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                )}
                 <span
                   className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${
                     isGreyedOut ? 'bg-muted/60' : 'bg-muted'
