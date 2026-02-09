@@ -13,11 +13,12 @@ import { WithdrawStakeDialog } from './WithdrawStakeDialog';
 import { RedelegateStakeDialog } from './RedelegateStakeDialog';
 import { SplitStakeDialog } from './SplitStakeDialog';
 import { MergeStakeDialog } from './MergeStakeDialog';
-import { StakeAccountInfo, getCompatibleMergeAccounts, createDeactivateStakeInstruction, createWithdrawStakeInstruction, createMergeStakeInstruction, createSplitStakeInstructions } from '@/lib/staking/validatorStakeUtils';
+import { BatchSplitDialog } from './BatchSplitDialog';
+import { StakeAccountInfo, getCompatibleMergeAccounts, createDeactivateStakeInstruction, createWithdrawStakeInstruction, createMergeStakeInstruction } from '@/lib/staking/validatorStakeUtils';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
-import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';
 
@@ -37,8 +38,9 @@ export function StakeAccountActions({
   const [redelegateOpen, setRedelegateOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [batchSplitOpen, setBatchSplitOpen] = useState(false);
   const { addItem } = useBatchTransactions();
-  const { multisigAddress, programId, connection } = useMultisigData();
+  const { multisigAddress, programId } = useMultisigData();
 
   const validatorAddresses = account.delegatedValidator ? [account.delegatedValidator] : [];
   const { data: validatorMetadata } = useValidatorsMetadata(validatorAddresses);
@@ -137,40 +139,6 @@ export function StakeAccountActions({
     toast.success(`Added ${compatible.length} merge operation${compatible.length > 1 ? 's' : ''} to batch queue`);
   };
 
-  const addSplitToBatch = async () => {
-    const vaultAddress = getVaultAddress();
-    if (!vaultAddress) return;
-
-    const maxSplitable = account.balance - account.rentExemptReserve - 0.1;
-    if (maxSplitable <= 0) return;
-
-    const splitAmount = Math.floor((maxSplitable / 2) * LAMPORTS_PER_SOL);
-    const seed = `split-${Date.now()}`.substring(0, 32);
-
-    try {
-      const { instructions } = await createSplitStakeInstructions(
-        new PublicKey(account.address),
-        vaultAddress,
-        splitAmount,
-        seed,
-        connection
-      );
-
-      const splitXnt = splitAmount / LAMPORTS_PER_SOL;
-      addItem({
-        type: 'split',
-        label: `Split ${getValidatorLabel()}`,
-        description: `${splitXnt.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT (50%) from ${account.address.slice(0, 8)}...`,
-        instructions,
-        vaultIndex,
-      });
-
-      toast.success('Added split (50%) to batch queue');
-    } catch (error: any) {
-      toast.error(`Failed to prepare split: ${error?.message || error}`);
-    }
-  };
-
   return (
     <>
       <DropdownMenu>
@@ -246,11 +214,11 @@ export function StakeAccountActions({
               )}
               {canSplit && (
                 <DropdownMenuItem
-                  onClick={addSplitToBatch}
+                  onClick={() => setBatchSplitOpen(true)}
                   className="cursor-pointer"
                 >
                   <Layers className="mr-2 h-4 w-4" />
-                  Add Split (50%) to Batch
+                  Add Split to Batch
                 </DropdownMenuItem>
               )}
               {canMerge && (
@@ -314,6 +282,15 @@ export function StakeAccountActions({
           onOpenChange={setMergeOpen}
           preSelectedAccount={account}
           allStakeAccounts={allStakeAccounts}
+        />
+      )}
+
+      {batchSplitOpen && (
+        <BatchSplitDialog
+          vaultIndex={vaultIndex}
+          isOpen={batchSplitOpen}
+          onOpenChange={setBatchSplitOpen}
+          preSelectedAccount={account}
         />
       )}
     </>
