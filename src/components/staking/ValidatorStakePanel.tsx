@@ -28,7 +28,7 @@ export function ValidatorStakePanel() {
   const [batchMode, setBatchMode] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
   const [batchDelegateOpen, setBatchDelegateOpen] = useState(false);
-  const { addItem, remaining, isFull } = useBatchTransactions();
+  const { addItem } = useBatchTransactions();
 
   // Get unique validator addresses
   const validatorAddresses =
@@ -116,16 +116,11 @@ export function ValidatorStakePanel() {
       toast.error('No selected accounts are eligible for unstaking (must be active or activating)');
       return;
     }
-    const toAdd = eligible.slice(0, remaining);
-    for (const account of toAdd) {
+    for (const account of eligible) {
       const label = getStakeAccountLabel(account, validatorMetadata);
       addItem(buildUnstakeBatchItem(account, multisigVault, vaultIndex, label));
     }
-    if (toAdd.length < eligible.length) {
-      toast.warning(`Added ${toAdd.length} of ${eligible.length} unstake operations (batch limit reached)`);
-    } else {
-      toast.success(`Added ${toAdd.length} unstake operation${toAdd.length > 1 ? 's' : ''} to batch queue`);
-    }
+    toast.success(`Added ${eligible.length} unstake operation${eligible.length > 1 ? 's' : ''} to batch queue`);
     exitBatchMode();
   };
 
@@ -137,16 +132,11 @@ export function ValidatorStakePanel() {
       toast.error('No selected accounts are eligible for withdrawal (must be inactive or deactivating)');
       return;
     }
-    const toAdd = eligible.slice(0, remaining);
-    for (const account of toAdd) {
+    for (const account of eligible) {
       const label = getStakeAccountLabel(account, validatorMetadata);
       addItem(buildWithdrawBatchItem(account, multisigVault, vaultIndex, label));
     }
-    if (toAdd.length < eligible.length) {
-      toast.warning(`Added ${toAdd.length} of ${eligible.length} withdraw operations (batch limit reached)`);
-    } else {
-      toast.success(`Added ${toAdd.length} withdraw operation${toAdd.length > 1 ? 's' : ''} to batch queue`);
-    }
+    toast.success(`Added ${eligible.length} withdraw operation${eligible.length > 1 ? 's' : ''} to batch queue`);
     exitBatchMode();
   };
 
@@ -157,20 +147,15 @@ export function ValidatorStakePanel() {
       toast.error('Select at least 2 accounts to merge');
       return;
     }
-    const items = buildBulkMergeBatchItems(selected, multisigVault, vaultIndex, validatorMetadata);
-    if (items.length === 0) {
+    const mergeItems = buildBulkMergeBatchItems(selected, multisigVault, vaultIndex, validatorMetadata);
+    if (mergeItems.length === 0) {
       toast.error('No compatible merge pairs found among selected accounts');
       return;
     }
-    const toAdd = items.slice(0, remaining);
-    for (const item of toAdd) {
+    for (const item of mergeItems) {
       addItem(item);
     }
-    if (toAdd.length < items.length) {
-      toast.warning(`Added ${toAdd.length} of ${items.length} merge operations (batch limit reached)`);
-    } else {
-      toast.success(`Added ${toAdd.length} merge operation${toAdd.length > 1 ? 's' : ''} to batch queue`);
-    }
+    toast.success(`Added ${mergeItems.length} merge operation${mergeItems.length > 1 ? 's' : ''} to batch queue`);
     exitBatchMode();
   };
 
@@ -209,7 +194,6 @@ export function ValidatorStakePanel() {
                 variant="outline"
                 size="sm"
                 onClick={() => setBatchDelegateOpen(true)}
-                disabled={isFull}
               >
                 <Layers className="mr-1.5 h-4 w-4" />
                 Batch Stake

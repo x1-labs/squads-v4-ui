@@ -43,7 +43,7 @@ export function StakeAccountActions({
   const [splitOpen, setSplitOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [batchSplitOpen, setBatchSplitOpen] = useState(false);
-  const { addItem, isFull } = useBatchTransactions();
+  const { addItem } = useBatchTransactions();
   const { multisigVault } = useMultisigData();
 
   const validatorAddresses = account.delegatedValidator ? [account.delegatedValidator] : [];
@@ -155,13 +155,13 @@ export function StakeAccountActions({
             <>
               <DropdownMenuSeparator />
               {canUndelegate && (
-                <DropdownMenuItem onClick={addUnstakeToBatch} disabled={isFull} className="cursor-pointer">
+                <DropdownMenuItem onClick={addUnstakeToBatch} className="cursor-pointer">
                   <Layers className="mr-2 h-4 w-4" />
                   Add Unstake to Batch
                 </DropdownMenuItem>
               )}
               {canWithdraw && (
-                <DropdownMenuItem onClick={addWithdrawToBatch} disabled={isFull} className="cursor-pointer">
+                <DropdownMenuItem onClick={addWithdrawToBatch} className="cursor-pointer">
                   <Layers className="mr-2 h-4 w-4" />
                   Add Withdraw to Batch
                 </DropdownMenuItem>
@@ -169,7 +169,6 @@ export function StakeAccountActions({
               {canSplit && (
                 <DropdownMenuItem
                   onClick={() => setBatchSplitOpen(true)}
-                  disabled={isFull}
                   className="cursor-pointer"
                 >
                   <Layers className="mr-2 h-4 w-4" />
@@ -177,7 +176,7 @@ export function StakeAccountActions({
                 </DropdownMenuItem>
               )}
               {canMerge && (
-                <DropdownMenuItem onClick={addMergeToBatch} disabled={isFull} className="cursor-pointer">
+                <DropdownMenuItem onClick={addMergeToBatch} className="cursor-pointer">
                   <Layers className="mr-2 h-4 w-4" />
                   Add Merge to Batch
                 </DropdownMenuItem>

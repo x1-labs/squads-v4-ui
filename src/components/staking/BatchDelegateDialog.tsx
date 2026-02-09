@@ -35,7 +35,7 @@ export function BatchDelegateDialog({
   const [isAdding, setIsAdding] = useState(false);
   const [minStake, setMinStake] = useState<number>(1);
   const { connection, multisigVault } = useMultisigData();
-  const { addItem, isFull } = useBatchTransactions();
+  const { addItem } = useBatchTransactions();
   const { data: validatorInfo } = useValidatorMetadata(
     isPublickey(validatorAddress) ? validatorAddress : undefined
   );
@@ -162,12 +162,12 @@ export function BatchDelegateDialog({
 
           <Button
             onClick={addToBatch}
-            disabled={!isValidatorValid || !isAmountValid || isAdding || isFull}
+            disabled={!isValidatorValid || !isAmountValid || isAdding}
             className="w-full"
             size="lg"
           >
             <Layers className="mr-2 h-4 w-4" />
-            {isFull ? 'Batch Queue Full' : isAdding ? 'Adding...' : 'Add Stake to Batch'}
+            {isAdding ? 'Adding...' : 'Add Stake to Batch'}
           </Button>
         </div>
       </DialogContent>

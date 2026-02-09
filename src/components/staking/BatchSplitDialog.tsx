@@ -36,7 +36,7 @@ export function BatchSplitDialog({
   const [amount, setAmount] = useState<string>('');
   const [isAdding, setIsAdding] = useState(false);
   const { connection, multisigVault } = useMultisigData();
-  const { addItem, isFull } = useBatchTransactions();
+  const { addItem } = useBatchTransactions();
 
   const validatorAddresses = preSelectedAccount.delegatedValidator
     ? [preSelectedAccount.delegatedValidator]
@@ -191,12 +191,12 @@ export function BatchSplitDialog({
 
           <Button
             onClick={addToBatch}
-            disabled={!isAmountValid || maxSplitable <= 0 || isAdding || isFull}
+            disabled={!isAmountValid || maxSplitable <= 0 || isAdding}
             className="w-full"
             size="lg"
           >
             <Layers className="mr-2 h-4 w-4" />
-            {isFull ? 'Batch Queue Full' : isAdding ? 'Adding...' : 'Add Split to Batch'}
+            {isAdding ? 'Adding...' : 'Add Split to Batch'}
           </Button>
         </div>
       </DialogContent>

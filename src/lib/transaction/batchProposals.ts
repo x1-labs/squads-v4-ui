@@ -131,8 +131,20 @@ export async function submitBatchProposal(
 
   const transaction = new VersionedTransaction(message);
 
-  const serialized = transaction.serialize();
+  let serialized: Uint8Array;
+  try {
+    serialized = transaction.serialize();
+  } catch (e) {
+    console.error('[BatchProposal] Serialization failed:', e);
+    throw new Error('Transaction too large. Remove some operations and try again.');
+  }
   console.log('[BatchProposal] Serialized transaction size:', serialized.length, 'bytes (limit: 1232)');
+
+  if (serialized.length > 1232) {
+    throw new Error(
+      `Transaction too large (${serialized.length} bytes, limit 1232). Remove some operations and try again.`
+    );
+  }
 
   // Sign
   onProgress({ currentStep: 'signing' });
