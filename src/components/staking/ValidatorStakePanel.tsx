@@ -21,6 +21,7 @@ import {
   countMergeEligible,
 } from '@/lib/staking/batchStakeActions';
 import { toast } from 'sonner';
+import { SplitButton } from '../ui/split-button';
 
 export function ValidatorStakePanel() {
   const { vaultIndex, multisigVault } = useMultisigData();
@@ -190,15 +191,12 @@ export function ValidatorStakePanel() {
                   {batchMode ? 'Cancel' : 'Batch'}
                 </Button>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setBatchDelegateOpen(true)}
+              <SplitButton
+                size="default"
+                items={[{ label: 'Batch Stake', onClick: () => setBatchDelegateOpen(true) }]}
               >
-                <Layers className="mr-1.5 h-4 w-4" />
-                Batch Stake
-              </Button>
-              <DelegateStakeDialog vaultIndex={vaultIndex} />
+                <DelegateStakeDialog vaultIndex={vaultIndex} />
+              </SplitButton>
             </div>
           </div>
           {/* Summary Stats */}
