@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { DelegateStakeDialog } from './DelegateStakeDialog';
 import { useStakeAccounts } from '@/hooks/useStakeAccounts';
@@ -6,18 +7,21 @@ import { useMultisigData } from '@/hooks/useMultisigData';
 import { Skeleton } from '../ui/skeleton';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../ui/dropdown-menu';
-import { MoreHorizontal, ArrowUpDown, ArrowDown, Wallet } from 'lucide-react';
+import { Checkbox } from '../ui/checkbox';
+import { Layers, ArrowDown, Wallet } from 'lucide-react';
 import { StakeAccountActions } from './StakeAccountActions';
+import { useBatchTransactions } from '@/hooks/useBatchTransactions';
+import { StakeAccountInfo, createDeactivateStakeInstruction, createWithdrawStakeInstruction } from '@/lib/staking/validatorStakeUtils';
+import { PublicKey } from '@solana/web3.js';
+import * as multisig from '@sqds/multisig';
+import { toast } from 'sonner';
 
 export function ValidatorStakePanel() {
-  const { vaultIndex } = useMultisigData();
+  const { vaultIndex, multisigAddress, programId } = useMultisigData();
   const { data: stakeAccounts, isLoading } = useStakeAccounts(vaultIndex);
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
+  const { addItem } = useBatchTransactions();
 
   // Get unique validator addresses
   const validatorAddresses =
@@ -37,6 +41,16 @@ export function ValidatorStakePanel() {
     { totalBalance: 0, totalActive: 0, totalInactive: 0 }
   ) || { totalBalance: 0, totalActive: 0, totalInactive: 0 };
 
+  const sortedAccounts = useMemo(() => {
+    if (!stakeAccounts) return [];
+    return [...stakeAccounts].sort((a, b) => {
+      if (b.balance !== a.balance) return b.balance - a.balance;
+      const aValidator = a.delegatedValidator || '';
+      const bValidator = b.delegatedValidator || '';
+      return aValidator.localeCompare(bValidator);
+    });
+  }, [stakeAccounts]);
+
   const getStatusBadgeVariant = (
     state: string
   ): 'default' | 'secondary' | 'outline' | 'destructive' => {
@@ -54,6 +68,130 @@ export function ValidatorStakePanel() {
     }
   };
 
+  const toggleBatchMode = () => {
+    if (batchMode) {
+      setSelectedAccounts(new Set());
+    }
+    setBatchMode(!batchMode);
+  };
+
+  const toggleAccount = (address: string) => {
+    setSelectedAccounts((prev) => {
+      const next = new Set(prev);
+      if (next.has(address)) {
+        next.delete(address);
+      } else {
+        next.add(address);
+      }
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (!stakeAccounts) return;
+    setSelectedAccounts(new Set(stakeAccounts.map((a) => a.address)));
+  };
+
+  const selectNone = () => {
+    setSelectedAccounts(new Set());
+  };
+
+  const getValidatorLabel = (account: StakeAccountInfo) => {
+    if (account.delegatedValidator && validatorMetadata?.get(account.delegatedValidator)?.name) {
+      return validatorMetadata.get(account.delegatedValidator)!.name!;
+    }
+    if (account.delegatedValidator) {
+      return `${account.delegatedValidator.slice(0, 8)}...`;
+    }
+    return `${account.address.slice(0, 8)}...`;
+  };
+
+  const getVaultAddress = () => {
+    if (!multisigAddress) return null;
+    return multisig.getVaultPda({
+      index: vaultIndex,
+      multisigPda: new PublicKey(multisigAddress),
+      programId,
+    })[0];
+  };
+
+  const batchUnstake = () => {
+    const vaultAddress = getVaultAddress();
+    if (!vaultAddress) return;
+
+    const selected = sortedAccounts.filter((a) => selectedAccounts.has(a.address));
+    const eligible = selected.filter(
+      (a) => a.state === 'active' || a.state === 'activating'
+    );
+
+    if (eligible.length === 0) {
+      toast.error('No selected accounts are eligible for unstaking (must be active or activating)');
+      return;
+    }
+
+    for (const account of eligible) {
+      const instruction = createDeactivateStakeInstruction(
+        new PublicKey(account.address),
+        vaultAddress
+      );
+      addItem({
+        type: 'unstake',
+        label: `Unstake ${getValidatorLabel(account)}`,
+        description: `${account.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT - ${account.address.slice(0, 8)}...`,
+        instructions: [instruction],
+        vaultIndex,
+      });
+    }
+
+    toast.success(`Added ${eligible.length} unstake operation${eligible.length > 1 ? 's' : ''} to batch queue`);
+    setSelectedAccounts(new Set());
+    setBatchMode(false);
+  };
+
+  const batchWithdraw = () => {
+    const vaultAddress = getVaultAddress();
+    if (!vaultAddress) return;
+
+    const selected = sortedAccounts.filter((a) => selectedAccounts.has(a.address));
+    const eligible = selected.filter(
+      (a) => a.state === 'inactive' || a.state === 'deactivating'
+    );
+
+    if (eligible.length === 0) {
+      toast.error('No selected accounts are eligible for withdrawal (must be inactive or deactivating)');
+      return;
+    }
+
+    for (const account of eligible) {
+      const lamports = account.balanceLamports;
+      const instruction = createWithdrawStakeInstruction(
+        new PublicKey(account.address),
+        vaultAddress,
+        BigInt(lamports)
+      );
+      addItem({
+        type: 'withdraw',
+        label: `Withdraw ${getValidatorLabel(account)}`,
+        description: `${account.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT - ${account.address.slice(0, 8)}...`,
+        instructions: [instruction],
+        vaultIndex,
+      });
+    }
+
+    toast.success(`Added ${eligible.length} withdraw operation${eligible.length > 1 ? 's' : ''} to batch queue`);
+    setSelectedAccounts(new Set());
+    setBatchMode(false);
+  };
+
+  // Count eligible accounts for each batch action among selected
+  const selectedList = sortedAccounts.filter((a) => selectedAccounts.has(a.address));
+  const unstakeEligibleCount = selectedList.filter(
+    (a) => a.state === 'active' || a.state === 'activating'
+  ).length;
+  const withdrawEligibleCount = selectedList.filter(
+    (a) => a.state === 'inactive' || a.state === 'deactivating'
+  ).length;
+
   return (
     <Card>
       <CardHeader>
@@ -63,7 +201,17 @@ export function ValidatorStakePanel() {
               <CardTitle>Validator Staking</CardTitle>
               <CardDescription>Stake XNT directly to validators</CardDescription>
             </div>
-            <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto">
+            <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:gap-2">
+              {stakeAccounts && stakeAccounts.length > 1 && (
+                <Button
+                  variant={batchMode ? 'secondary' : 'outline'}
+                  onClick={toggleBatchMode}
+                  size="sm"
+                >
+                  <Layers className="mr-1.5 h-4 w-4" />
+                  {batchMode ? 'Cancel' : 'Batch'}
+                </Button>
+              )}
               <DelegateStakeDialog vaultIndex={vaultIndex} />
             </div>
           </div>
@@ -103,6 +251,45 @@ export function ValidatorStakePanel() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          {/* Batch selection controls */}
+          {batchMode && stakeAccounts && stakeAccounts.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <span className="text-sm font-medium">
+                {selectedAccounts.size} selected
+              </span>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="sm" onClick={selectAll} className="h-7 text-xs">
+                  All
+                </Button>
+                <Button variant="ghost" size="sm" onClick={selectNone} className="h-7 text-xs">
+                  None
+                </Button>
+              </div>
+              <div className="ml-auto flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={batchUnstake}
+                  disabled={unstakeEligibleCount === 0}
+                  className="h-8"
+                >
+                  <ArrowDown className="mr-1.5 h-3.5 w-3.5" />
+                  Batch Unstake{unstakeEligibleCount > 0 ? ` (${unstakeEligibleCount})` : ''}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={batchWithdraw}
+                  disabled={withdrawEligibleCount === 0}
+                  className="h-8"
+                >
+                  <Wallet className="mr-1.5 h-3.5 w-3.5" />
+                  Batch Withdraw{withdrawEligibleCount > 0 ? ` (${withdrawEligibleCount})` : ''}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {isLoading ? (
             <div className="space-y-2">
               <Skeleton className="h-16 w-full" />
@@ -111,29 +298,29 @@ export function ValidatorStakePanel() {
           ) : stakeAccounts && stakeAccounts.length > 0 ? (
             <div className="space-y-2">
               <h3 className="mb-3 text-sm font-medium text-muted-foreground">Stake Accounts</h3>
-              {stakeAccounts
-                .sort((a, b) => {
-                  // Primary sort: balance amount (highest to lowest)
-                  if (b.balance !== a.balance) {
-                    return b.balance - a.balance;
-                  }
-                  // Secondary sort: vote account alphabetically (for consistent ordering when amounts are equal)
-                  const aValidator = a.delegatedValidator || '';
-                  const bValidator = b.delegatedValidator || '';
-                  return aValidator.localeCompare(bValidator);
-                })
-                .map((account) => (
+              {sortedAccounts.map((account) => (
                   <div
                     key={account.address}
                     className={`space-y-3 rounded-lg p-3 transition-colors ${
-                      account.state === 'inactive'
-                        ? 'bg-muted/20 opacity-75 hover:bg-muted/30'
-                        : 'bg-muted/30 hover:bg-muted/50'
-                    }`}
+                      batchMode && selectedAccounts.has(account.address)
+                        ? 'bg-primary/10 ring-1 ring-primary/30'
+                        : account.state === 'inactive'
+                          ? 'bg-muted/20 opacity-75 hover:bg-muted/30'
+                          : 'bg-muted/30 hover:bg-muted/50'
+                    } ${batchMode ? 'cursor-pointer' : ''}`}
+                    onClick={batchMode ? () => toggleAccount(account.address) : undefined}
                   >
                     {/* Header with stake account info and action button */}
                     <div className="flex items-start justify-between gap-2 sm:items-center">
                       <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                        {batchMode && (
+                          <Checkbox
+                            checked={selectedAccounts.has(account.address)}
+                            onCheckedChange={() => toggleAccount(account.address)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="mt-0.5 sm:mt-0"
+                          />
+                        )}
                         <p className="break-all font-mono text-xs sm:break-normal">
                           {account.address.slice(0, 6)}...{account.address.slice(-6)}
                         </p>
@@ -144,13 +331,15 @@ export function ValidatorStakePanel() {
                           {account.state}
                         </Badge>
                       </div>
-                      <div className="flex-shrink-0">
-                        <StakeAccountActions
-                          account={account}
-                          vaultIndex={vaultIndex}
-                          allStakeAccounts={stakeAccounts || []}
-                        />
-                      </div>
+                      {!batchMode && (
+                        <div className="flex-shrink-0">
+                          <StakeAccountActions
+                            account={account}
+                            vaultIndex={vaultIndex}
+                            allStakeAccounts={stakeAccounts || []}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Content section */}

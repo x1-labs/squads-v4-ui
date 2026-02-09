@@ -21,6 +21,7 @@ import { Routes, Route, BrowserRouter } from 'react-router-dom';
 import './styles/global.css'; // ✅ Load Tailwind styles
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AutoAddEnvSquads } from './components/AutoAddEnvSquads';
+import { BatchTransactionsProvider } from './hooks/useBatchTransactions';
 
 const App = () => {
   const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <Wallet>
+          <BatchTransactionsProvider>
           <BrowserRouter>
             <div className="flex h-screen min-w-full flex-col bg-background dark:bg-background md:flex-row">
               <Suspense fallback={null}>
@@ -69,6 +71,7 @@ const App = () => {
               />
             </div>
           </BrowserRouter>
+          </BatchTransactionsProvider>
         </Wallet>
       </QueryClientProvider>
     </ThemeProvider>
