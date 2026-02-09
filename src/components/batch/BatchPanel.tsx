@@ -10,7 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '@/hooks/useAccess';
 import { toast } from 'sonner';
 import {
-  submitBatchProposals,
+  submitBatchProposal,
   BatchProgress,
 } from '@/lib/transaction/batchProposals';
 import {
@@ -59,8 +59,8 @@ export function BatchPanel() {
       return;
     }
 
-    if (!wallet.signAllTransactions) {
-      toast.error('Your wallet does not support batch signing. Please use a wallet that supports signAllTransactions.');
+    if (!wallet.signTransaction) {
+      toast.error('Your wallet does not support transaction signing.');
       return;
     }
 
@@ -73,7 +73,7 @@ export function BatchPanel() {
     setProgress(null);
 
     try {
-      const result = await submitBatchProposals(
+      await submitBatchProposal(
         items.map((item) => ({
           instructions: item.instructions,
           vaultIndex: item.vaultIndex,
@@ -86,22 +86,12 @@ export function BatchPanel() {
         (p) => setProgress({ ...p })
       );
 
-      if (result.failed === 0) {
-        toast.success(`All ${result.succeeded} proposals created successfully`);
-        clearAll();
-      } else if (result.succeeded > 0) {
-        toast.warning(
-          `${result.succeeded} proposals created, ${result.failed} failed`
-        );
-        clearAll();
-      } else {
-        toast.error('All proposals failed to submit');
-      }
-
+      toast.success(`Proposal created with ${itemCount} operations`);
+      clearAll();
       await queryClient.invalidateQueries({ queryKey: ['transactions'] });
       await queryClient.invalidateQueries({ queryKey: ['stakeAccounts'] });
     } catch (error: any) {
-      toast.error(`Batch submission failed: ${error?.message || error}`);
+      toast.error(`Submission failed: ${error?.message || error}`);
     } finally {
       setIsSubmitting(false);
       setProgress(null);
@@ -112,17 +102,17 @@ export function BatchPanel() {
     if (!progress) return '';
     switch (progress.currentStep) {
       case 'preparing':
-        return 'Preparing transactions...';
+        return 'Preparing transaction...';
       case 'signing':
         return 'Please approve in your wallet...';
       case 'sending':
-        return `Sending ${progress.sent}/${progress.total}...`;
+        return 'Sending transaction...';
       case 'confirming':
-        return `Confirming ${progress.confirmed}/${progress.total}...`;
+        return 'Confirming...';
       case 'done':
-        return `Done: ${progress.confirmed} confirmed, ${progress.failed} failed`;
+        return 'Proposal created!';
       case 'error':
-        return 'Error occurred';
+        return progress.error || 'Error occurred';
       default:
         return '';
     }
@@ -151,7 +141,7 @@ export function BatchPanel() {
           </Button>
         </div>
         <CardDescription>
-          These operations will each become a separate multisig proposal, submitted with a single wallet approval.
+          All operations will be combined into a single multisig proposal.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -180,39 +170,6 @@ export function BatchPanel() {
               )}
               <span className="text-sm">{getProgressText()}</span>
             </div>
-            {/* Progress bar */}
-            <div className="flex h-2 overflow-hidden rounded-full bg-muted">
-              {progress.confirmed > 0 && (
-                <div
-                  className="bg-green-500 transition-all"
-                  style={{ width: `${(progress.confirmed / progress.total) * 100}%` }}
-                />
-              )}
-              {progress.sent > progress.confirmed && (
-                <div
-                  className="bg-yellow-500 transition-all"
-                  style={{
-                    width: `${((progress.sent - progress.confirmed - progress.failed) / progress.total) * 100}%`,
-                  }}
-                />
-              )}
-              {progress.failed > 0 && (
-                <div
-                  className="bg-red-500 transition-all"
-                  style={{ width: `${(progress.failed / progress.total) * 100}%` }}
-                />
-              )}
-            </div>
-            {/* Error messages */}
-            {progress.errors.length > 0 && (
-              <div className="space-y-1">
-                {progress.errors.map((err, i) => (
-                  <p key={i} className="text-xs text-red-500">
-                    {err}
-                  </p>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
@@ -230,7 +187,7 @@ export function BatchPanel() {
           ) : (
             <>
               <Send className="mr-2 h-4 w-4" />
-              Submit {itemCount} {itemCount === 1 ? 'Proposal' : 'Proposals'}
+              Submit Proposal ({itemCount} {itemCount === 1 ? 'operation' : 'operations'})
             </>
           )}
         </Button>
