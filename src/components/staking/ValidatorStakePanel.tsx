@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { DelegateStakeDialog } from './DelegateStakeDialog';
+import { BatchDelegateDialog } from './BatchDelegateDialog';
 import { useStakeAccounts } from '@/hooks/useStakeAccounts';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
 import { useMultisigData } from '@/hooks/useMultisigData';
@@ -26,6 +27,7 @@ export function ValidatorStakePanel() {
   const { data: stakeAccounts, isLoading } = useStakeAccounts(vaultIndex);
   const [batchMode, setBatchMode] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
+  const [batchDelegateOpen, setBatchDelegateOpen] = useState(false);
   const { addItem, remaining, isFull } = useBatchTransactions();
 
   // Get unique validator addresses
@@ -183,6 +185,7 @@ export function ValidatorStakePanel() {
   const mergeEligibleCount = countMergeEligible(selectedList);
 
   return (
+  <>
     <Card>
       <CardHeader>
         <div className="space-y-4">
@@ -202,6 +205,15 @@ export function ValidatorStakePanel() {
                   {batchMode ? 'Cancel' : 'Batch'}
                 </Button>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setBatchDelegateOpen(true)}
+                disabled={isFull}
+              >
+                <Layers className="mr-1.5 h-4 w-4" />
+                Batch Stake
+              </Button>
               <DelegateStakeDialog vaultIndex={vaultIndex} />
             </div>
           </div>
@@ -509,5 +521,14 @@ export function ValidatorStakePanel() {
         </div>
       </CardContent>
     </Card>
+
+    {batchDelegateOpen && (
+      <BatchDelegateDialog
+        vaultIndex={vaultIndex}
+        isOpen={batchDelegateOpen}
+        onOpenChange={setBatchDelegateOpen}
+      />
+    )}
+  </>
   );
 }

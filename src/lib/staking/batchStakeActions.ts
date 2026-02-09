@@ -1,10 +1,12 @@
-import { PublicKey } from '@solana/web3.js';
+import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import { BatchItemType } from '@/hooks/useBatchTransactions';
 import {
   StakeAccountInfo,
   createDeactivateStakeInstruction,
   createWithdrawStakeInstruction,
   createMergeStakeInstruction,
+  createStakeAccountWithSeedInstructions,
+  createDelegateStakeInstruction,
   getCompatibleMergeAccounts,
 } from '@/lib/staking/validatorStakeUtils';
 
@@ -132,6 +134,39 @@ export function buildBulkMergeBatchItems(
   }
 
   return items;
+}
+
+/**
+ * Build a batch item that creates a new stake account and delegates to a validator.
+ */
+export async function buildDelegateBatchItem(
+  validatorVoteAddress: string,
+  validatorName: string | undefined,
+  amountXNT: number,
+  vaultAddress: PublicKey,
+  vaultIndex: number
+): Promise<NewBatchItem> {
+  const lamports = Math.floor(amountXNT * LAMPORTS_PER_SOL);
+  const seed = `stake-${Date.now()}`.substring(0, 32);
+
+  const { instructions: createInstructions, stakeAccount } =
+    await createStakeAccountWithSeedInstructions(vaultAddress, seed, lamports);
+
+  const delegateIx = createDelegateStakeInstruction(
+    stakeAccount,
+    vaultAddress,
+    new PublicKey(validatorVoteAddress)
+  );
+
+  const label = validatorName || shortAddress(validatorVoteAddress);
+
+  return {
+    type: 'delegate',
+    label: `Stake to ${label}`,
+    description: `${formatBalance(amountXNT)} XNT`,
+    instructions: [...createInstructions, delegateIx],
+    vaultIndex,
+  };
 }
 
 /**
