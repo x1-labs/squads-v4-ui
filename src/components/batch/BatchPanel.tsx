@@ -99,10 +99,14 @@ export function BatchPanel() {
       await queryClient.invalidateQueries({ queryKey: ['transactions'] });
       await queryClient.invalidateQueries({ queryKey: ['stakeAccounts'] });
     } catch (error: any) {
-      toast.error(`Submission failed: ${error?.message || error}`);
+      const msg = error?.message || String(error);
+      if (!msg.includes('User rejected')) {
+        setProgress({ currentStep: 'error', error: msg });
+        toast.error(msg.length > 200 ? msg.substring(0, 200) + '...' : msg);
+      }
     } finally {
       setIsSubmitting(false);
-      setProgress(null);
+      setTimeout(() => setProgress(null), 2000);
     }
   };
 

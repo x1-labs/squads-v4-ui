@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 
+/** Max executes to batch at once (each is a separate transaction) */
+export const MAX_BATCH_EXECUTES = 10;
+
 export interface BatchExecuteItem {
   id: string;
   transactionIndex: number;
@@ -25,7 +28,12 @@ export function BatchExecutesProvider({ children }: { children: ReactNode }) {
   const addItem = useCallback((item: Omit<BatchExecuteItem, 'id'>): boolean => {
     let added = false;
     setItems((prev) => {
+      // Don't add duplicates
       if (prev.some((i) => i.transactionIndex === item.transactionIndex)) {
+        return prev;
+      }
+      // Check limit
+      if (prev.length >= MAX_BATCH_EXECUTES) {
         return prev;
       }
       const id = `execute-${nextId++}-${Date.now()}`;

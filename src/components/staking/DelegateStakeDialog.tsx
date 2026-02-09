@@ -86,15 +86,6 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
     const { instructions: createAccountInstructions, stakeAccount } =
       await createStakeAccountWithSeedInstructions(vaultAddress, seed, lamports);
 
-    console.log('Creating stake account delegation:', {
-      vaultAddress: vaultAddress.toBase58(),
-      stakeAccount: stakeAccount.toBase58(),
-      validator: validatorAddress,
-      seed,
-      amount: parsedAmount,
-      lamports,
-    });
-
     // Delegate to the validator
     const delegateInstruction = createDelegateStakeInstruction(
       stakeAccount,
@@ -157,9 +148,7 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
     });
 
     // Get FRESH blockhash right before sending
-    console.log('[DelegateStakeDialog] Fetching fresh blockhash');
     const freshBlockhash = (await connection.getLatestBlockhash()).blockhash;
-    console.log('[DelegateStakeDialog] Got fresh blockhash:', freshBlockhash);
 
     const message = new TransactionMessage({
       instructions: [multisigTransactionIx, proposalIx, approveIx],
@@ -171,20 +160,17 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
 
     // Sign transaction first, then send manually
     // This avoids "Plugin Closed" issues with some wallets (especially Backpack)
-    console.log('[DelegateStakeDialog] Requesting wallet signature');
     if (!wallet.signTransaction) {
       throw new Error('Wallet does not support transaction signing');
     }
 
     const signedTransaction = await wallet.signTransaction(transaction);
-    console.log('[DelegateStakeDialog] Transaction signed, sending to network');
 
     const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
       skipPreflight: false,
       maxRetries: 3,
     });
 
-    console.log('[DelegateStakeDialog] Transaction signature:', signature);
     toast.loading('Confirming...', { id: 'transaction' });
 
     const sent = await waitForConfirmation(connection, [signature]);

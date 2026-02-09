@@ -28,7 +28,6 @@ export async function submitBatchApprovals(
 
   for (const item of items) {
     const transactionIndexBN = BigInt(item.transactionIndex);
-    const actualProgramId = programId;
 
     if (item.proposalStatus === 'None') {
       transaction.add(
@@ -38,7 +37,7 @@ export async function submitBatchApprovals(
           isDraft: false,
           transactionIndex: transactionIndexBN,
           rentPayer: wallet.publicKey,
-          programId: actualProgramId,
+          programId,
         })
       );
     }
@@ -49,7 +48,7 @@ export async function submitBatchApprovals(
           multisigPda: new PublicKey(multisigPda),
           member: wallet.publicKey,
           transactionIndex: transactionIndexBN,
-          programId: actualProgramId,
+          programId,
         })
       );
     }
@@ -59,7 +58,7 @@ export async function submitBatchApprovals(
         multisigPda: new PublicKey(multisigPda),
         member: wallet.publicKey,
         transactionIndex: transactionIndexBN,
-        programId: actualProgramId,
+        programId,
       })
     );
   }
@@ -70,7 +69,6 @@ export async function submitBatchApprovals(
   // Check size before signing
   try {
     const serialized = transaction.serialize({ verifySignatures: false });
-    console.log('[BatchApproval] Transaction size:', serialized.length, 'bytes');
     if (serialized.length > 1232) {
       throw new Error(
         `Transaction too large (${serialized.length} bytes). Select fewer proposals.`
@@ -78,7 +76,6 @@ export async function submitBatchApprovals(
     }
   } catch (e: any) {
     if (e.message?.includes('too large')) throw e;
-    console.error('[BatchApproval] Serialization check failed:', e);
     throw new Error('Transaction too large. Select fewer proposals.');
   }
 

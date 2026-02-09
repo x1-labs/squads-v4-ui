@@ -77,7 +77,6 @@ export async function getStakeAccountsForVault(
         const meta = info.meta;
 
         const stakeActivation = await getStakeActivation(connection as any, account.pubkey);
-        console.log('Stake Activation for', account.pubkey.toBase58(), ':', stakeActivation);
 
         // Handle edge case where activationEpoch is max u64 value
         // This indicates the stake is actually active from epoch 0
@@ -92,14 +91,6 @@ export async function getStakeAccountsForVault(
         if (stakeActivation.status === 'active') state = 'active';
         else if (stakeActivation.status === 'activating') state = 'activating';
         else if (stakeActivation.status === 'deactivating') state = 'deactivating';
-
-        console.log(
-          'Raw lamports for',
-          account.pubkey.toBase58(),
-          ':',
-          account.account.lamports,
-          typeof account.account.lamports
-        );
 
         stakeAccounts.push({
           address: account.pubkey.toBase58(),

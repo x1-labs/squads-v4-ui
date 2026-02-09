@@ -92,7 +92,7 @@ export default function TransactionDetailsPage() {
       );
       setProposal(proposalData);
     } catch (err) {
-      console.log('No proposal found for transaction');
+      console.debug('No proposal found for transaction');
     }
   };
 
