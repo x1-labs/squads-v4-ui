@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { useBatchExecutes, BatchExecuteItem } from '@/hooks/useBatchExecutes';
+import { useBatchExecutes, BatchExecuteItem, MAX_BATCH_EXECUTES } from '@/hooks/useBatchExecutes';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
@@ -120,8 +120,11 @@ export function BatchExecutePanel() {
           <div className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-green-500" />
             <CardTitle className="text-lg">Batch Executions</CardTitle>
-            <Badge variant="secondary" className="ml-1">
-              {itemCount} {itemCount === 1 ? 'transaction' : 'transactions'}
+            <Badge
+              variant={itemCount >= MAX_BATCH_EXECUTES ? 'destructive' : 'secondary'}
+              className="ml-1"
+            >
+              {itemCount}/{MAX_BATCH_EXECUTES}
             </Badge>
           </div>
           <Button
