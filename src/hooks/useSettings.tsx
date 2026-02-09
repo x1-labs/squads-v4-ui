@@ -2,9 +2,9 @@ import * as multisig from '@sqds/multisig';
 // top level
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 
-const DEFAULT_RPC_URL = process.env.APP_RPC_URL || 'https://rpc.testnet.x1.xyz'; // Default fallback
+export const DEFAULT_RPC_URL = process.env.APP_RPC_URL || 'https://rpc.testnet.x1.xyz'; // Default fallback
 
-const getRpcUrl = () => {
+export const getRpcUrl = () => {
   if (typeof document !== 'undefined') {
     return localStorage.getItem('x-rpc-url') || DEFAULT_RPC_URL;
   }
