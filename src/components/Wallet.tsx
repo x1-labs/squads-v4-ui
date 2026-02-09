@@ -1,16 +1,12 @@
 'use client';
 import React, { FC, useMemo, useEffect, useState } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import { clusterApiUrl } from '@solana/web3.js';
 import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
   TorusWalletAdapter,
   LedgerWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
-import { BackpackWalletAdapter } from '@solana/wallet-adapter-backpack';
+import { getRpcUrl } from '@/hooks/useSettings';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
 
@@ -19,10 +15,12 @@ type Props = {
 };
 
 export const Wallet: FC<Props> = ({ children }) => {
-  const network = WalletAdapterNetwork.Devnet;
   const [walletsReady, setWalletsReady] = useState(false);
 
-  const endpoint = useMemo(() => clusterApiUrl(network), [network]);
+  // Use the same RPC URL configured in app settings (localStorage).
+  // This ensures the wallet adapter connects to the same network the app is using,
+  // so users don't have to manually switch networks in their wallet.
+  const endpoint = useMemo(() => getRpcUrl(), []);
 
   // Delay wallet initialization to allow browser extensions to register
   useEffect(() => {
@@ -37,21 +35,14 @@ export const Wallet: FC<Props> = ({ children }) => {
   const wallets = useMemo(
     () => {
       if (!walletsReady) return [];
-      
-      const adapters: any[] = [
-        new PhantomWalletAdapter(),
-        new SolflareWalletAdapter(),
+
+      // Wallets that support the Wallet Standard (Phantom, Solflare, Backpack, etc.)
+      // are detected automatically and don't need legacy adapter registration.
+      // Only include adapters for wallets that don't implement the standard.
+      return [
         new TorusWalletAdapter(),
         new LedgerWalletAdapter(),
       ];
-      
-      // Add Backpack adapter as fallback if it's not auto-detected via wallet standard
-      // Check if window.backpack exists (indicates extension is installed)
-      if (typeof window !== 'undefined' && (window as any).backpack?.solana) {
-        adapters.push(new BackpackWalletAdapter());
-      }
-      
-      return adapters;
     },
     [walletsReady]
   );
