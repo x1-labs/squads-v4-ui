@@ -2,12 +2,38 @@ import {
   PublicKey,
   Connection,
   StakeProgram,
+  VoteProgram,
   LAMPORTS_PER_SOL,
   Authorized,
   Lockup,
   TransactionInstruction,
 } from '@solana/web3.js';
 import { getStakeActivation } from '@anza-xyz/solana-rpc-get-stake-activation';
+
+/**
+ * Validates that an address is a vote account (owned by the Vote program).
+ * Returns an error message if invalid, or null if valid.
+ */
+export async function validateVoteAccount(
+  connection: Connection,
+  address: PublicKey
+): Promise<string | null> {
+  try {
+    const accountInfo = await connection.getAccountInfo(address);
+
+    if (!accountInfo) {
+      return 'Account not found. Please check the address.';
+    }
+
+    if (!accountInfo.owner.equals(VoteProgram.programId)) {
+      return 'This is not a vote account. Please use the validator\'s vote account address, not their identity address.';
+    }
+
+    return null; // Valid vote account
+  } catch (error) {
+    return 'Failed to validate vote account. Please check the address.';
+  }
+}
 
 export interface StakeAccountInfo {
   address: string;

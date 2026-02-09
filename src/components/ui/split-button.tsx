@@ -63,7 +63,10 @@ export function SplitButton({
           {items.map((item, index) => (
             <DropdownMenuItem
               key={index}
-              onClick={item.onClick}
+              onClick={(e) => {
+                e.stopPropagation();
+                item.onClick();
+              }}
               disabled={item.disabled}
             >
               {item.label}

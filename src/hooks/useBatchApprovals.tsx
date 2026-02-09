@@ -1,4 +1,7 @@
-import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+
+/** Max approvals that fit in a single transaction */
+export const MAX_BATCH_APPROVALS = 12;
 
 export interface BatchApprovalItem {
   id: string;
@@ -13,6 +16,7 @@ interface BatchApprovalsContextType {
   removeItem: (id: string) => void;
   clearAll: () => void;
   itemCount: number;
+  remainingSlots: number;
   hasItem: (transactionIndex: number) => boolean;
 }
 
@@ -28,6 +32,10 @@ export function BatchApprovalsProvider({ children }: { children: ReactNode }) {
     setItems((prev) => {
       // Don't add duplicates
       if (prev.some((i) => i.transactionIndex === item.transactionIndex)) {
+        return prev;
+      }
+      // Check limit
+      if (prev.length >= MAX_BATCH_APPROVALS) {
         return prev;
       }
       const id = `approval-${nextId++}-${Date.now()}`;
@@ -58,6 +66,7 @@ export function BatchApprovalsProvider({ children }: { children: ReactNode }) {
         removeItem,
         clearAll,
         itemCount: items.length,
+        remainingSlots: Math.max(0, MAX_BATCH_APPROVALS - items.length),
         hasItem,
       }}
     >

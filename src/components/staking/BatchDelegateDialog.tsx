@@ -15,8 +15,9 @@ import { isPublickey } from '@/lib/isPublickey';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { useValidatorMetadata } from '@/hooks/useValidatorMetadata';
-import { getMinimumStakeAmount } from '@/lib/staking/validatorStakeUtils';
+import { getMinimumStakeAmount, validateVoteAccount } from '@/lib/staking/validatorStakeUtils';
 import { buildDelegateBatchItem } from '@/lib/staking/batchStakeActions';
+import { PublicKey } from '@solana/web3.js';
 import { AlertCircle, Layers } from 'lucide-react';
 
 type BatchDelegateDialogProps = {
@@ -53,6 +54,14 @@ export function BatchDelegateDialog({
 
     setIsAdding(true);
     try {
+      // Validate that the address is a vote account
+      const validatorPubkey = new PublicKey(validatorAddress);
+      const validationError = await validateVoteAccount(connection, validatorPubkey);
+      if (validationError) {
+        toast.error(validationError);
+        return;
+      }
+
       const item = await buildDelegateBatchItem(
         validatorAddress,
         validatorInfo?.name,

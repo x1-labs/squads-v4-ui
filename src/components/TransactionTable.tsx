@@ -200,7 +200,10 @@ function ActionButtons({
   const navigate = useNavigate();
   const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
 
-  // Check if current user has already rejected or cancelled
+  // Check if current user has already approved, rejected or cancelled
+  const walletPubkeyStr = wallet.publicKey?.toBase58();
+  const approvedListStr = proposal?.approved?.map(m => m.toBase58()) || [];
+  const hasUserApproved = walletPubkeyStr ? approvedListStr.includes(walletPubkeyStr) : false;
   const hasUserRejected = proposal?.rejected?.some((member) =>
     wallet.publicKey ? member.equals(wallet.publicKey) : false
   );
@@ -211,7 +214,7 @@ function ActionButtons({
 
   // Determine which buttons to show based on status
   const showReject =
-    !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+    !hasUserApproved && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
   const showExecute = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
   const showCancel = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
 

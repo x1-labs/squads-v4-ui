@@ -2,14 +2,16 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { useBatchApprovals, BatchApprovalItem } from '@/hooks/useBatchApprovals';
+import { useBatchApprovals, BatchApprovalItem, MAX_BATCH_APPROVALS } from '@/hooks/useBatchApprovals';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '@/hooks/useAccess';
 import { toast } from 'sonner';
-import { submitBatchApprovals } from '@/lib/transaction/batchApprovals';
+import { submitBatchApprovals, ApprovalItem } from '@/lib/transaction/batchApprovals';
+import { PublicKey } from '@solana/web3.js';
+import * as multisig from '@sqds/multisig';
 import {
   X,
   Trash2,
@@ -62,13 +64,52 @@ export function BatchApprovalPanel() {
     setProgress({ currentStep: 'preparing' });
 
     try {
+      // Filter out already-approved transactions
+      const multisigPubkey = new PublicKey(multisigAddress);
+      const approvalChecks = await Promise.all(
+        items.map(async (item) => {
+          const [proposalPda] = multisig.getProposalPda({
+            multisigPda: multisigPubkey,
+            transactionIndex: BigInt(item.transactionIndex),
+            programId,
+          });
+          try {
+            const proposal = await multisig.accounts.Proposal.fromAccountAddress(
+              connection as any,
+              proposalPda
+            );
+            const alreadyApproved = proposal.approved?.some((m: PublicKey) =>
+              wallet.publicKey ? m.equals(wallet.publicKey) : false
+            );
+            return { item, alreadyApproved, status: proposal.status.__kind };
+          } catch {
+            // Proposal doesn't exist yet, needs to be created
+            return { item, alreadyApproved: false, status: 'None' };
+          }
+        })
+      );
+
+      const eligibleItems: ApprovalItem[] = approvalChecks
+        .filter((check) => !check.alreadyApproved)
+        .map((check) => ({
+          transactionIndex: check.item.transactionIndex,
+          proposalStatus: check.status,
+        }));
+
+      if (eligibleItems.length === 0) {
+        toast.info('All proposals already approved');
+        clearAll();
+        return;
+      }
+
+      if (eligibleItems.length < items.length) {
+        toast.info(`Skipping ${items.length - eligibleItems.length} already-approved proposals`);
+      }
+
       setProgress({ currentStep: 'signing' });
 
       await submitBatchApprovals(
-        items.map((item) => ({
-          transactionIndex: item.transactionIndex,
-          proposalStatus: item.proposalStatus,
-        })),
+        eligibleItems,
         connection,
         multisigAddress,
         programId,
@@ -76,7 +117,7 @@ export function BatchApprovalPanel() {
       );
 
       setProgress({ currentStep: 'done' });
-      toast.success(`Approved ${itemCount} proposals`);
+      toast.success(`Approved ${eligibleItems.length} proposals`);
       clearAll();
 
       await Promise.all([
@@ -123,8 +164,11 @@ export function BatchApprovalPanel() {
           <div className="flex items-center gap-2">
             <FileCheck className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">Batch Approvals</CardTitle>
-            <Badge variant="secondary" className="ml-1">
-              {itemCount} {itemCount === 1 ? 'proposal' : 'proposals'}
+            <Badge
+              variant={itemCount >= MAX_BATCH_APPROVALS ? 'destructive' : 'secondary'}
+              className="ml-1"
+            >
+              {itemCount}/{MAX_BATCH_APPROVALS}
             </Badge>
           </div>
           <Button

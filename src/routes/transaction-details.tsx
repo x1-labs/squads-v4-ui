@@ -35,7 +35,7 @@ export default function TransactionDetailsPage() {
   const { selectSquad, addSquad } = useSquadConfig();
   const wallet = useWallet();
   const isMember = useAccess();
-  const { addItem: addToBatchApproval, hasItem: isInBatchApproval } = useBatchApprovals();
+  const { addItem: addToBatchApproval, hasItem: isInBatchApproval, remainingSlots: remainingApprovalSlots } = useBatchApprovals();
   const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
 
   // Create connection with the configured RPC URL
@@ -210,7 +210,10 @@ export default function TransactionDetailsPage() {
     multisigConfig &&
     Number(multisigConfig.staleTransactionIndex) > Number(transactionIndex);
 
-  // Check if current user has already rejected or cancelled
+  // Check if current user has already approved, rejected or cancelled
+  const walletPubkeyStr = wallet.publicKey?.toBase58();
+  const approvedListStr = proposal?.approved?.map(m => m.toBase58()) || [];
+  const hasUserApproved = walletPubkeyStr ? approvedListStr.includes(walletPubkeyStr) : false;
   const hasUserRejected = proposal?.rejected?.some((member) =>
     wallet.publicKey ? member.equals(wallet.publicKey) : false
   );
@@ -222,9 +225,9 @@ export default function TransactionDetailsPage() {
   // Determine which action buttons to show
   const proposalStatus = proposal?.status.__kind || 'None';
   const showApprove =
-    !isStale && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+    !isStale && !hasUserApproved && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
   const showReject =
-    !isStale && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+    !isStale && !hasUserApproved && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
   const showExecute = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
   const showCancel = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
 
@@ -247,8 +250,10 @@ export default function TransactionDetailsPage() {
     if (added) {
       toast.success(`Added #${txIndex} to batch approval`);
       navigate(`/${multisigAddress}/transactions`);
-    } else {
+    } else if (isInBatchApproval(txIndex)) {
       toast.info('Already in batch');
+    } else {
+      toast.error('Batch is full');
     }
   };
 
@@ -321,9 +326,9 @@ export default function TransactionDetailsPage() {
               {showApprove && (
                 <SplitButton
                   items={[{
-                    label: isInBatchApproval(Number(transactionIndex)) ? 'In Batch' : 'Batch Approval',
+                    label: hasUserApproved ? 'Already Approved' : isInBatchApproval(Number(transactionIndex)) ? 'In Batch' : 'Batch Approval',
                     onClick: handleAddToBatch,
-                    disabled: isInBatchApproval(Number(transactionIndex)),
+                    disabled: hasUserApproved || isInBatchApproval(Number(transactionIndex)),
                   }]}
                 >
                   <ApproveButton

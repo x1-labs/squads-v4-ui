@@ -31,6 +31,7 @@ import {
   createStakeAccountWithSeedInstructions,
   createDelegateStakeInstruction,
   getMinimumStakeAmount,
+  validateVoteAccount,
 } from '@/lib/staking/validatorStakeUtils';
 
 type DelegateStakeDialogProps = {
@@ -62,6 +63,13 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
   const delegate = async () => {
     if (!wallet.publicKey || !multisigAddress) {
       throw 'Wallet not connected';
+    }
+
+    // Validate that the address is a vote account
+    const validatorPubkey = new PublicKey(validatorAddress);
+    const validationError = await validateVoteAccount(connection, validatorPubkey);
+    if (validationError) {
+      throw validationError;
     }
 
     const vaultAddress = multisig.getVaultPda({
