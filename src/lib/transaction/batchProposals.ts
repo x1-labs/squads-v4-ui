@@ -38,6 +38,15 @@ export async function submitBatchProposal(
 
   onProgress({ currentStep: 'preparing' });
 
+  console.log('[BatchProposal] Starting batch submission with', items.length, 'items');
+  for (let i = 0; i < items.length; i++) {
+    console.log(`[BatchProposal] Item ${i}: "${items[i].label}" - ${items[i].instructions.length} instructions`);
+    for (let j = 0; j < items[i].instructions.length; j++) {
+      const ix = items[i].instructions[j];
+      console.log(`[BatchProposal]   ix[${j}]: programId=${ix.programId.toBase58()}, keys=${ix.keys.length}, data=${ix.data.length} bytes`);
+    }
+  }
+
   const multisigInfo = await multisig.accounts.Multisig.fromAccountAddress(
     // @ts-ignore
     connection,
@@ -53,11 +62,16 @@ export async function submitBatchProposal(
     programId,
   })[0];
 
+  console.log('[BatchProposal] vaultAddress:', vaultAddress.toBase58());
+  console.log('[BatchProposal] vaultIndex:', vaultIndex);
+
   // Combine all instructions from all batch items into one list
   const allInstructions: TransactionInstruction[] = [];
   for (const item of items) {
     allInstructions.push(...item.instructions);
   }
+
+  console.log('[BatchProposal] Total inner instructions:', allInstructions.length);
 
   const blockhash = (await connection.getLatestBlockhash()).blockhash;
 
@@ -67,7 +81,10 @@ export async function submitBatchProposal(
     recentBlockhash: blockhash,
   });
 
+  console.log('[BatchProposal] Inner message created');
+
   const transactionIndex = BigInt(Number(multisigInfo.transactionIndex) + 1);
+  console.log('[BatchProposal] transactionIndex:', transactionIndex.toString());
 
   const vaultTransactionIx = multisig.instructions.vaultTransactionCreate({
     multisigPda: new PublicKey(multisigPda),
@@ -81,6 +98,8 @@ export async function submitBatchProposal(
     vaultIndex,
     programId,
   });
+
+  console.log('[BatchProposal] vaultTransactionCreate ix: keys=', vaultTransactionIx.keys.length, 'data=', vaultTransactionIx.data.length, 'bytes');
 
   const proposalIx = multisig.instructions.proposalCreate({
     multisigPda: new PublicKey(multisigPda),
@@ -100,17 +119,26 @@ export async function submitBatchProposal(
 
   const freshBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
+  console.log('[BatchProposal] Building outer transaction...');
+
   const message = new TransactionMessage({
     instructions: [vaultTransactionIx, proposalIx, approveIx],
     payerKey: wallet.publicKey,
     recentBlockhash: freshBlockhash,
   }).compileToV0Message();
 
+  console.log('[BatchProposal] V0 message compiled');
+
   const transaction = new VersionedTransaction(message);
+
+  const serialized = transaction.serialize();
+  console.log('[BatchProposal] Serialized transaction size:', serialized.length, 'bytes (limit: 1232)');
 
   // Sign
   onProgress({ currentStep: 'signing' });
+  console.log('[BatchProposal] Requesting wallet signature...');
   const signedTransaction = await wallet.signTransaction(transaction);
+  console.log('[BatchProposal] Transaction signed');
 
   // Send
   onProgress({ currentStep: 'sending' });
@@ -118,6 +146,8 @@ export async function submitBatchProposal(
     skipPreflight: false,
     maxRetries: 3,
   });
+
+  console.log('[BatchProposal] Transaction sent, signature:', signature);
 
   // Confirm
   onProgress({ currentStep: 'confirming' });
