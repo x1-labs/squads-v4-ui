@@ -19,7 +19,7 @@ export interface BatchItem {
   vaultIndex: number;
 }
 
-export const DEFAULT_BATCH_LIMIT = 3;
+export const DEFAULT_BATCH_LIMIT = 2;
 
 interface BatchTransactionsContextType {
   items: BatchItem[];
