@@ -5,7 +5,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import CreateTransaction from '@/components/CreateTransactionButton';
 import TransactionTable from '@/components/TransactionTable';
 import TransactionTableMobile from '@/components/TransactionTableMobile';
@@ -14,6 +14,14 @@ import { useMultisigData } from '@/hooks/useMultisigData';
 import { useLocation } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Button } from '@/components/ui/button';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { useAccess } from '@/hooks/useAccess';
+import { useQueryClient } from '@tanstack/react-query';
+import { submitBatchApprovals } from '@/lib/transaction/batchApprovals';
+import { toast } from 'sonner';
+import { CheckSquare, Loader2 } from 'lucide-react';
 
 const TRANSACTIONS_PER_PAGE = 10;
 
@@ -25,8 +33,15 @@ export default function TransactionsPage() {
   if (page < 1) {
     page = 1;
   }
-  const { multisigAddress, programId } = useMultisigData();
+  const { multisigAddress, programId, connection } = useMultisigData();
   const { data } = useMultisig();
+  const wallet = useWallet();
+  const walletModal = useWalletModal();
+  const isMember = useAccess();
+  const queryClient = useQueryClient();
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedTxs, setSelectedTxs] = useState<Set<number>>(new Set());
+  const [isApproving, setIsApproving] = useState(false);
 
   // Check if we have a valid multisig
   if (!multisigAddress || !data) {
@@ -61,6 +76,56 @@ export default function TransactionsPage() {
     };
   });
 
+  const toggleBatchMode = () => {
+    if (batchMode) {
+      setSelectedTxs(new Set());
+    }
+    setBatchMode(!batchMode);
+  };
+
+  const toggleTx = (index: number) => {
+    setSelectedTxs((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
+  const handleBatchApprove = async () => {
+    if (!wallet.publicKey) {
+      walletModal.setVisible(true);
+      return;
+    }
+    if (!multisigAddress || !programId || selectedTxs.size === 0) return;
+
+    const items = transactions
+      .filter((tx) => selectedTxs.has(Number(tx.index)))
+      .map((tx) => ({
+        transactionIndex: Number(tx.index),
+        proposalStatus: tx.proposal?.status.__kind || 'None',
+      }));
+
+    setIsApproving(true);
+    try {
+      await submitBatchApprovals(items, connection, multisigAddress, programId, wallet);
+      toast.success(`Approved ${items.length} proposals`);
+      setSelectedTxs(new Set());
+      setBatchMode(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['proposal'] }),
+      ]);
+    } catch (error: any) {
+      toast.error(`Batch approval failed: ${error?.message || error}`);
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
   return (
     <ErrorBoundary>
       <Suspense
@@ -81,7 +146,36 @@ export default function TransactionsPage() {
                 Manage and execute multisig transactions
               </p>
             </div>
-            <CreateTransaction />
+            <div className="flex items-center gap-2">
+              {isMember && wallet.connected && (
+                <>
+                  {batchMode && selectedTxs.size > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={handleBatchApprove}
+                      disabled={isApproving}
+                    >
+                      {isApproving ? (
+                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                      ) : (
+                        <CheckSquare className="mr-1.5 h-4 w-4" />
+                      )}
+                      Approve ({selectedTxs.size})
+                    </Button>
+                  )}
+                  <Button
+                    variant={batchMode ? 'secondary' : 'outline'}
+                    size="sm"
+                    onClick={toggleBatchMode}
+                    disabled={isApproving}
+                  >
+                    <CheckSquare className="mr-1.5 h-4 w-4" />
+                    {batchMode ? 'Cancel' : 'Batch Approve'}
+                  </Button>
+                </>
+              )}
+              <CreateTransaction />
+            </div>
           </div>
 
           <Suspense>
@@ -110,6 +204,9 @@ export default function TransactionsPage() {
                       multisigPda={multisigAddress!}
                       transactions={transactions}
                       programId={programId!.toBase58()}
+                      batchMode={batchMode}
+                      selectedTxs={selectedTxs}
+                      onToggleTx={toggleTx}
                     />
                   </Suspense>
                 </Table>
@@ -122,6 +219,9 @@ export default function TransactionsPage() {
                 multisigPda={multisigAddress!}
                 transactions={transactions}
                 programId={programId!.toBase58()}
+                batchMode={batchMode}
+                selectedTxs={selectedTxs}
+                onToggleTx={toggleTx}
               />
             </div>
           </Suspense>
