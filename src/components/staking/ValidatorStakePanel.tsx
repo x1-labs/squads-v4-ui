@@ -11,13 +11,18 @@ import { Checkbox } from '../ui/checkbox';
 import { Layers, ArrowDown, Wallet, Merge as MergeIcon } from 'lucide-react';
 import { StakeAccountActions } from './StakeAccountActions';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
-import { StakeAccountInfo, createDeactivateStakeInstruction, createWithdrawStakeInstruction, createMergeStakeInstruction, getCompatibleMergeAccounts } from '@/lib/staking/validatorStakeUtils';
-import { PublicKey } from '@solana/web3.js';
-import * as multisig from '@sqds/multisig';
+import { StakeAccountInfo } from '@/lib/staking/validatorStakeUtils';
+import {
+  getStakeAccountLabel,
+  buildUnstakeBatchItem,
+  buildWithdrawBatchItem,
+  buildBulkMergeBatchItems,
+  countMergeEligible,
+} from '@/lib/staking/batchStakeActions';
 import { toast } from 'sonner';
 
 export function ValidatorStakePanel() {
-  const { vaultIndex, multisigAddress, programId } = useMultisigData();
+  const { vaultIndex, multisigVault } = useMultisigData();
   const { data: stakeAccounts, isLoading } = useStakeAccounts(vaultIndex);
   const [batchMode, setBatchMode] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
@@ -96,152 +101,60 @@ export function ValidatorStakePanel() {
     setSelectedAccounts(new Set());
   };
 
-  const getValidatorLabel = (account: StakeAccountInfo) => {
-    if (account.delegatedValidator && validatorMetadata?.get(account.delegatedValidator)?.name) {
-      return validatorMetadata.get(account.delegatedValidator)!.name!;
-    }
-    if (account.delegatedValidator) {
-      return `${account.delegatedValidator.slice(0, 8)}...`;
-    }
-    return `${account.address.slice(0, 8)}...`;
-  };
-
-  const getVaultAddress = () => {
-    if (!multisigAddress) return null;
-    return multisig.getVaultPda({
-      index: vaultIndex,
-      multisigPda: new PublicKey(multisigAddress),
-      programId,
-    })[0];
+  const exitBatchMode = () => {
+    setSelectedAccounts(new Set());
+    setBatchMode(false);
   };
 
   const batchUnstake = () => {
-    const vaultAddress = getVaultAddress();
-    if (!vaultAddress) return;
-
+    if (!multisigVault) return;
     const selected = sortedAccounts.filter((a) => selectedAccounts.has(a.address));
-    const eligible = selected.filter(
-      (a) => a.state === 'active' || a.state === 'activating'
-    );
-
+    const eligible = selected.filter((a) => a.state === 'active' || a.state === 'activating');
     if (eligible.length === 0) {
       toast.error('No selected accounts are eligible for unstaking (must be active or activating)');
       return;
     }
-
     for (const account of eligible) {
-      const instruction = createDeactivateStakeInstruction(
-        new PublicKey(account.address),
-        vaultAddress
-      );
-      addItem({
-        type: 'unstake',
-        label: `Unstake ${getValidatorLabel(account)}`,
-        description: `${account.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT - ${account.address.slice(0, 8)}...`,
-        instructions: [instruction],
-        vaultIndex,
-      });
+      const label = getStakeAccountLabel(account, validatorMetadata);
+      addItem(buildUnstakeBatchItem(account, multisigVault, vaultIndex, label));
     }
-
     toast.success(`Added ${eligible.length} unstake operation${eligible.length > 1 ? 's' : ''} to batch queue`);
-    setSelectedAccounts(new Set());
-    setBatchMode(false);
+    exitBatchMode();
   };
 
   const batchWithdraw = () => {
-    const vaultAddress = getVaultAddress();
-    if (!vaultAddress) return;
-
+    if (!multisigVault) return;
     const selected = sortedAccounts.filter((a) => selectedAccounts.has(a.address));
-    const eligible = selected.filter(
-      (a) => a.state === 'inactive' || a.state === 'deactivating'
-    );
-
+    const eligible = selected.filter((a) => a.state === 'inactive' || a.state === 'deactivating');
     if (eligible.length === 0) {
       toast.error('No selected accounts are eligible for withdrawal (must be inactive or deactivating)');
       return;
     }
-
     for (const account of eligible) {
-      const lamports = account.balanceLamports;
-      const instruction = createWithdrawStakeInstruction(
-        new PublicKey(account.address),
-        vaultAddress,
-        BigInt(lamports)
-      );
-      addItem({
-        type: 'withdraw',
-        label: `Withdraw ${getValidatorLabel(account)}`,
-        description: `${account.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT - ${account.address.slice(0, 8)}...`,
-        instructions: [instruction],
-        vaultIndex,
-      });
+      const label = getStakeAccountLabel(account, validatorMetadata);
+      addItem(buildWithdrawBatchItem(account, multisigVault, vaultIndex, label));
     }
-
     toast.success(`Added ${eligible.length} withdraw operation${eligible.length > 1 ? 's' : ''} to batch queue`);
-    setSelectedAccounts(new Set());
-    setBatchMode(false);
+    exitBatchMode();
   };
 
   const batchMerge = () => {
-    const vaultAddress = getVaultAddress();
-    if (!vaultAddress || !stakeAccounts) return;
-
+    if (!multisigVault) return;
     const selected = sortedAccounts.filter((a) => selectedAccounts.has(a.address));
     if (selected.length < 2) {
       toast.error('Select at least 2 accounts to merge');
       return;
     }
-
-    // Group selected accounts by validator + state compatibility
-    // For each group, merge smaller accounts into the largest
-    const groups = new Map<string, StakeAccountInfo[]>();
-    for (const account of selected) {
-      const key = `${account.delegatedValidator || 'none'}-${account.state}`;
-      const group = groups.get(key) || [];
-      group.push(account);
-      groups.set(key, group);
-    }
-
-    let mergeCount = 0;
-    for (const group of groups.values()) {
-      if (group.length < 2) continue;
-
-      // Sort by balance descending - largest is the destination
-      const sorted = [...group].sort((a, b) => b.balance - a.balance);
-      const destination = sorted[0];
-
-      for (let i = 1; i < sorted.length; i++) {
-        const source = sorted[i];
-        // Verify compatibility using the existing utility
-        const compatible = getCompatibleMergeAccounts(destination, [source]);
-        if (compatible.length === 0) continue;
-
-        const instruction = createMergeStakeInstruction(
-          new PublicKey(destination.address),
-          new PublicKey(source.address),
-          vaultAddress
-        );
-
-        addItem({
-          type: 'merge',
-          label: `Merge into ${getValidatorLabel(destination)}`,
-          description: `${source.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT from ${source.address.slice(0, 8)}...`,
-          instructions: [instruction],
-          vaultIndex,
-        });
-        mergeCount++;
-      }
-    }
-
-    if (mergeCount === 0) {
+    const items = buildBulkMergeBatchItems(selected, multisigVault, vaultIndex, validatorMetadata);
+    if (items.length === 0) {
       toast.error('No compatible merge pairs found among selected accounts');
       return;
     }
-
-    toast.success(`Added ${mergeCount} merge operation${mergeCount > 1 ? 's' : ''} to batch queue`);
-    setSelectedAccounts(new Set());
-    setBatchMode(false);
+    for (const item of items) {
+      addItem(item);
+    }
+    toast.success(`Added ${items.length} merge operation${items.length > 1 ? 's' : ''} to batch queue`);
+    exitBatchMode();
   };
 
   // Count eligible accounts for each batch action among selected
@@ -252,21 +165,7 @@ export function ValidatorStakePanel() {
   const withdrawEligibleCount = selectedList.filter(
     (a) => a.state === 'inactive' || a.state === 'deactivating'
   ).length;
-
-  // Count merge-eligible: need at least 2 selected accounts that share validator+state
-  const mergeEligibleCount = (() => {
-    if (selectedList.length < 2) return 0;
-    const groups = new Map<string, number>();
-    for (const a of selectedList) {
-      const key = `${a.delegatedValidator || 'none'}-${a.state}`;
-      groups.set(key, (groups.get(key) || 0) + 1);
-    }
-    let count = 0;
-    for (const size of groups.values()) {
-      if (size >= 2) count += size - 1; // each group produces (n-1) merges
-    }
-    return count;
-  })();
+  const mergeEligibleCount = countMergeEligible(selectedList);
 
   return (
     <Card>

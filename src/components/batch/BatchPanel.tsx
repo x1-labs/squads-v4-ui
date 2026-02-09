@@ -39,16 +39,6 @@ const typeIcons: Record<string, React.ReactNode> = {
   custom: <Layers className="h-3.5 w-3.5" />,
 };
 
-const typeLabels: Record<string, string> = {
-  unstake: 'Unstake',
-  withdraw: 'Withdraw',
-  delegate: 'Delegate',
-  redelegate: 'Redelegate',
-  split: 'Split',
-  merge: 'Merge',
-  custom: 'Custom',
-};
-
 export function BatchPanel() {
   const { items, removeItem, clearAll, itemCount } = useBatchTransactions();
   const { connection, programId, multisigAddress } = useMultisigData();

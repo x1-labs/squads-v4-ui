@@ -14,12 +14,16 @@ import { RedelegateStakeDialog } from './RedelegateStakeDialog';
 import { SplitStakeDialog } from './SplitStakeDialog';
 import { MergeStakeDialog } from './MergeStakeDialog';
 import { BatchSplitDialog } from './BatchSplitDialog';
-import { StakeAccountInfo, getCompatibleMergeAccounts, createDeactivateStakeInstruction, createWithdrawStakeInstruction, createMergeStakeInstruction } from '@/lib/staking/validatorStakeUtils';
+import { StakeAccountInfo, getCompatibleMergeAccounts } from '@/lib/staking/validatorStakeUtils';
+import {
+  getStakeAccountLabel,
+  buildUnstakeBatchItem,
+  buildWithdrawBatchItem,
+  buildMergeBatchItem,
+} from '@/lib/staking/batchStakeActions';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
-import { PublicKey } from '@solana/web3.js';
-import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';
 
 type StakeAccountActionsProps = {
@@ -40,7 +44,7 @@ export function StakeAccountActions({
   const [mergeOpen, setMergeOpen] = useState(false);
   const [batchSplitOpen, setBatchSplitOpen] = useState(false);
   const { addItem } = useBatchTransactions();
-  const { multisigAddress, programId } = useMultisigData();
+  const { multisigVault } = useMultisigData();
 
   const validatorAddresses = account.delegatedValidator ? [account.delegatedValidator] : [];
   const { data: validatorMetadata } = useValidatorsMetadata(validatorAddresses);
@@ -48,95 +52,34 @@ export function StakeAccountActions({
   const canUndelegate = account.state === 'active' || account.state === 'activating';
   const canWithdraw = account.state === 'inactive' || account.state === 'deactivating';
   const canRedelegate = account.state === 'inactive';
-  const canSplit = account.balance > account.rentExemptReserve + 0.1; // Must have enough to split (leave 0.1 XNT minimum)
-  const canMerge = getCompatibleMergeAccounts(account, allStakeAccounts).length > 0; // Must have compatible accounts to merge with
-  const canBatchUnstake = canUndelegate;
-  const canBatchWithdraw = canWithdraw;
+  const canSplit = account.balance > account.rentExemptReserve + 0.1;
+  const canMerge = getCompatibleMergeAccounts(account, allStakeAccounts).length > 0;
 
-  const getValidatorLabel = () => {
-    if (account.delegatedValidator && validatorMetadata?.get(account.delegatedValidator)?.name) {
-      return validatorMetadata.get(account.delegatedValidator)!.name!;
-    }
-    if (account.delegatedValidator) {
-      return `${account.delegatedValidator.slice(0, 8)}...`;
-    }
-    return `${account.address.slice(0, 8)}...`;
-  };
-
-  const getVaultAddress = () => {
-    if (!multisigAddress) return null;
-    return multisig.getVaultPda({
-      index: vaultIndex,
-      multisigPda: new PublicKey(multisigAddress),
-      programId,
-    })[0];
-  };
+  const label = getStakeAccountLabel(account, validatorMetadata);
 
   const addUnstakeToBatch = () => {
-    const vaultAddress = getVaultAddress();
-    if (!vaultAddress) return;
-
-    const instruction = createDeactivateStakeInstruction(
-      new PublicKey(account.address),
-      vaultAddress
-    );
-
-    addItem({
-      type: 'unstake',
-      label: `Unstake ${getValidatorLabel()}`,
-      description: `${account.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT - ${account.address.slice(0, 8)}...`,
-      instructions: [instruction],
-      vaultIndex,
-    });
-
+    if (!multisigVault) return;
+    addItem(buildUnstakeBatchItem(account, multisigVault, vaultIndex, label));
     toast.success('Added unstake to batch queue');
   };
 
   const addWithdrawToBatch = () => {
-    const vaultAddress = getVaultAddress();
-    if (!vaultAddress) return;
-
-    const instruction = createWithdrawStakeInstruction(
-      new PublicKey(account.address),
-      vaultAddress,
-      BigInt(account.balanceLamports)
-    );
-
-    addItem({
-      type: 'withdraw',
-      label: `Withdraw ${getValidatorLabel()}`,
-      description: `${account.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT - ${account.address.slice(0, 8)}...`,
-      instructions: [instruction],
-      vaultIndex,
-    });
-
+    if (!multisigVault) return;
+    addItem(buildWithdrawBatchItem(account, multisigVault, vaultIndex, label));
     toast.success('Added withdrawal to batch queue');
   };
 
   const addMergeToBatch = () => {
-    const vaultAddress = getVaultAddress();
-    if (!vaultAddress) return;
-
+    if (!multisigVault) return;
     const compatible = getCompatibleMergeAccounts(account, allStakeAccounts);
     if (compatible.length === 0) return;
 
     for (const source of compatible) {
-      const instruction = createMergeStakeInstruction(
-        new PublicKey(account.address),
-        new PublicKey(source.address),
-        vaultAddress
-      );
-
-      addItem({
-        type: 'merge',
-        label: `Merge into ${getValidatorLabel()}`,
-        description: `${source.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT from ${source.address.slice(0, 8)}...`,
-        instructions: [instruction],
-        vaultIndex,
-      });
+      addItem(buildMergeBatchItem(account, source, multisigVault, vaultIndex, label));
     }
-
-    toast.success(`Added ${compatible.length} merge operation${compatible.length > 1 ? 's' : ''} to batch queue`);
+    toast.success(
+      `Added ${compatible.length} merge operation${compatible.length > 1 ? 's' : ''} to batch queue`
+    );
   };
 
   return (
@@ -191,23 +134,17 @@ export function StakeAccountActions({
           </DropdownMenuItem>
 
           {/* Batch actions */}
-          {(canBatchUnstake || canBatchWithdraw || canSplit || canMerge) && (
+          {(canUndelegate || canWithdraw || canSplit || canMerge) && (
             <>
               <DropdownMenuSeparator />
-              {canBatchUnstake && (
-                <DropdownMenuItem
-                  onClick={addUnstakeToBatch}
-                  className="cursor-pointer"
-                >
+              {canUndelegate && (
+                <DropdownMenuItem onClick={addUnstakeToBatch} className="cursor-pointer">
                   <Layers className="mr-2 h-4 w-4" />
                   Add Unstake to Batch
                 </DropdownMenuItem>
               )}
-              {canBatchWithdraw && (
-                <DropdownMenuItem
-                  onClick={addWithdrawToBatch}
-                  className="cursor-pointer"
-                >
+              {canWithdraw && (
+                <DropdownMenuItem onClick={addWithdrawToBatch} className="cursor-pointer">
                   <Layers className="mr-2 h-4 w-4" />
                   Add Withdraw to Batch
                 </DropdownMenuItem>
@@ -222,10 +159,7 @@ export function StakeAccountActions({
                 </DropdownMenuItem>
               )}
               {canMerge && (
-                <DropdownMenuItem
-                  onClick={addMergeToBatch}
-                  className="cursor-pointer"
-                >
+                <DropdownMenuItem onClick={addMergeToBatch} className="cursor-pointer">
                   <Layers className="mr-2 h-4 w-4" />
                   Add Merge to Batch
                 </DropdownMenuItem>
@@ -235,7 +169,6 @@ export function StakeAccountActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Only render the dialog that's currently open to avoid focus conflicts */}
       {undelegateOpen && (
         <UndelegateStakeDialog
           stakeAccounts={[account]}

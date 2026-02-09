@@ -14,12 +14,11 @@ import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
-import { createSplitStakeInstructions } from '@/lib/staking/validatorStakeUtils';
-import { StakeAccountInfo } from '@/lib/staking/validatorStakeUtils';
+import { createSplitStakeInstructions, StakeAccountInfo } from '@/lib/staking/validatorStakeUtils';
+import { getStakeAccountLabel } from '@/lib/staking/batchStakeActions';
 import { formatXNTCompact } from '@/lib/utils/formatters';
-import { AlertCircle, Split, Layers } from 'lucide-react';
+import { AlertCircle, Layers } from 'lucide-react';
 import { StakeAccountDisplay } from './StakeAccountDisplay';
-import * as multisig from '@sqds/multisig';
 
 type BatchSplitDialogProps = {
   vaultIndex?: number;
@@ -36,7 +35,7 @@ export function BatchSplitDialog({
 }: BatchSplitDialogProps) {
   const [amount, setAmount] = useState<string>('');
   const [isAdding, setIsAdding] = useState(false);
-  const { connection, programId, multisigAddress } = useMultisigData();
+  const { connection, multisigVault } = useMultisigData();
   const { addItem } = useBatchTransactions();
 
   const validatorAddresses = preSelectedAccount.delegatedValidator
@@ -52,36 +51,19 @@ export function BatchSplitDialog({
   const parsedAmount = parseFloat(amount);
   const isAmountValid = !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= maxSplitable;
 
-  const getValidatorLabel = () => {
-    if (
-      preSelectedAccount.delegatedValidator &&
-      validatorMetadata?.get(preSelectedAccount.delegatedValidator)?.name
-    ) {
-      return validatorMetadata.get(preSelectedAccount.delegatedValidator)!.name!;
-    }
-    if (preSelectedAccount.delegatedValidator) {
-      return `${preSelectedAccount.delegatedValidator.slice(0, 8)}...`;
-    }
-    return `${preSelectedAccount.address.slice(0, 8)}...`;
-  };
+  const label = getStakeAccountLabel(preSelectedAccount, validatorMetadata);
 
   const addToBatch = async () => {
-    if (!multisigAddress || !isAmountValid) return;
+    if (!multisigVault || !isAmountValid) return;
 
     setIsAdding(true);
     try {
-      const vaultAddress = multisig.getVaultPda({
-        index: vaultIndex,
-        multisigPda: new PublicKey(multisigAddress),
-        programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-      })[0];
-
       const lamports = Math.floor(parsedAmount * LAMPORTS_PER_SOL);
       const seed = `split-${Date.now()}`.substring(0, 32);
 
       const { instructions } = await createSplitStakeInstructions(
         new PublicKey(preSelectedAccount.address),
-        vaultAddress,
+        multisigVault,
         lamports,
         seed,
         connection
@@ -89,7 +71,7 @@ export function BatchSplitDialog({
 
       addItem({
         type: 'split',
-        label: `Split ${getValidatorLabel()}`,
+        label: `Split ${label}`,
         description: `${parsedAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT from ${preSelectedAccount.address.slice(0, 8)}...`,
         instructions,
         vaultIndex,
