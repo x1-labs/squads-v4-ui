@@ -1,23 +1,19 @@
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { DelegateStakeDialog } from './DelegateStakeDialog';
+import { BatchDelegateDialog } from './BatchDelegateDialog';
 import { useStakeAccounts } from '@/hooks/useStakeAccounts';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { Skeleton } from '../ui/skeleton';
 import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../ui/dropdown-menu';
-import { MoreHorizontal, ArrowUpDown, ArrowDown, Wallet } from 'lucide-react';
 import { StakeAccountActions } from './StakeAccountActions';
+import { SplitButton } from '../ui/split-button';
 
 export function ValidatorStakePanel() {
   const { vaultIndex } = useMultisigData();
   const { data: stakeAccounts, isLoading } = useStakeAccounts(vaultIndex);
+  const [batchDelegateOpen, setBatchDelegateOpen] = useState(false);
 
   // Get unique validator addresses
   const validatorAddresses =
@@ -37,6 +33,16 @@ export function ValidatorStakePanel() {
     { totalBalance: 0, totalActive: 0, totalInactive: 0 }
   ) || { totalBalance: 0, totalActive: 0, totalInactive: 0 };
 
+  const sortedAccounts = useMemo(() => {
+    if (!stakeAccounts) return [];
+    return [...stakeAccounts].sort((a, b) => {
+      if (b.balance !== a.balance) return b.balance - a.balance;
+      const aValidator = a.delegatedValidator || '';
+      const bValidator = b.delegatedValidator || '';
+      return aValidator.localeCompare(bValidator);
+    });
+  }, [stakeAccounts]);
+
   const getStatusBadgeVariant = (
     state: string
   ): 'default' | 'secondary' | 'outline' | 'destructive' => {
@@ -55,6 +61,7 @@ export function ValidatorStakePanel() {
   };
 
   return (
+  <>
     <Card>
       <CardHeader>
         <div className="space-y-4">
@@ -63,9 +70,12 @@ export function ValidatorStakePanel() {
               <CardTitle>Validator Staking</CardTitle>
               <CardDescription>Stake XNT directly to validators</CardDescription>
             </div>
-            <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto">
+            <SplitButton
+              size="default"
+              items={[{ label: 'Batch Stake', onClick: () => setBatchDelegateOpen(true) }]}
+            >
               <DelegateStakeDialog vaultIndex={vaultIndex} />
-            </div>
+            </SplitButton>
           </div>
           {/* Summary Stats */}
           {totals.totalBalance > 0 && (
@@ -111,18 +121,7 @@ export function ValidatorStakePanel() {
           ) : stakeAccounts && stakeAccounts.length > 0 ? (
             <div className="space-y-2">
               <h3 className="mb-3 text-sm font-medium text-muted-foreground">Stake Accounts</h3>
-              {stakeAccounts
-                .sort((a, b) => {
-                  // Primary sort: balance amount (highest to lowest)
-                  if (b.balance !== a.balance) {
-                    return b.balance - a.balance;
-                  }
-                  // Secondary sort: vote account alphabetically (for consistent ordering when amounts are equal)
-                  const aValidator = a.delegatedValidator || '';
-                  const bValidator = b.delegatedValidator || '';
-                  return aValidator.localeCompare(bValidator);
-                })
-                .map((account) => (
+              {sortedAccounts.map((account) => (
                   <div
                     key={account.address}
                     className={`space-y-3 rounded-lg p-3 transition-colors ${
@@ -320,5 +319,14 @@ export function ValidatorStakePanel() {
         </div>
       </CardContent>
     </Card>
+
+    {batchDelegateOpen && (
+      <BatchDelegateDialog
+        vaultIndex={vaultIndex}
+        isOpen={batchDelegateOpen}
+        onOpenChange={setBatchDelegateOpen}
+      />
+    )}
+  </>
   );
 }

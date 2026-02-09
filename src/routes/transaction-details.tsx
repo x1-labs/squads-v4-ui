@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { TransactionDecoder } from '@/components/TransactionDecoder';
@@ -10,6 +10,7 @@ import { useMultisigAddress } from '@/hooks/useMultisigAddress';
 import { useSquadConfig } from '@/hooks/useSquadConfig';
 import * as multisig from '@sqds/multisig';
 import { Button } from '@/components/ui/button';
+import { SplitButton } from '@/components/ui/split-button';
 import ApproveButton from '@/components/ApproveButton';
 import RejectButton from '@/components/RejectButton';
 import ExecuteButton from '@/components/ExecuteButton';
@@ -20,6 +21,9 @@ import { TransactionTag } from '@/lib/instructions/types';
 import { TransactionTagList } from '@/components/TransactionTag';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess } from '@/hooks/useAccess';
+import { useBatchApprovals } from '@/hooks/useBatchApprovals';
+import { useBatchExecutes } from '@/hooks/useBatchExecutes';
+import { toast } from 'sonner';
 
 export default function TransactionDetailsPage() {
   const { transactionPda } = useParams<{ transactionPda: string }>();
@@ -31,6 +35,8 @@ export default function TransactionDetailsPage() {
   const { selectSquad, addSquad } = useSquadConfig();
   const wallet = useWallet();
   const isMember = useAccess();
+  const { addItem: addToBatchApproval, hasItem: isInBatchApproval, remainingSlots: remainingApprovalSlots } = useBatchApprovals();
+  const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
 
   // Create connection with the configured RPC URL
   const connection = useMemo(() => {
@@ -86,7 +92,7 @@ export default function TransactionDetailsPage() {
       );
       setProposal(proposalData);
     } catch (err) {
-      console.log('No proposal found for transaction');
+      console.debug('No proposal found for transaction');
     }
   };
 
@@ -204,7 +210,10 @@ export default function TransactionDetailsPage() {
     multisigConfig &&
     Number(multisigConfig.staleTransactionIndex) > Number(transactionIndex);
 
-  // Check if current user has already rejected or cancelled
+  // Check if current user has already approved, rejected or cancelled
+  const walletPubkeyStr = wallet.publicKey?.toBase58();
+  const approvedListStr = proposal?.approved?.map(m => m.toBase58()) || [];
+  const hasUserApproved = walletPubkeyStr ? approvedListStr.includes(walletPubkeyStr) : false;
   const hasUserRejected = proposal?.rejected?.some((member) =>
     wallet.publicKey ? member.equals(wallet.publicKey) : false
   );
@@ -216,11 +225,55 @@ export default function TransactionDetailsPage() {
   // Determine which action buttons to show
   const proposalStatus = proposal?.status.__kind || 'None';
   const showApprove =
-    !isStale && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+    !isStale && !hasUserApproved && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
   const showReject =
-    !isStale && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+    !isStale && !hasUserApproved && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
   const showExecute = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
   const showCancel = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
+
+  const actualProgramId = programId?.toBase58() || multisig.PROGRAM_ID.toBase58();
+
+  const handleAddToBatch = () => {
+    if (transactionIndex === null) return;
+
+    const txIndex = Number(transactionIndex);
+    const label = tags.length > 0
+      ? tags.map(t => t.label).join(', ')
+      : 'Transaction';
+
+    const added = addToBatchApproval({
+      transactionIndex: txIndex,
+      proposalStatus: proposalStatus,
+      label,
+    });
+
+    if (added) {
+      toast.success(`Added #${txIndex} to batch approval`);
+      navigate(`/${multisigAddress}/transactions`);
+    } else if (isInBatchApproval(txIndex)) {
+      toast.info('Already in batch');
+    } else {
+      toast.error('Batch is full');
+    }
+  };
+
+  const handleAddToExecuteBatch = () => {
+    if (transactionIndex === null) return;
+
+    const txIndex = Number(transactionIndex);
+    const label = tags.length > 0
+      ? tags.map(t => t.label).join(', ')
+      : 'Transaction';
+
+    const added = addToBatchExecute({
+      transactionIndex: txIndex,
+      label,
+    });
+
+    if (added) {
+      navigate(`/${multisigAddress}/transactions`);
+    }
+  };
 
   return (
     <div className="px-3 py-4 sm:container sm:mx-auto sm:py-8">
@@ -268,35 +321,51 @@ export default function TransactionDetailsPage() {
           {transactionIndex !== null && multisigAddress && wallet.connected && isMember && (
             <div className="flex flex-wrap gap-2">
               {showApprove && (
-                <ApproveButton
-                  multisigPda={multisigAddress}
-                  transactionIndex={Number(transactionIndex)}
-                  proposalStatus={proposalStatus}
-                  programId={programId?.toBase58() || multisig.PROGRAM_ID.toBase58()}
-                />
+                <SplitButton
+                  items={[{
+                    label: hasUserApproved ? 'Already Approved' : isInBatchApproval(Number(transactionIndex)) ? 'In Batch' : 'Batch Approval',
+                    onClick: handleAddToBatch,
+                    disabled: hasUserApproved || isInBatchApproval(Number(transactionIndex)),
+                  }]}
+                >
+                  <ApproveButton
+                    multisigPda={multisigAddress}
+                    transactionIndex={Number(transactionIndex)}
+                    proposalStatus={proposalStatus}
+                    programId={actualProgramId}
+                  />
+                </SplitButton>
               )}
               {showReject && (
                 <RejectButton
                   multisigPda={multisigAddress}
                   transactionIndex={Number(transactionIndex)}
                   proposalStatus={proposalStatus}
-                  programId={programId?.toBase58() || multisig.PROGRAM_ID.toBase58()}
+                  programId={actualProgramId}
                 />
               )}
               {showExecute && (
-                <ExecuteButton
-                  multisigPda={multisigAddress}
-                  transactionIndex={Number(transactionIndex)}
-                  proposalStatus={proposalStatus}
-                  programId={programId?.toBase58() || multisig.PROGRAM_ID.toBase58()}
-                />
+                <SplitButton
+                  items={[{
+                    label: isInBatchExecute(Number(transactionIndex)) ? 'In Batch' : 'Batch Execute',
+                    onClick: handleAddToExecuteBatch,
+                    disabled: isInBatchExecute(Number(transactionIndex)),
+                  }]}
+                >
+                  <ExecuteButton
+                    multisigPda={multisigAddress}
+                    transactionIndex={Number(transactionIndex)}
+                    proposalStatus={proposalStatus}
+                    programId={actualProgramId}
+                  />
+                </SplitButton>
               )}
               {showCancel && (
                 <CancelButton
                   multisigPda={multisigAddress}
                   transactionIndex={Number(transactionIndex)}
                   proposalStatus={proposalStatus}
-                  programId={programId?.toBase58() || multisig.PROGRAM_ID.toBase58()}
+                  programId={actualProgramId}
                 />
               )}
             </div>

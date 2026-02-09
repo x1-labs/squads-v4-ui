@@ -1,5 +1,6 @@
 import { StakingPanel } from '@/components/staking/StakingPanel';
 import { ValidatorStakePanel } from '@/components/staking/ValidatorStakePanel';
+import { BatchPanel } from '@/components/batch/BatchPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Suspense } from 'react';
 import { useMultisigData } from '@/hooks/useMultisigData';
@@ -34,7 +35,8 @@ const StakePage = () => {
               Manage your XNT stake pools and validator delegations
             </p>
           </div>
-          
+
+          <BatchPanel />
           <StakingPanel />
           <ValidatorStakePanel />
         </div>

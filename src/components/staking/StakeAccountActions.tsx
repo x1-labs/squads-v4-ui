@@ -4,15 +4,27 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import { MoreHorizontal, ArrowUpDown, ArrowDown, Wallet, Split, Merge } from 'lucide-react';
+import { MoreHorizontal, ArrowUpDown, ArrowDown, Wallet, Split, Merge, Layers } from 'lucide-react';
 import { UndelegateStakeDialog } from './UndelegateStakeDialog';
 import { WithdrawStakeDialog } from './WithdrawStakeDialog';
 import { RedelegateStakeDialog } from './RedelegateStakeDialog';
 import { SplitStakeDialog } from './SplitStakeDialog';
 import { MergeStakeDialog } from './MergeStakeDialog';
+import { BatchSplitDialog } from './BatchSplitDialog';
 import { StakeAccountInfo, getCompatibleMergeAccounts } from '@/lib/staking/validatorStakeUtils';
+import {
+  getStakeAccountLabel,
+  buildUnstakeBatchItem,
+  buildWithdrawBatchItem,
+  buildMergeBatchItem,
+} from '@/lib/staking/batchStakeActions';
+import { useBatchTransactions } from '@/hooks/useBatchTransactions';
+import { useMultisigData } from '@/hooks/useMultisigData';
+import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
+import { toast } from 'sonner';
 
 type StakeAccountActionsProps = {
   account: StakeAccountInfo;
@@ -30,12 +42,62 @@ export function StakeAccountActions({
   const [redelegateOpen, setRedelegateOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [batchSplitOpen, setBatchSplitOpen] = useState(false);
+  const { addItem } = useBatchTransactions();
+  const { multisigVault } = useMultisigData();
+
+  const validatorAddresses = account.delegatedValidator ? [account.delegatedValidator] : [];
+  const { data: validatorMetadata } = useValidatorsMetadata(validatorAddresses);
 
   const canUndelegate = account.state === 'active' || account.state === 'activating';
   const canWithdraw = account.state === 'inactive' || account.state === 'deactivating';
   const canRedelegate = account.state === 'inactive';
-  const canSplit = account.balance > account.rentExemptReserve + 0.1; // Must have enough to split (leave 0.1 XNT minimum)
-  const canMerge = getCompatibleMergeAccounts(account, allStakeAccounts).length > 0; // Must have compatible accounts to merge with
+  const canSplit = account.balance > account.rentExemptReserve + 0.1;
+  const canMerge = getCompatibleMergeAccounts(account, allStakeAccounts).length > 0;
+
+  const label = getStakeAccountLabel(account, validatorMetadata);
+
+  const addUnstakeToBatch = () => {
+    if (!multisigVault) return;
+    const added = addItem(buildUnstakeBatchItem(account, multisigVault, vaultIndex, label));
+    if (added) {
+      toast.success('Added unstake to batch queue');
+    } else {
+      toast.error('Not enough instruction space in batch');
+    }
+  };
+
+  const addWithdrawToBatch = () => {
+    if (!multisigVault) return;
+    const added = addItem(buildWithdrawBatchItem(account, multisigVault, vaultIndex, label));
+    if (added) {
+      toast.success('Added withdrawal to batch queue');
+    } else {
+      toast.error('Not enough instruction space in batch');
+    }
+  };
+
+  const addMergeToBatch = () => {
+    if (!multisigVault) return;
+    const compatible = getCompatibleMergeAccounts(account, allStakeAccounts);
+    if (compatible.length === 0) return;
+
+    let count = 0;
+    for (const source of compatible) {
+      const added = addItem(buildMergeBatchItem(account, source, multisigVault, vaultIndex, label));
+      if (added) count++;
+      else break;
+    }
+    if (count === 0) {
+      toast.error('Not enough instruction space in batch');
+    } else if (count < compatible.length) {
+      toast.warning(`Added ${count} of ${compatible.length} merge operations (instruction limit reached)`);
+    } else {
+      toast.success(
+        `Added ${count} merge operation${count > 1 ? 's' : ''} to batch queue`
+      );
+    }
+  };
 
   return (
     <>
@@ -87,10 +149,43 @@ export function StakeAccountActions({
             <Wallet className="mr-2 h-4 w-4" />
             Withdraw
           </DropdownMenuItem>
+
+          {/* Batch actions */}
+          {(canUndelegate || canWithdraw || canSplit || canMerge) && (
+            <>
+              <DropdownMenuSeparator />
+              {canUndelegate && (
+                <DropdownMenuItem onClick={addUnstakeToBatch} className="cursor-pointer">
+                  <Layers className="mr-2 h-4 w-4" />
+                  Add Unstake to Batch
+                </DropdownMenuItem>
+              )}
+              {canWithdraw && (
+                <DropdownMenuItem onClick={addWithdrawToBatch} className="cursor-pointer">
+                  <Layers className="mr-2 h-4 w-4" />
+                  Add Withdraw to Batch
+                </DropdownMenuItem>
+              )}
+              {canSplit && (
+                <DropdownMenuItem
+                  onClick={() => setBatchSplitOpen(true)}
+                  className="cursor-pointer"
+                >
+                  <Layers className="mr-2 h-4 w-4" />
+                  Add Split to Batch
+                </DropdownMenuItem>
+              )}
+              {canMerge && (
+                <DropdownMenuItem onClick={addMergeToBatch} className="cursor-pointer">
+                  <Layers className="mr-2 h-4 w-4" />
+                  Add Merge to Batch
+                </DropdownMenuItem>
+              )}
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Only render the dialog that's currently open to avoid focus conflicts */}
       {undelegateOpen && (
         <UndelegateStakeDialog
           stakeAccounts={[account]}
@@ -137,6 +232,15 @@ export function StakeAccountActions({
           onOpenChange={setMergeOpen}
           preSelectedAccount={account}
           allStakeAccounts={allStakeAccounts}
+        />
+      )}
+
+      {batchSplitOpen && (
+        <BatchSplitDialog
+          vaultIndex={vaultIndex}
+          isOpen={batchSplitOpen}
+          onOpenChange={setBatchSplitOpen}
+          preSelectedAccount={account}
         />
       )}
     </>

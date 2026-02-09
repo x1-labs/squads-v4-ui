@@ -5,6 +5,8 @@ import CancelButton from './CancelButton';
 import ReviewButton from './ReviewButton';
 import { ApprovalStatus } from './ApprovalStatus';
 import { TableBody, TableCell, TableRow } from './ui/table';
+import { SplitButton } from './ui/split-button';
+import { Badge } from './ui/badge';
 import { useNavigate } from 'react-router-dom';
 import { useMultisig } from '@/hooks/useServices';
 import { toast } from 'sonner';
@@ -12,6 +14,9 @@ import { TransactionTagList } from './TransactionTag';
 import { TransactionTag } from '@/lib/instructions/types';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess } from '@/hooks/useAccess';
+import { useBatchApprovals } from '@/hooks/useBatchApprovals';
+import { useBatchExecutes } from '@/hooks/useBatchExecutes';
+import { Layers } from 'lucide-react';
 
 // Format address to show first 8 and last 8 characters
 function formatAddress(address: string): string {
@@ -26,6 +31,7 @@ interface ActionButtonsProps {
   proposalStatus: string;
   programId: string;
   proposal: multisig.generated.Proposal | null;
+  tags?: TransactionTag[];
 }
 
 export default function TransactionTable({
@@ -47,6 +53,8 @@ export default function TransactionTable({
   const { data: multisigConfig } = useMultisig();
   const isMember = useAccess();
   const { connected } = useWallet();
+  const { hasItem: isInBatchApproval } = useBatchApprovals();
+  const { hasItem: isInBatchExecute } = useBatchExecutes();
 
   if (transactions.length === 0) {
     return (
@@ -111,13 +119,21 @@ export default function TransactionTable({
             <TableCell
               className={`font-mono text-sm ${isGreyedOut ? 'text-muted-foreground' : ''}`}
             >
-              <span
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
-                  isGreyedOut ? 'bg-muted/60' : 'bg-muted'
-                } text-xs font-semibold`}
-              >
-                {Number(transaction.index)}
-              </span>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-full ${
+                    isGreyedOut ? 'bg-muted/60' : 'bg-muted'
+                  } text-xs font-semibold`}
+                >
+                  {Number(transaction.index)}
+                </span>
+                {(isInBatchApproval(Number(transaction.index)) || isInBatchExecute(Number(transaction.index))) && (
+                  <Badge variant="secondary" className="gap-1 px-1.5 py-0.5 text-xs">
+                    <Layers className="h-3 w-3" />
+                    Batch
+                  </Badge>
+                )}
+              </div>
             </TableCell>
             <TableCell className={isGreyedOut ? 'text-muted-foreground' : ''}>
               <div className="flex flex-col gap-1.5">
@@ -173,6 +189,7 @@ export default function TransactionTable({
                   proposalStatus={transaction.proposal?.status.__kind || 'None'}
                   programId={programId ? programId : multisig.PROGRAM_ID.toBase58()}
                   proposal={transaction.proposal}
+                  tags={transaction.tags}
                 />
               )}
             </TableCell>
@@ -190,10 +207,16 @@ function ActionButtons({
   proposalStatus,
   programId,
   proposal,
+  tags,
 }: ActionButtonsProps) {
   const wallet = useWallet();
+  const navigate = useNavigate();
+  const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
 
-  // Check if current user has already rejected or cancelled
+  // Check if current user has already approved, rejected or cancelled
+  const walletPubkeyStr = wallet.publicKey?.toBase58();
+  const approvedListStr = proposal?.approved?.map(m => m.toBase58()) || [];
+  const hasUserApproved = walletPubkeyStr ? approvedListStr.includes(walletPubkeyStr) : false;
   const hasUserRejected = proposal?.rejected?.some((member) =>
     wallet.publicKey ? member.equals(wallet.publicKey) : false
   );
@@ -204,9 +227,24 @@ function ActionButtons({
 
   // Determine which buttons to show based on status
   const showReject =
-    !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+    !hasUserApproved && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
   const showExecute = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
   const showCancel = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
+
+  const handleAddToExecuteBatch = () => {
+    const label = tags && tags.length > 0
+      ? tags.map(t => t.label).join(', ')
+      : 'Transaction';
+
+    const added = addToBatchExecute({
+      transactionIndex,
+      label,
+    });
+
+    if (added) {
+      navigate(`/${multisigPda}/transactions`);
+    }
+  };
 
   return (
     <div className="flex items-center justify-end gap-1">
@@ -220,12 +258,20 @@ function ActionButtons({
         />
       )}
       {showExecute && (
-        <ExecuteButton
-          multisigPda={multisigPda}
-          transactionIndex={transactionIndex}
-          proposalStatus={proposalStatus}
-          programId={programId}
-        />
+        <SplitButton
+          items={[{
+            label: isInBatchExecute(transactionIndex) ? 'In Batch' : 'Batch Execute',
+            onClick: handleAddToExecuteBatch,
+            disabled: isInBatchExecute(transactionIndex),
+          }]}
+        >
+          <ExecuteButton
+            multisigPda={multisigPda}
+            transactionIndex={transactionIndex}
+            proposalStatus={proposalStatus}
+            programId={programId}
+          />
+        </SplitButton>
       )}
       {showCancel && (
         <CancelButton
