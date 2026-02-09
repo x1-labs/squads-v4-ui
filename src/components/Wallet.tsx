@@ -6,7 +6,7 @@ import {
   TorusWalletAdapter,
   LedgerWalletAdapter,
 } from '@solana/wallet-adapter-wallets';
-import { getRpcUrl } from '@/hooks/useSettings';
+import { useRpcUrl } from '@/hooks/useSettings';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
 
@@ -20,7 +20,8 @@ export const Wallet: FC<Props> = ({ children }) => {
   // Use the same RPC URL configured in app settings (localStorage).
   // This ensures the wallet adapter connects to the same network the app is using,
   // so users don't have to manually switch networks in their wallet.
-  const endpoint = useMemo(() => getRpcUrl(), []);
+  // Using the hook ensures the endpoint updates when settings change.
+  const { rpcUrl: endpoint } = useRpcUrl();
 
   // Delay wallet initialization to allow browser extensions to register
   useEffect(() => {
@@ -44,7 +45,7 @@ export const Wallet: FC<Props> = ({ children }) => {
         new LedgerWalletAdapter(),
       ];
     },
-    [walletsReady]
+    [walletsReady, endpoint]
   );
 
   return (
