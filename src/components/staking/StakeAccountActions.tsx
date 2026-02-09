@@ -43,7 +43,7 @@ export function StakeAccountActions({
   const [splitOpen, setSplitOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [batchSplitOpen, setBatchSplitOpen] = useState(false);
-  const { addItem } = useBatchTransactions();
+  const { addItem, isFull } = useBatchTransactions();
   const { multisigVault } = useMultisigData();
 
   const validatorAddresses = account.delegatedValidator ? [account.delegatedValidator] : [];
@@ -59,14 +59,22 @@ export function StakeAccountActions({
 
   const addUnstakeToBatch = () => {
     if (!multisigVault) return;
-    addItem(buildUnstakeBatchItem(account, multisigVault, vaultIndex, label));
-    toast.success('Added unstake to batch queue');
+    const added = addItem(buildUnstakeBatchItem(account, multisigVault, vaultIndex, label));
+    if (added) {
+      toast.success('Added unstake to batch queue');
+    } else {
+      toast.error('Batch queue is full');
+    }
   };
 
   const addWithdrawToBatch = () => {
     if (!multisigVault) return;
-    addItem(buildWithdrawBatchItem(account, multisigVault, vaultIndex, label));
-    toast.success('Added withdrawal to batch queue');
+    const added = addItem(buildWithdrawBatchItem(account, multisigVault, vaultIndex, label));
+    if (added) {
+      toast.success('Added withdrawal to batch queue');
+    } else {
+      toast.error('Batch queue is full');
+    }
   };
 
   const addMergeToBatch = () => {
@@ -74,12 +82,21 @@ export function StakeAccountActions({
     const compatible = getCompatibleMergeAccounts(account, allStakeAccounts);
     if (compatible.length === 0) return;
 
+    let count = 0;
     for (const source of compatible) {
-      addItem(buildMergeBatchItem(account, source, multisigVault, vaultIndex, label));
+      const added = addItem(buildMergeBatchItem(account, source, multisigVault, vaultIndex, label));
+      if (added) count++;
+      else break;
     }
-    toast.success(
-      `Added ${compatible.length} merge operation${compatible.length > 1 ? 's' : ''} to batch queue`
-    );
+    if (count === 0) {
+      toast.error('Batch queue is full');
+    } else if (count < compatible.length) {
+      toast.warning(`Added ${count} of ${compatible.length} merge operations (batch limit reached)`);
+    } else {
+      toast.success(
+        `Added ${count} merge operation${count > 1 ? 's' : ''} to batch queue`
+      );
+    }
   };
 
   return (
@@ -138,13 +155,13 @@ export function StakeAccountActions({
             <>
               <DropdownMenuSeparator />
               {canUndelegate && (
-                <DropdownMenuItem onClick={addUnstakeToBatch} className="cursor-pointer">
+                <DropdownMenuItem onClick={addUnstakeToBatch} disabled={isFull} className="cursor-pointer">
                   <Layers className="mr-2 h-4 w-4" />
                   Add Unstake to Batch
                 </DropdownMenuItem>
               )}
               {canWithdraw && (
-                <DropdownMenuItem onClick={addWithdrawToBatch} className="cursor-pointer">
+                <DropdownMenuItem onClick={addWithdrawToBatch} disabled={isFull} className="cursor-pointer">
                   <Layers className="mr-2 h-4 w-4" />
                   Add Withdraw to Batch
                 </DropdownMenuItem>
@@ -152,6 +169,7 @@ export function StakeAccountActions({
               {canSplit && (
                 <DropdownMenuItem
                   onClick={() => setBatchSplitOpen(true)}
+                  disabled={isFull}
                   className="cursor-pointer"
                 >
                   <Layers className="mr-2 h-4 w-4" />
@@ -159,7 +177,7 @@ export function StakeAccountActions({
                 </DropdownMenuItem>
               )}
               {canMerge && (
-                <DropdownMenuItem onClick={addMergeToBatch} className="cursor-pointer">
+                <DropdownMenuItem onClick={addMergeToBatch} disabled={isFull} className="cursor-pointer">
                   <Layers className="mr-2 h-4 w-4" />
                   Add Merge to Batch
                 </DropdownMenuItem>

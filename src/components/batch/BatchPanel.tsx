@@ -40,7 +40,7 @@ const typeIcons: Record<string, React.ReactNode> = {
 };
 
 export function BatchPanel() {
-  const { items, removeItem, clearAll, itemCount } = useBatchTransactions();
+  const { items, removeItem, clearAll, itemCount, maxItems, isFull } = useBatchTransactions();
   const { connection, programId, multisigAddress } = useMultisigData();
   const wallet = useWallet();
   const walletModal = useWalletModal();
@@ -135,8 +135,8 @@ export function BatchPanel() {
           <div className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">Batch Queue</CardTitle>
-            <Badge variant="secondary" className="ml-1">
-              {itemCount} {itemCount === 1 ? 'item' : 'items'}
+            <Badge variant={isFull ? 'destructive' : 'secondary'} className="ml-1">
+              {itemCount}/{maxItems}
             </Badge>
           </div>
           <Button

@@ -19,25 +19,45 @@ export interface BatchItem {
   vaultIndex: number;
 }
 
+export const DEFAULT_BATCH_LIMIT = 4;
+
 interface BatchTransactionsContextType {
   items: BatchItem[];
-  addItem: (item: Omit<BatchItem, 'id'>) => void;
+  addItem: (item: Omit<BatchItem, 'id'>) => boolean;
   removeItem: (id: string) => void;
   clearAll: () => void;
   itemCount: number;
+  maxItems: number;
+  isFull: boolean;
+  remaining: number;
 }
 
 const BatchTransactionsContext = createContext<BatchTransactionsContextType | null>(null);
 
 let nextId = 1;
 
-export function BatchTransactionsProvider({ children }: { children: ReactNode }) {
+export function BatchTransactionsProvider({
+  children,
+  maxItems = DEFAULT_BATCH_LIMIT,
+}: {
+  children: ReactNode;
+  maxItems?: number;
+}) {
   const [items, setItems] = useState<BatchItem[]>([]);
 
-  const addItem = useCallback((item: Omit<BatchItem, 'id'>) => {
-    const id = `batch-${nextId++}-${Date.now()}`;
-    setItems((prev) => [...prev, { ...item, id }]);
-  }, []);
+  const addItem = useCallback(
+    (item: Omit<BatchItem, 'id'>): boolean => {
+      let added = false;
+      setItems((prev) => {
+        if (prev.length >= maxItems) return prev;
+        const id = `batch-${nextId++}-${Date.now()}`;
+        added = true;
+        return [...prev, { ...item, id }];
+      });
+      return added;
+    },
+    [maxItems]
+  );
 
   const removeItem = useCallback((id: string) => {
     setItems((prev) => prev.filter((item) => item.id !== id));
@@ -47,6 +67,8 @@ export function BatchTransactionsProvider({ children }: { children: ReactNode })
     setItems([]);
   }, []);
 
+  const itemCount = items.length;
+
   return (
     <BatchTransactionsContext.Provider
       value={{
@@ -54,7 +76,10 @@ export function BatchTransactionsProvider({ children }: { children: ReactNode })
         addItem,
         removeItem,
         clearAll,
-        itemCount: items.length,
+        itemCount,
+        maxItems,
+        isFull: itemCount >= maxItems,
+        remaining: Math.max(0, maxItems - itemCount),
       }}
     >
       {children}
