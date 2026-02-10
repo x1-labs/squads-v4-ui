@@ -1,7 +1,9 @@
 import * as multisig from '@sqds/multisig';
 import {
+  AddressLookupTableAccount,
   Connection,
   PublicKey,
+  TransactionInstruction,
   TransactionMessage,
   VersionedTransaction,
 } from '@solana/web3.js';
@@ -13,9 +15,7 @@ export interface ExecuteItem {
 }
 
 /**
- * Batch execute multiple approved proposals.
- * Each execution is a separate transaction (they're too large to combine).
- * All transactions are signed at once with signAllTransactions, then sent sequentially.
+ * Batch execute multiple approved proposals in a single transaction.
  */
 export async function submitBatchExecutes(
   items: ExecuteItem[],
@@ -24,23 +24,20 @@ export async function submitBatchExecutes(
   programId: PublicKey,
   wallet: WalletContextState,
   onProgress?: (msg: string) => void
-): Promise<string[]> {
-  if (!wallet.publicKey || !wallet.signAllTransactions) {
-    throw new Error('Wallet must be connected and support signing multiple transactions');
+): Promise<string> {
+  if (!wallet.publicKey || !wallet.signTransaction) {
+    throw new Error('Wallet must be connected');
   }
 
   const member = wallet.publicKey;
   const multisigPubkey = new PublicKey(multisigPda);
 
-  onProgress?.(`Building ${items.length} execute transactions...`);
+  onProgress?.('Building execute transaction...');
 
-  // Build execute instructions for each item
-  type TxBuildData = {
-    instructions: any[];
-    lookupTableAccounts?: any[];
-  };
+  const instructions: TransactionInstruction[] = [];
+  const allLookupTables: AddressLookupTableAccount[] = [];
 
-  const buildPromises = items.map(async (item) => {
+  for (const item of items) {
     const transactionIndexBN = BigInt(item.transactionIndex);
     const [transactionPda] = multisig.getTransactionPda({
       multisigPda: multisigPubkey,
@@ -76,10 +73,10 @@ export async function submitBatchExecutes(
         transactionIndex: transactionIndexBN,
         programId,
       });
-      return {
-        instructions: [resp.instruction],
-        lookupTableAccounts: resp.lookupTableAccounts,
-      } as TxBuildData;
+      instructions.push(resp.instruction);
+      if (resp.lookupTableAccounts) {
+        allLookupTables.push(...resp.lookupTableAccounts);
+      }
     } else if (txType === 'config') {
       const executeIx = multisig.instructions.configTransactionExecute({
         multisigPda: multisigPubkey,
@@ -88,66 +85,54 @@ export async function submitBatchExecutes(
         transactionIndex: transactionIndexBN,
         programId,
       });
-      return {
-        instructions: [executeIx],
-        lookupTableAccounts: undefined,
-      } as TxBuildData;
+      instructions.push(executeIx);
     }
+  }
 
-    return null;
-  });
-
-  const buildResults = await Promise.all(buildPromises);
-  const validBuilds = buildResults.filter((b): b is TxBuildData => b !== null);
-
-  if (validBuilds.length === 0) {
+  if (instructions.length === 0) {
     throw new Error('No executable transactions found');
   }
 
-  onProgress?.('Requesting wallet signatures...');
+  // Deduplicate lookup tables by address
+  const uniqueLookupTables = Array.from(
+    new Map(allLookupTables.map((t) => [t.key.toBase58(), t])).values()
+  );
 
-  // Get fresh blockhash
   const { blockhash } = await connection.getLatestBlockhash();
 
-  // Build versioned transactions
-  const transactions = validBuilds.map((buildData) => {
-    return new VersionedTransaction(
-      new TransactionMessage({
-        instructions: buildData.instructions,
-        payerKey: member,
-        recentBlockhash: blockhash,
-      }).compileToV0Message(buildData.lookupTableAccounts)
+  const transaction = new VersionedTransaction(
+    new TransactionMessage({
+      instructions,
+      payerKey: member,
+      recentBlockhash: blockhash,
+    }).compileToV0Message(uniqueLookupTables)
+  );
+
+  // Check size before signing
+  const serialized = transaction.serialize();
+  if (serialized.length > 1232) {
+    throw new Error(
+      `Transaction too large (${serialized.length} bytes). Select fewer transactions.`
     );
+  }
+
+  onProgress?.('Requesting wallet signature...');
+
+  const signedTransaction = await wallet.signTransaction(transaction);
+
+  onProgress?.('Sending transaction...');
+
+  const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
+    skipPreflight: false,
+    maxRetries: 3,
   });
 
-  // Sign all at once
-  const signedTransactions = await wallet.signAllTransactions(transactions);
+  onProgress?.('Confirming...');
 
-  // Send sequentially
-  const signatures: string[] = [];
-  for (let i = 0; i < signedTransactions.length; i++) {
-    onProgress?.(`Sending transaction ${i + 1} of ${signedTransactions.length}...`);
-
-    const signature = await connection.sendRawTransaction(signedTransactions[i].serialize(), {
-      skipPreflight: false,
-      maxRetries: 3,
-    });
-    signatures.push(signature);
+  const results = await waitForConfirmation(connection, [signature], 30000);
+  if (!results[0] || results[0].err) {
+    throw new Error(`Transaction failed or unable to confirm. Signature: ${signature}`);
   }
 
-  onProgress?.('Confirming transactions...');
-  const results = await waitForConfirmation(connection, signatures, 30000);
-
-  const failed = results.filter((r) => !r || r.err);
-  if (failed.length > 0) {
-    const successCount = results.length - failed.length;
-    if (successCount > 0) {
-      throw new Error(
-        `${successCount} of ${results.length} transactions executed. ${failed.length} failed.`
-      );
-    }
-    throw new Error('Transaction execution failed');
-  }
-
-  return signatures;
+  return signature;
 }

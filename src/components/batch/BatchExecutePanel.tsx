@@ -49,8 +49,8 @@ export function BatchExecutePanel() {
       return;
     }
 
-    if (!wallet.signAllTransactions) {
-      toast.error('Your wallet does not support signing multiple transactions.');
+    if (!wallet.signTransaction) {
+      toast.error('Your wallet does not support transaction signing.');
       return;
     }
 
@@ -97,15 +97,15 @@ export function BatchExecutePanel() {
     if (!progress) return '';
     switch (progress.currentStep) {
       case 'preparing':
-        return 'Preparing transactions...';
+        return 'Preparing transaction...';
       case 'signing':
         return 'Please approve in your wallet...';
       case 'sending':
-        return progress.message || 'Sending transactions...';
+        return progress.message || 'Sending transaction...';
       case 'confirming':
         return 'Confirming...';
       case 'done':
-        return 'Executions complete!';
+        return 'Execution complete!';
       case 'error':
         return progress.error || 'Error occurred';
       default:
@@ -139,7 +139,7 @@ export function BatchExecutePanel() {
           </Button>
         </div>
         <CardDescription>
-          Execute multiple approved transactions sequentially.
+          Execute multiple approved transactions in a single transaction.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
