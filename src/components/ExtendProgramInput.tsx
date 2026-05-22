@@ -3,7 +3,7 @@ import { Input } from './ui/input';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useState } from 'react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
-import { Info } from 'lucide-react';
+import { AlertCircle, Info } from 'lucide-react';
 import {
   AccountMeta,
   PublicKey,
@@ -31,10 +31,20 @@ const ExtendProgramInput = ({
 
   const [additionalBytes, setAdditionalBytes] = useState('');
 
-  const { connection } = useMultisigData();
+  const { connection, multisigVault } = useMultisigData();
 
   const parsedBytes = parseInt(additionalBytes, 10);
   const isValidBytes = !isNaN(parsedBytes) && parsedBytes > 0;
+
+  const walletIsAuthority = !!(
+    wallet.publicKey && programInfos.authority &&
+    wallet.publicKey.toBase58() === programInfos.authority
+  );
+
+  const authorityIsVault = !!(
+    multisigVault && programInfos.authority &&
+    multisigVault.toBase58() === programInfos.authority
+  );
 
   const extendProgram = async () => {
     if (!wallet.publicKey) {
@@ -42,6 +52,7 @@ const ExtendProgramInput = ({
       throw 'Wallet not connected';
     }
 
+    const authority = new PublicKey(programInfos.authority);
     const extendData = Buffer.alloc(8);
     extendData.writeUInt32LE(6, 0);
     extendData.writeUInt32LE(parsedBytes, 4);
@@ -62,12 +73,26 @@ const ExtendProgramInput = ({
         isWritable: false,
         isSigner: false,
       },
-      {
+    ];
+
+    if (authority.equals(wallet.publicKey)) {
+      keys.push({
         pubkey: wallet.publicKey,
         isWritable: true,
         isSigner: true,
-      },
-    ];
+      });
+    } else {
+      keys.push({
+        pubkey: authority,
+        isWritable: false,
+        isSigner: true,
+      });
+      keys.push({
+        pubkey: wallet.publicKey,
+        isWritable: true,
+        isSigner: true,
+      });
+    }
 
     const blockhash = (await connection.getLatestBlockhash()).blockhash;
 
@@ -107,15 +132,30 @@ const ExtendProgramInput = ({
 
   return (
     <div>
-      <div className="mb-3 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
-        <div className="flex items-start gap-2">
-          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-500" />
-          <div className="text-sm text-blue-400">
-            Extend is sent directly from your wallet (not through the multisig) because the BPF
-            Loader does not support this instruction via CPI. No upgrade authority is required.
+      {authorityIsVault && (
+        <div className="mb-3 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-500" />
+            <div className="text-sm text-yellow-500">
+              This program's upgrade authority is the multisig vault. The BPF Loader does not
+              support ExtendProgram via CPI, so it cannot be executed through the multisig.
+              To extend, temporarily transfer the upgrade authority to a keypair, extend, then
+              transfer it back.
+            </div>
           </div>
         </div>
-      </div>
+      )}
+      {!authorityIsVault && (
+        <div className="mb-3 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
+          <div className="flex items-start gap-2">
+            <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-500" />
+            <div className="text-sm text-blue-400">
+              Extend is sent directly from your wallet (not through the multisig) because the BPF
+              Loader does not support this instruction via CPI. The upgrade authority must sign.
+            </div>
+          </div>
+        </div>
+      )}
       <Input
         placeholder="Additional Bytes"
         type="number"
@@ -136,7 +176,8 @@ const ExtendProgramInput = ({
           !wallet.publicKey ||
           !isValidBytes ||
           !programInfos.programAddress ||
-          !programInfos.programDataAddress
+          !programInfos.programDataAddress ||
+          !walletIsAuthority
         }
       >
         Extend Program
