@@ -1,8 +1,9 @@
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
+import { AlertCircle } from 'lucide-react';
 import * as multisig from '@sqds/multisig';
 import {
   AccountMeta,
@@ -35,10 +36,75 @@ const CreateProgramUpgradeInput = ({
 
   const [bufferAddress, setBufferAddress] = useState('');
   const [spillAddress, setSpillAddress] = useState('');
+  const [bufferWarning, setBufferWarning] = useState<string | null>(null);
+  const [checkingBuffer, setCheckingBuffer] = useState(false);
 
   const { connection, multisigAddress, vaultIndex, programId, multisigVault } = useMultisigData();
 
   const bigIntTransactionIndex = BigInt(transactionIndex);
+
+  useEffect(() => {
+    if (!isPublickey(bufferAddress) || !multisigVault) {
+      setBufferWarning(null);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingBuffer(true);
+    setBufferWarning(null);
+
+    const checkBufferAuthority = async () => {
+      try {
+        const accountInfo = await connection.getAccountInfo(new PublicKey(bufferAddress));
+
+        if (cancelled) return;
+
+        if (!accountInfo) {
+          setBufferWarning('Buffer account not found on-chain.');
+          return;
+        }
+
+        const data = accountInfo.data;
+        const accountType = data.readUInt32LE(0);
+        if (accountType !== 1) {
+          setBufferWarning('Account is not a BPF Loader buffer.');
+          return;
+        }
+
+        const hasAuthority = data[4] === 1;
+        if (!hasAuthority) {
+          setBufferWarning('Buffer has no authority set (immutable).');
+          return;
+        }
+
+        const authority = new PublicKey(data.slice(5, 37));
+        const vaultAddress = new PublicKey(multisigVault);
+
+        if (!authority.equals(vaultAddress)) {
+          const shortAuth = `${authority.toBase58().slice(0, 8)}...${authority.toBase58().slice(-4)}`;
+          setBufferWarning(
+            `Buffer authority (${shortAuth}) does not match the multisig vault. ` +
+            `Transfer it first:\n` +
+            `solana program set-buffer-authority ${bufferAddress} --new-buffer-authority ${multisigVault}`
+          );
+        } else {
+          setBufferWarning(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setBufferWarning('Failed to verify buffer authority.');
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingBuffer(false);
+        }
+      }
+    };
+
+    checkBufferAuthority();
+
+    return () => { cancelled = true; };
+  }, [bufferAddress, multisigVault, connection]);
 
   const changeUpgradeAuth = async () => {
     if (!wallet.publicKey) {
@@ -179,6 +245,14 @@ const CreateProgramUpgradeInput = ({
         onChange={(e) => setSpillAddress(e.target.value)}
         className="mb-3"
       />
+      {bufferWarning && (
+        <div className="mb-3 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-500" />
+            <div className="whitespace-pre-wrap text-sm text-yellow-500">{bufferWarning}</div>
+          </div>
+        </div>
+      )}
       <Button
         onClick={() =>
           toast.promise(changeUpgradeAuth, {
@@ -194,7 +268,9 @@ const CreateProgramUpgradeInput = ({
           !isPublickey(spillAddress) ||
           !isPublickey(programInfos.programAddress) ||
           !isPublickey(programInfos.authority) ||
-          !isPublickey(programInfos.programDataAddress)
+          !isPublickey(programInfos.programDataAddress) ||
+          !!bufferWarning ||
+          checkingBuffer
         }
       >
         Create upgrade
