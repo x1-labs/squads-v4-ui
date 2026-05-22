@@ -3,7 +3,7 @@ import { Input } from './ui/input';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useState } from 'react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
-import * as multisig from '@sqds/multisig';
+import { Info } from 'lucide-react';
 import {
   AccountMeta,
   PublicKey,
@@ -20,12 +20,10 @@ import { waitForConfirmation } from '../lib/transactionConfirmation';
 
 type ExtendProgramInputProps = {
   programInfos: SimplifiedProgramInfo;
-  transactionIndex: number;
 };
 
 const ExtendProgramInput = ({
   programInfos,
-  transactionIndex,
 }: ExtendProgramInputProps) => {
   const queryClient = useQueryClient();
   const wallet = useWallet();
@@ -33,9 +31,8 @@ const ExtendProgramInput = ({
 
   const [additionalBytes, setAdditionalBytes] = useState('');
 
-  const { connection, multisigAddress, vaultIndex, programId, multisigVault } = useMultisigData();
+  const { connection } = useMultisigData();
 
-  const bigIntTransactionIndex = BigInt(transactionIndex);
   const parsedBytes = parseInt(additionalBytes, 10);
   const isValidBytes = !isNaN(parsedBytes) && parsedBytes > 0;
 
@@ -44,15 +41,6 @@ const ExtendProgramInput = ({
       walletModal.setVisible(true);
       throw 'Wallet not connected';
     }
-    if (!multisigVault) {
-      throw 'Multisig vault not found';
-    }
-    if (!multisigAddress) {
-      throw 'Multisig not found';
-    }
-
-    const vaultAddress = new PublicKey(multisigVault);
-    const multisigPda = new PublicKey(multisigAddress);
 
     const extendData = Buffer.alloc(8);
     extendData.writeUInt32LE(6, 0);
@@ -75,7 +63,7 @@ const ExtendProgramInput = ({
         isSigner: false,
       },
       {
-        pubkey: vaultAddress,
+        pubkey: wallet.publicKey,
         isWritable: true,
         isSigner: true,
       },
@@ -83,7 +71,7 @@ const ExtendProgramInput = ({
 
     const blockhash = (await connection.getLatestBlockhash()).blockhash;
 
-    const transactionMessage = new TransactionMessage({
+    const message = new TransactionMessage({
       instructions: [
         new TransactionInstruction({
           programId: new PublicKey('BPFLoaderUpgradeab1e11111111111111111111111'),
@@ -91,43 +79,8 @@ const ExtendProgramInput = ({
           keys,
         }),
       ],
-      payerKey: vaultAddress,
-      recentBlockhash: blockhash,
-    });
-
-    const transactionIndexBN = BigInt(transactionIndex);
-
-    const multisigTransactionIx = multisig.instructions.vaultTransactionCreate({
-      multisigPda,
-      creator: wallet.publicKey,
-      ephemeralSigners: 0,
-      // @ts-ignore
-      transactionMessage,
-      transactionIndex: transactionIndexBN,
-      addressLookupTableAccounts: [],
-      rentPayer: wallet.publicKey,
-      vaultIndex: vaultIndex,
-      programId,
-    });
-    const proposalIx = multisig.instructions.proposalCreate({
-      multisigPda,
-      creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: bigIntTransactionIndex,
-      rentPayer: wallet.publicKey,
-      programId,
-    });
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda,
-      member: wallet.publicKey,
-      transactionIndex: bigIntTransactionIndex,
-      programId,
-    });
-
-    const message = new TransactionMessage({
-      instructions: [multisigTransactionIx, proposalIx, approveIx],
       payerKey: wallet.publicKey,
-      recentBlockhash: (await connection.getLatestBlockhash()).blockhash,
+      recentBlockhash: blockhash,
     }).compileToV0Message();
 
     const transaction = new VersionedTransaction(message);
@@ -154,6 +107,15 @@ const ExtendProgramInput = ({
 
   return (
     <div>
+      <div className="mb-3 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
+        <div className="flex items-start gap-2">
+          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-500" />
+          <div className="text-sm text-blue-400">
+            Extend is sent directly from your wallet (not through the multisig) because the BPF
+            Loader does not support this instruction via CPI. No upgrade authority is required.
+          </div>
+        </div>
+      </div>
       <Input
         placeholder="Additional Bytes"
         type="number"
@@ -165,13 +127,13 @@ const ExtendProgramInput = ({
         onClick={() =>
           toast.promise(extendProgram, {
             id: 'transaction',
-            loading: 'Loading...',
-            success: 'Program extend proposed.',
-            error: (e) => `Failed to propose: ${e}`,
+            loading: 'Extending program...',
+            success: 'Program extended successfully.',
+            error: (e) => `Failed to extend: ${e}`,
           })
         }
         disabled={
-          !programId ||
+          !wallet.publicKey ||
           !isValidBytes ||
           !programInfos.programAddress ||
           !programInfos.programDataAddress

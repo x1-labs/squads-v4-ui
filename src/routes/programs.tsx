@@ -169,9 +169,6 @@ const ProgramsPage = () => {
                   <CardContent>
                     <ExtendProgramInput
                       programInfos={programInfos}
-                      transactionIndex={
-                        Number(multisigConfig ? multisigConfig.transactionIndex : 0) + 1
-                      }
                     />
                   </CardContent>
                 </Card>
