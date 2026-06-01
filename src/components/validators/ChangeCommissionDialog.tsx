@@ -16,7 +16,7 @@ import { ValidatorInfo } from '@/lib/validators/validatorUtils';
 import { createUpdateCommissionInstruction } from '@/lib/validators/validatorInstructions';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useMultisig } from '@/hooks/useServices';
-import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';

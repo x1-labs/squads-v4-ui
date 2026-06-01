@@ -139,10 +139,18 @@ const ApproveButton = ({
       );
       transaction.recentBlockhash = freshBlockhash;
 
-      // If simulation passes, send the transaction with fresh blockhash
-      console.log('[ApproveButton] Sending transaction to wallet for approval');
+      // If simulation passes, sign with the wallet and broadcast via the app's
+      // connection. Signing only (instead of wallet.sendTransaction) means the
+      // wallet never broadcasts, so it doesn't need to be pointed at this
+      // network's RPC — the app always submits to the configured endpoint. This
+      // also avoids the "Plugin Closed" errors some wallets throw on send.
+      console.log('[ApproveButton] Requesting wallet signature');
+      if (!wallet.signTransaction) {
+        throw new Error('Wallet does not support transaction signing');
+      }
       const startSend = Date.now();
-      signature = await wallet.sendTransaction(transaction, connection, {
+      const signedTransaction = await wallet.signTransaction(transaction);
+      signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
         skipPreflight: false,
         maxRetries: 3,
       });
@@ -194,12 +202,6 @@ const ApproveButton = ({
         queryClient.invalidateQueries({ queryKey: ['proposal'] }),
         queryClient.invalidateQueries({ queryKey: ['transaction-details'] }),
       ]);
-
-      // Force a page reload after a short delay to ensure all data is fresh
-      console.log('[ApproveButton] Scheduling page reload');
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
 
       // Return success with signature
       console.log('[ApproveButton] Approval completed successfully');
