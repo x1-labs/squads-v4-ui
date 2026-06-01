@@ -4,8 +4,21 @@ const TsconfigPathsPlugin = require('tsconfig-paths-webpack-plugin');
 const webpack = require('webpack');
 const dotenv = require('dotenv');
 
-// Load .env file
-dotenv.config();
+// Select which env file to load based on APP_NETWORK:
+//   APP_NETWORK=testnet        -> .env.testnet
+//   APP_NETWORK=mainnet        -> .env.mainnet
+//   APP_NETWORK=solana-mainnet -> .env.solana-mainnet
+// When APP_NETWORK is unset (e.g. on Vercel, where APP_* vars come from the
+// project dashboard), fall back to .env. dotenv does NOT override variables that
+// are already present in the environment, so Vercel's dashboard values win.
+const appNetwork = process.env.APP_NETWORK;
+const envFile = appNetwork ? `.env.${appNetwork}` : '.env';
+const dotenvResult = dotenv.config({ path: path.resolve(__dirname, envFile) });
+console.log(
+  dotenvResult.error
+    ? `[webpack] ${envFile} not found; using existing environment variables`
+    : `[webpack] Loaded environment from ${envFile}`
+);
 
 module.exports = {
   entry: './src/index.tsx',
@@ -69,6 +82,9 @@ module.exports = {
       'process.env.APP_RPC_URL': JSON.stringify(process.env.APP_RPC_URL || ''),
       'process.env.APP_PROGRAM_ID': JSON.stringify(process.env.APP_PROGRAM_ID || ''),
       'process.env.APP_EXPLORER_URL': JSON.stringify(process.env.APP_EXPLORER_URL || ''),
+      // Network this build targets (testnet/mainnet/solana-mainnet). Used to
+      // namespace persisted settings so networks don't collide on localhost.
+      'process.env.APP_NETWORK': JSON.stringify(process.env.APP_NETWORK || ''),
       // Pass through all APP_SAVED_SQUAD_ environment variables as a JSON object
       'process.env.APP_SAVED_SQUADS': JSON.stringify(
         Object.keys(process.env)

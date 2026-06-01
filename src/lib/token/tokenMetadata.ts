@@ -10,6 +10,7 @@ import {
   getExtensionData,
   Mint,
 } from '@solana/spl-token';
+import { RPC_URL_STORAGE_KEY } from '@/hooks/useSettings';
 import { unpack } from '@solana/spl-token-metadata';
 
 export interface TokenMetadata {
@@ -143,8 +144,8 @@ export async function getTokenMetadata(
     // Always prefer the RPC URL from localStorage over the connection's endpoint
     // because the wallet adapter connection might have a different RPC
     const rpcUrl =
-      typeof window !== 'undefined' && localStorage.getItem('x-rpc-url')
-        ? localStorage.getItem('x-rpc-url')!
+      typeof window !== 'undefined' && localStorage.getItem(RPC_URL_STORAGE_KEY)
+        ? localStorage.getItem(RPC_URL_STORAGE_KEY)!
         : connection.rpcEndpoint;
 
     // First, determine which token program owns this mint

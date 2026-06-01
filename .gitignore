@@ -2,5 +2,11 @@ node_modules/
 dist/
 .idea/
 squads-public-verify/
-/.env
+# Env files (incl. per-network .env.testnet / .env.mainnet / .env.solana-mainnet).
+# These hold secrets (RPC keys, Vercel tokens) and must never be committed.
+.env
+.env.*
+!.env.example
 /.vercel/
+.vercel
+.env*.local
