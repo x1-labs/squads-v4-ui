@@ -2,11 +2,27 @@ import * as multisig from '@sqds/multisig';
 // top level
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 
+// Persisted settings are namespaced by the build's network (APP_NETWORK) so that
+// running locally against different networks (`yarn dev` vs `yarn dev:mainnet`)
+// keeps each network's overrides separate. Without this, an RPC URL or program id
+// saved for one network leaks into another through the shared localhost origin and
+// silently points the app at the wrong chain ("Address does not exist on chain").
+// In production APP_NETWORK is unset, so the keys are unchanged and each network is
+// already isolated by its own origin (multisig.testnet.x1.xyz vs multisig.x1.xyz).
+const NETWORK_SUFFIX = process.env.APP_NETWORK ? `:${process.env.APP_NETWORK}` : '';
+const RPC_URL_KEY = `x-rpc-url${NETWORK_SUFFIX}`;
+const PROGRAM_ID_KEY = `x-program-id-v4${NETWORK_SUFFIX}`;
+const EXPLORER_URL_KEY = `x-explorer-url${NETWORK_SUFFIX}`;
+const STAKE_POOL_PROGRAM_ID_KEY = `x-stake-pool-program-id${NETWORK_SUFFIX}`;
+
+// Exported so non-hook modules (e.g. token metadata) resolve the same key.
+export const RPC_URL_STORAGE_KEY = RPC_URL_KEY;
+
 export const DEFAULT_RPC_URL = process.env.APP_RPC_URL || 'https://rpc.testnet.x1.xyz'; // Default fallback
 
 export const getRpcUrl = () => {
   if (typeof document !== 'undefined') {
-    return localStorage.getItem('x-rpc-url') || DEFAULT_RPC_URL;
+    return localStorage.getItem(RPC_URL_KEY) || DEFAULT_RPC_URL;
   }
   return DEFAULT_RPC_URL;
 };
@@ -21,7 +37,7 @@ export const useRpcUrl = () => {
 
   const setRpcUrl = useMutation({
     mutationFn: (newRpcUrl: string) => {
-      localStorage.setItem(`x-rpc-url`, newRpcUrl);
+      localStorage.setItem(RPC_URL_KEY, newRpcUrl);
       return Promise.resolve(newRpcUrl);
     },
     onSuccess: (newRpcUrl) => {
@@ -37,7 +53,7 @@ const DEFAULT_PROGRAM_ID =
 
 const getProgramId = () => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('x-program-id-v4') || DEFAULT_PROGRAM_ID;
+    return localStorage.getItem(PROGRAM_ID_KEY) || DEFAULT_PROGRAM_ID;
   }
   return DEFAULT_PROGRAM_ID;
 };
@@ -52,7 +68,7 @@ export const useProgramId = () => {
 
   const setProgramId = useMutation({
     mutationFn: (newProgramId: string) => {
-      localStorage.setItem('x-program-id-v4', newProgramId);
+      localStorage.setItem(PROGRAM_ID_KEY, newProgramId);
       return Promise.resolve(newProgramId);
     },
     onSuccess: (newProgramId) => {
@@ -66,7 +82,7 @@ export const useProgramId = () => {
 const DEFAULT_EXPLORER_URL = process.env.APP_EXPLORER_URL || 'https://explorer.x1.xyz';
 const getExplorerUrl = () => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('x-explorer-url') || DEFAULT_EXPLORER_URL;
+    return localStorage.getItem(EXPLORER_URL_KEY) || DEFAULT_EXPLORER_URL;
   }
   return DEFAULT_PROGRAM_ID;
 };
@@ -81,7 +97,7 @@ export const useExplorerUrl = () => {
 
   const setExplorerUrl = useMutation({
     mutationFn: (newExplorerUrl: string) => {
-      localStorage.setItem('x-explorer-url', newExplorerUrl);
+      localStorage.setItem(EXPLORER_URL_KEY, newExplorerUrl);
       return Promise.resolve(newExplorerUrl);
     },
     onSuccess: (newExplorerUrl) => {
@@ -96,7 +112,7 @@ const DEFAULT_STAKE_POOL_PROGRAM_ID =
   process.env.APP_STAKE_POOL_PROGRAM_ID || 'XPoo1Fx6KNgeAzFcq2dPTo95bWGUSj5KdPVqYj9CZux';
 const getStakePoolProgramId = () => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('x-stake-pool-program-id') || DEFAULT_STAKE_POOL_PROGRAM_ID;
+    return localStorage.getItem(STAKE_POOL_PROGRAM_ID_KEY) || DEFAULT_STAKE_POOL_PROGRAM_ID;
   }
   return DEFAULT_STAKE_POOL_PROGRAM_ID;
 };
@@ -111,7 +127,7 @@ export const useStakePoolProgramId = () => {
 
   const setStakePoolProgramId = useMutation({
     mutationFn: (newStakePoolProgramId: string) => {
-      localStorage.setItem('x-stake-pool-program-id', newStakePoolProgramId);
+      localStorage.setItem(STAKE_POOL_PROGRAM_ID_KEY, newStakePoolProgramId);
       return Promise.resolve(newStakePoolProgramId);
     },
     onSuccess: (newStakePoolProgramId) => {

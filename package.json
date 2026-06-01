@@ -4,8 +4,14 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "webpack serve --config webpack.dev.js",
-    "build": "webpack --config webpack.prod.js"
+    "dev": "APP_NETWORK=testnet webpack serve --config webpack.dev.js",
+    "dev:testnet": "APP_NETWORK=testnet webpack serve --config webpack.dev.js",
+    "dev:mainnet": "APP_NETWORK=mainnet webpack serve --config webpack.dev.js",
+    "dev:solana-mainnet": "APP_NETWORK=solana-mainnet webpack serve --config webpack.dev.js",
+    "build": "webpack --config webpack.prod.js",
+    "build:testnet": "APP_NETWORK=testnet webpack --config webpack.prod.js",
+    "build:mainnet": "APP_NETWORK=mainnet webpack --config webpack.prod.js",
+    "build:solana-mainnet": "APP_NETWORK=solana-mainnet webpack --config webpack.prod.js"
   },
   "author": "",
   "license": "ISC",
