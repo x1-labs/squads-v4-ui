@@ -1,11 +1,9 @@
 'use client';
-import React, { FC, useMemo, useEffect, useState } from 'react';
+import React, { FC, useCallback, useMemo } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
-import {
-  TorusWalletAdapter,
-  LedgerWalletAdapter,
-} from '@solana/wallet-adapter-wallets';
+import { WalletError } from '@solana/wallet-adapter-base';
+import { TorusWalletAdapter, LedgerWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { getRpcUrl } from '@/hooks/useSettings';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
@@ -15,41 +13,31 @@ type Props = {
 };
 
 export const Wallet: FC<Props> = ({ children }) => {
-  const [walletsReady, setWalletsReady] = useState(false);
-
-  // Use the same RPC URL configured in app settings (localStorage).
-  // This ensures the wallet adapter connects to the same network the app is using,
-  // so users don't have to manually switch networks in their wallet.
+  // RPC endpoint for the wallet-adapter ConnectionProvider. Read once at mount.
+  // The app's reactive connection (which follows RPC changes made in Settings)
+  // lives in useMultisigData; this endpoint only backs the wallet-adapter context.
   const endpoint = useMemo(() => getRpcUrl(), []);
 
-  // Delay wallet initialization to allow browser extensions to register
-  useEffect(() => {
-    // Give browser extensions time to inject and register with the wallet standard
-    const timer = setTimeout(() => {
-      setWalletsReady(true);
-    }, 100);
+  // Wallets that implement the Wallet Standard (Phantom, Solflare, Backpack, …)
+  // are detected automatically and must NOT be listed here. Only register legacy
+  // adapters that don't implement the standard.
+  //
+  // This array must be referentially stable: swapping it after mount forces
+  // WalletProvider to re-initialize and races with autoConnect, which is a
+  // primary cause of spurious disconnects. (Previously this was delayed behind a
+  // 100ms timer and went from [] -> [adapters]; that swap was the bug.)
+  const wallets = useMemo(() => [new LedgerWalletAdapter(), new TorusWalletAdapter()], []);
 
-    return () => clearTimeout(timer);
+  // autoConnect can surface benign errors (user hasn't authorized the site yet,
+  // a wallet isn't ready, etc.). Swallow them as warnings instead of letting them
+  // bubble up as uncaught errors / scary console noise.
+  const onError = useCallback((error: WalletError) => {
+    console.warn('[wallet-adapter]', error.name, error.message);
   }, []);
-
-  const wallets = useMemo(
-    () => {
-      if (!walletsReady) return [];
-
-      // Wallets that support the Wallet Standard (Phantom, Solflare, Backpack, etc.)
-      // are detected automatically and don't need legacy adapter registration.
-      // Only include adapters for wallets that don't implement the standard.
-      return [
-        new TorusWalletAdapter(),
-        new LedgerWalletAdapter(),
-      ];
-    },
-    [walletsReady]
-  );
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
+      <WalletProvider wallets={wallets} onError={onError} autoConnect>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

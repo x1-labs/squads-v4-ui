@@ -25,9 +25,12 @@ import { BatchTransactionsProvider } from './hooks/useBatchTransactions';
 import { BatchApprovalsProvider } from './hooks/useBatchApprovals';
 import { BatchExecutesProvider } from './hooks/useBatchExecutes';
 
-const App = () => {
-  const queryClient = new QueryClient();
+// Create the QueryClient once at module scope. Creating it inside the component
+// body would discard the entire query cache (RPC URL, multisig data, …) on every
+// re-render of App, which can cascade into connection/wallet resets.
+const queryClient = new QueryClient();
 
+const App = () => {
   // @ts-ignore
   return (
     <ThemeProvider>

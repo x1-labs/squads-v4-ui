@@ -451,12 +451,6 @@ const ExecuteButton = ({
       queryClient.invalidateQueries({ queryKey: ['transaction-details'] }),
     ]);
 
-    // Force a page reload after a short delay to ensure all data is fresh
-    console.log('[ExecuteButton] Scheduling page reload');
-    setTimeout(() => {
-      window.location.reload();
-    }, 1500);
-
     // Return success result
     console.log('[ExecuteButton] Execution completed successfully');
     return {
