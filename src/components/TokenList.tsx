@@ -2,6 +2,8 @@ import { LAMPORTS_PER_SOL, Connection } from '@solana/web3.js';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import SendTokens from './SendTokensButton';
 import SendSol from './SendSolButton';
+import MintTokens from './MintTokensButton';
+import BurnTokens from './BurnTokensButton';
 import { useMultisigData } from '~/hooks/useMultisigData';
 import { useBalance, useGetTokens } from '~/hooks/useServices';
 import { useEffect, useState, useMemo } from 'react';
@@ -158,14 +160,32 @@ export function TokenList({ multisigPda }: TokenListProps) {
                         </p>
                       </div>
                     </div>
-                    <SendTokens
-                      mint={mint}
-                      tokenAccount={token.pubkey.toBase58()}
-                      decimals={token.account.data.parsed.info.tokenAmount.decimals}
-                      multisigPda={multisigPda}
-                      vaultIndex={vaultIndex}
-                      programId={programId.toBase58()}
-                    />
+                    <div className="flex gap-2">
+                      <MintTokens
+                        mint={mint}
+                        decimals={token.account.data.parsed.info.tokenAmount.decimals}
+                        multisigPda={multisigPda}
+                        vaultIndex={vaultIndex}
+                        programId={programId.toBase58()}
+                      />
+                      <BurnTokens
+                        mint={mint}
+                        tokenAccount={token.pubkey.toBase58()}
+                        decimals={token.account.data.parsed.info.tokenAmount.decimals}
+                        balance={token.account.data.parsed.info.tokenAmount.uiAmount || 0}
+                        multisigPda={multisigPda}
+                        vaultIndex={vaultIndex}
+                        programId={programId.toBase58()}
+                      />
+                      <SendTokens
+                        mint={mint}
+                        tokenAccount={token.pubkey.toBase58()}
+                        decimals={token.account.data.parsed.info.tokenAmount.decimals}
+                        multisigPda={multisigPda}
+                        vaultIndex={vaultIndex}
+                        programId={programId.toBase58()}
+                      />
+                    </div>
                   </div>
                 );
               })}
