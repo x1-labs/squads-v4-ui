@@ -78,9 +78,17 @@ export async function getStakeAccountsForVault(
 
         const stakeActivation = await getStakeActivation(connection as any, account.pubkey);
 
-        // Handle edge case where activationEpoch is max u64 value
-        // This indicates the stake is actually active from epoch 0
-        if (stake?.delegation?.activationEpoch === '18446744073709551615') {
+        // Genesis/bootstrap stakes report activationEpoch = u64::MAX and are active
+        // from epoch 0. getStakeActivation reports them as inactive, so we correct it —
+        // but ONLY when the stake has not been deactivated. A bootstrap stake with a
+        // real deactivationEpoch has been unstaked, so we trust getStakeActivation
+        // (which correctly reports inactive/deactivating) rather than forcing 'active'.
+        // Forcing 'active' here previously let already-deactivated genesis stakes be
+        // re-deactivated, failing on-chain with StakeError::AlreadyDeactivated (0x2).
+        if (
+          stake?.delegation?.activationEpoch === '18446744073709551615' &&
+          stake?.delegation?.deactivationEpoch === '18446744073709551615'
+        ) {
           stake.delegation.activationEpoch = '0';
           stakeActivation.status = 'active';
           stakeActivation.active = BigInt(stake.delegation.stake);
