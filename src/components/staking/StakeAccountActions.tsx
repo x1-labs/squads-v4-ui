@@ -59,7 +59,12 @@ export function StakeAccountActions({
 
   const addUnstakeToBatch = () => {
     if (!multisigVault) return;
-    const added = addItem(buildUnstakeBatchItem(account, multisigVault, vaultIndex, label));
+    const item = buildUnstakeBatchItem(account, multisigVault, vaultIndex, label);
+    if (!item) {
+      toast.error('This stake account is already deactivating or inactive');
+      return;
+    }
+    const added = addItem(item);
     if (added) {
       toast.success('Added unstake to batch queue');
     } else {

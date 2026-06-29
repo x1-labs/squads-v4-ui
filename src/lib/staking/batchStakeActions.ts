@@ -46,7 +46,15 @@ export function buildUnstakeBatchItem(
   vaultAddress: PublicKey,
   vaultIndex: number,
   label: string
-): NewBatchItem {
+): NewBatchItem | null {
+  // Only active/activating accounts can be deactivated. Re-deactivating an account
+  // that is already deactivating/inactive fails on-chain with StakeError::AlreadyDeactivated
+  // (custom error 0x2) and, because a VaultTransaction executes atomically, reverts the
+  // entire batched proposal. Skip such accounts so they never enter the batch.
+  if (account.state !== 'active' && account.state !== 'activating') {
+    return null;
+  }
+
   return {
     type: 'unstake',
     label: `Unstake ${label}`,
