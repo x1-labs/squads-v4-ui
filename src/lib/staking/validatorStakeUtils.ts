@@ -26,7 +26,7 @@ export async function validateVoteAccount(
     }
 
     if (!accountInfo.owner.equals(VoteProgram.programId)) {
-      return 'This is not a vote account. Please use the validator\'s vote account address, not their identity address.';
+      return "This is not a vote account. Please use the validator's vote account address, not their identity address.";
     }
 
     return null; // Valid vote account
@@ -229,6 +229,33 @@ export function createWithdrawStakeInstruction(
     toPubkey: vaultAddress,
     lamports,
   }).instructions[0];
+}
+
+/** Rent-exempt reserve of a stake account, in lamports. */
+export function rentReserveLamports(account: StakeAccountInfo): bigint {
+  return BigInt(Math.round(account.rentExemptReserve * LAMPORTS_PER_SOL));
+}
+
+/**
+ * Lamports to withdraw when draining an inactive stake account into the vault.
+ *
+ * A *full-balance* withdraw closes the account (removes the rent-exempt reserve
+ * and deallocates it). The on-chain stake program only permits that once the
+ * deactivation cooldown is fully complete. `getStakeActivation` reports a stake
+ * as `inactive` one or more epochs BEFORE the chain will allow the close, so a
+ * full-balance withdraw of a freshly-deactivated stake fails with
+ * `InsufficientFunds` — short by exactly the rent-exempt reserve. In a batched
+ * VaultTransaction (executed atomically) one such failure reverts the entire
+ * proposal.
+ *
+ * To stay safe regardless of cooldown state we withdraw everything EXCEPT the
+ * rent-exempt reserve. This always succeeds; the leftover reserve is a tiny,
+ * rent-exempt empty stake account that can be closed later once fully inactive.
+ */
+export function getDrainWithdrawLamports(account: StakeAccountInfo): bigint {
+  const balance = BigInt(account.balanceLamports);
+  const reserve = rentReserveLamports(account);
+  return balance > reserve ? balance - reserve : BigInt(0);
 }
 
 export async function createSplitStakeInstructions(

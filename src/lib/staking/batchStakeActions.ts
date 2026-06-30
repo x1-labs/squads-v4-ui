@@ -8,6 +8,7 @@ import {
   createStakeAccountWithSeedInstructions,
   createDelegateStakeInstruction,
   getCompatibleMergeAccounts,
+  getDrainWithdrawLamports,
 } from '@/lib/staking/validatorStakeUtils';
 
 type NewBatchItem = {
@@ -70,6 +71,12 @@ export function buildWithdrawBatchItem(
   vaultIndex: number,
   label: string
 ): NewBatchItem {
+  // Withdraw everything except the rent-exempt reserve rather than the full balance.
+  // Withdrawing the full balance closes the account, which the chain rejects while a
+  // freshly-deactivated stake is still finishing its cooldown (fails with
+  // InsufficientFunds, short by the reserve) — and in an atomic batch that single
+  // failure reverts the whole proposal. Leaving the reserve always succeeds; the tiny
+  // leftover account can be closed later once fully inactive.
   return {
     type: 'withdraw',
     label: `Withdraw ${label}`,
@@ -78,7 +85,7 @@ export function buildWithdrawBatchItem(
       createWithdrawStakeInstruction(
         new PublicKey(account.address),
         vaultAddress,
-        BigInt(account.balanceLamports)
+        getDrainWithdrawLamports(account)
       ),
     ],
     vaultIndex,
