@@ -26,7 +26,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '@/hooks/useAccess';
 import { waitForConfirmation } from '@/lib/transactionConfirmation';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
-import { createWithdrawStakeInstruction } from '@/lib/staking/validatorStakeUtils';
+import {
+  createWithdrawStakeInstruction,
+  getDrainWithdrawLamports,
+  rentReserveLamports,
+} from '@/lib/staking/validatorStakeUtils';
 import { StakeAccountInfo as StakeAccountData } from '@/lib/staking/validatorStakeUtils';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
 import {
@@ -100,12 +104,13 @@ export function WithdrawStakeDialog({
     const isStaked =
       selectedAccountInfo.state === 'active' || selectedAccountInfo.state === 'activating';
     if (selectedAccountInfo.state === 'inactive') {
-      // Inactive (fully deactivated/undelegated) accounts can withdraw everything
-      // The only valid withdrawal is the full balance (which closes the account)
-      // Partial withdrawals will fail with "insufficient funds" because the remaining
-      // balance would be less than rent-exempt reserve
-      maxWithdrawable = totalBalance;
-      maxWithdrawableWithRent = totalBalance;
+      // Default to withdrawing everything EXCEPT the rent-exempt reserve. That always
+      // succeeds. Withdrawing the full balance closes the account, which the chain only
+      // allows once the deactivation cooldown is fully complete — getStakeActivation
+      // reports a stake `inactive` an epoch or more before the chain will let it close,
+      // so closing too early fails with "insufficient funds" (short by the reserve).
+      maxWithdrawable = Math.max(0, totalBalance - rentReserve);
+      maxWithdrawableWithRent = totalBalance; // full balance (closes the account)
     } else if (selectedAccountInfo.state === 'deactivating') {
       // Deactivating accounts can only withdraw the inactive portion
       const inactiveAmount = selectedAccountInfo.inactiveStake || 0;
@@ -139,14 +144,23 @@ export function WithdrawStakeDialog({
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     })[0];
 
-    // For full withdrawals of inactive accounts, fetch the account balance one more time
-    // to get the most up-to-date value using raw RPC to preserve precision
+    // Determine the exact lamports to withdraw, preserving precision for very large
+    // balances (>2^53 lamports). Two "drain" intents withdraw most/all of the account:
+    //   - close: withdraw the full balance and deallocate the account
+    //   - safe drain: withdraw everything except the rent-exempt reserve. This always
+    //     succeeds, even while a freshly-deactivated stake is still finishing its
+    //     cooldown (when a full close would fail with "insufficient funds").
     let lamports: number | bigint;
-    const isFullWithdrawal = Math.abs(parsedAmount - selectedAccountInfo.balance) < 0.001;
+    const isClose = Math.abs(parsedAmount - selectedAccountInfo.balance) < 0.001;
+    const isSafeDrain =
+      selectedAccountInfo.state === 'inactive' &&
+      !isClose &&
+      Math.abs(parsedAmount - maxWithdrawable) < 0.001;
 
-    if (isFullWithdrawal && selectedAccountInfo.state === 'inactive') {
-      // For very large balances (>9 quadrillion lamports), we need to make a raw RPC call
-      // to get lamports as a string before JavaScript converts it to a Number
+    if (selectedAccountInfo.state === 'inactive' && (isClose || isSafeDrain)) {
+      // Re-fetch the live balance via raw RPC so large values aren't mangled by
+      // JSON.parse converting them to an imprecise Number.
+      let freshBalance = BigInt(selectedAccountInfo.balanceLamports);
       try {
         const response = await fetch(connection.rpcEndpoint, {
           method: 'POST',
@@ -158,43 +172,24 @@ export function WithdrawStakeDialog({
             params: [selectedAccountInfo.address, { encoding: 'base64' }],
           }),
         });
-
-        // Get raw text to avoid JSON.parse converting large numbers
+        // Read raw text to avoid JSON.parse rounding the lamports value.
         const responseText = await response.text();
-        console.log('Raw RPC response (first 500 chars):', responseText.substring(0, 500));
-
-        // Extract lamports value using regex to preserve it as a string
         const lamportsMatch = responseText.match(/"lamports":(\d+)/);
         if (lamportsMatch && lamportsMatch[1]) {
-          const lamportsString = lamportsMatch[1];
-          const lamportsBigInt = BigInt(lamportsString);
-
-          // Check if the value is safe to convert to Number
-          if (lamportsBigInt <= BigInt(Number.MAX_SAFE_INTEGER)) {
-            lamports = Number(lamportsBigInt);
-            console.log('Fresh account lamports (safe to use as Number):', lamports);
-          } else {
-            // For very large values, keep as BigInt to preserve precision
-            // Our createWithdrawStakeInstruction now supports bigint
-            lamports = lamportsBigInt;
-            console.log(
-              'Fresh account lamports (using BigInt for precision):',
-              lamportsString,
-              '→',
-              lamportsBigInt.toString()
-            );
-          }
-        } else {
-          throw new Error('Could not extract lamports from RPC response');
+          freshBalance = BigInt(lamportsMatch[1]);
         }
       } catch (error) {
-        console.error('Failed to fetch lamports via raw RPC, falling back:', error);
-        lamports = selectedAccountInfo.balanceLamports;
+        console.error('Failed to fetch fresh lamports via raw RPC, using cached balance:', error);
+      }
+
+      if (isClose) {
+        lamports = freshBalance; // closes the account (only valid once fully inactive)
+      } else {
+        const reserve = rentReserveLamports(selectedAccountInfo);
+        lamports = freshBalance > reserve ? freshBalance - reserve : BigInt(0);
       }
     } else {
-      lamports = isFullWithdrawal
-        ? selectedAccountInfo.balanceLamports
-        : Math.floor(parsedAmount * LAMPORTS_PER_SOL);
+      lamports = Math.floor(parsedAmount * LAMPORTS_PER_SOL);
     }
 
     const withdrawInstruction = createWithdrawStakeInstruction(
@@ -433,12 +428,15 @@ export function WithdrawStakeDialog({
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      // For inactive accounts, use exact lamports to avoid floating point errors
+                      // For inactive accounts, use exact lamports to avoid floating point
+                      // errors. The default drains everything except the rent-exempt
+                      // reserve (always succeeds); closing the account is the separate
+                      // "Close" action below.
                       if (
                         selectedAccountInfo.state === 'inactive' &&
                         selectedAccountInfo.balanceLamports
                       ) {
-                        const lamports = BigInt(selectedAccountInfo.balanceLamports);
+                        const lamports = getDrainWithdrawLamports(selectedAccountInfo);
                         const wholeSol = lamports / BigInt(LAMPORTS_PER_SOL);
                         const remainder = lamports % BigInt(LAMPORTS_PER_SOL);
                         // Convert to SOL with full precision: "wholePart.fractionalPart"
@@ -451,7 +449,7 @@ export function WithdrawStakeDialog({
                     className="w-full"
                   >
                     <span className="truncate">
-                      {selectedAccountInfo.state === 'inactive' ? 'Withdraw All & Close' : 'Max'} •{' '}
+                      {selectedAccountInfo.state === 'inactive' ? 'Withdraw All' : 'Max'} •{' '}
                       {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
                     </span>
                   </Button>
@@ -460,7 +458,22 @@ export function WithdrawStakeDialog({
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => setAmount(maxWithdrawableWithRent.toString())}
+                        onClick={() => {
+                          // Close = withdraw the full balance. Use exact lamports for
+                          // inactive accounts to avoid floating point errors.
+                          if (
+                            selectedAccountInfo.state === 'inactive' &&
+                            selectedAccountInfo.balanceLamports
+                          ) {
+                            const lamports = BigInt(selectedAccountInfo.balanceLamports);
+                            const wholeSol = lamports / BigInt(LAMPORTS_PER_SOL);
+                            const remainder = lamports % BigInt(LAMPORTS_PER_SOL);
+                            const fractional = remainder.toString().padStart(9, '0');
+                            setAmount(`${wholeSol}.${fractional}`);
+                          } else {
+                            setAmount(maxWithdrawableWithRent.toString());
+                          }
+                        }}
                         className="w-full"
                       >
                         <span className="truncate">

@@ -8,6 +8,7 @@ import {
   createStakeAccountWithSeedInstructions,
   createDelegateStakeInstruction,
   getCompatibleMergeAccounts,
+  getDrainWithdrawLamports,
 } from '@/lib/staking/validatorStakeUtils';
 
 type NewBatchItem = {
@@ -69,7 +70,22 @@ export function buildWithdrawBatchItem(
   vaultAddress: PublicKey,
   vaultIndex: number,
   label: string
-): NewBatchItem {
+): NewBatchItem | null {
+  // Only fully inactive accounts can be drained in a batch. A 'deactivating' account
+  // still holds effective (locked) stake, so withdrawing balance - reserve would exceed
+  // its withdrawable (inactive) portion and fail on-chain — and because a VaultTransaction
+  // executes atomically, that single failure reverts the whole proposal. Such partial
+  // withdrawals must go through the single-withdraw dialog, which caps the amount at the
+  // already-cooled-down portion.
+  if (account.state !== 'inactive') {
+    return null;
+  }
+
+  // Withdraw everything except the rent-exempt reserve rather than the full balance.
+  // Withdrawing the full balance closes the account, which the chain rejects while a
+  // freshly-deactivated stake is still finishing its cooldown (fails with
+  // InsufficientFunds, short by the reserve). Leaving the reserve always succeeds; the
+  // tiny leftover account can be closed later once fully inactive.
   return {
     type: 'withdraw',
     label: `Withdraw ${label}`,
@@ -78,7 +94,7 @@ export function buildWithdrawBatchItem(
       createWithdrawStakeInstruction(
         new PublicKey(account.address),
         vaultAddress,
-        BigInt(account.balanceLamports)
+        getDrainWithdrawLamports(account)
       ),
     ],
     vaultIndex,
