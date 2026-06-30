@@ -74,7 +74,14 @@ export function StakeAccountActions({
 
   const addWithdrawToBatch = () => {
     if (!multisigVault) return;
-    const added = addItem(buildWithdrawBatchItem(account, multisigVault, vaultIndex, label));
+    const item = buildWithdrawBatchItem(account, multisigVault, vaultIndex, label);
+    if (!item) {
+      toast.error(
+        'Only fully inactive accounts can be batch-withdrawn. Use the Withdraw dialog for a deactivating account.'
+      );
+      return;
+    }
+    const added = addItem(item);
     if (added) {
       toast.success('Added withdrawal to batch queue');
     } else {
@@ -96,11 +103,11 @@ export function StakeAccountActions({
     if (count === 0) {
       toast.error('Not enough instruction space in batch');
     } else if (count < compatible.length) {
-      toast.warning(`Added ${count} of ${compatible.length} merge operations (instruction limit reached)`);
-    } else {
-      toast.success(
-        `Added ${count} merge operation${count > 1 ? 's' : ''} to batch queue`
+      toast.warning(
+        `Added ${count} of ${compatible.length} merge operations (instruction limit reached)`
       );
+    } else {
+      toast.success(`Added ${count} merge operation${count > 1 ? 's' : ''} to batch queue`);
     }
   };
 
@@ -165,7 +172,7 @@ export function StakeAccountActions({
                   Add Unstake to Batch
                 </DropdownMenuItem>
               )}
-              {canWithdraw && (
+              {account.state === 'inactive' && (
                 <DropdownMenuItem onClick={addWithdrawToBatch} className="cursor-pointer">
                   <Layers className="mr-2 h-4 w-4" />
                   Add Withdraw to Batch

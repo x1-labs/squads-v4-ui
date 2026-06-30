@@ -249,8 +249,12 @@ export function rentReserveLamports(account: StakeAccountInfo): bigint {
  * proposal.
  *
  * To stay safe regardless of cooldown state we withdraw everything EXCEPT the
- * rent-exempt reserve. This always succeeds; the leftover reserve is a tiny,
- * rent-exempt empty stake account that can be closed later once fully inactive.
+ * rent-exempt reserve. The leftover reserve is a tiny, rent-exempt empty stake
+ * account that can be closed later once fully inactive.
+ *
+ * Precondition: `account.state === 'inactive'`. A 'deactivating' account still has
+ * effective (locked) stake, so `balance - reserve` would exceed its withdrawable
+ * portion and fail on-chain — callers must not pass one here.
  */
 export function getDrainWithdrawLamports(account: StakeAccountInfo): bigint {
   const balance = BigInt(account.balanceLamports);

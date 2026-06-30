@@ -26,7 +26,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '@/hooks/useAccess';
 import { waitForConfirmation } from '@/lib/transactionConfirmation';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
-import { createWithdrawStakeInstruction } from '@/lib/staking/validatorStakeUtils';
+import {
+  createWithdrawStakeInstruction,
+  getDrainWithdrawLamports,
+  rentReserveLamports,
+} from '@/lib/staking/validatorStakeUtils';
 import { StakeAccountInfo as StakeAccountData } from '@/lib/staking/validatorStakeUtils';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
 import {
@@ -181,9 +185,7 @@ export function WithdrawStakeDialog({
       if (isClose) {
         lamports = freshBalance; // closes the account (only valid once fully inactive)
       } else {
-        const reserve = BigInt(
-          Math.round(selectedAccountInfo.rentExemptReserve * LAMPORTS_PER_SOL)
-        );
+        const reserve = rentReserveLamports(selectedAccountInfo);
         lamports = freshBalance > reserve ? freshBalance - reserve : BigInt(0);
       }
     } else {
@@ -434,11 +436,7 @@ export function WithdrawStakeDialog({
                         selectedAccountInfo.state === 'inactive' &&
                         selectedAccountInfo.balanceLamports
                       ) {
-                        const reserve = BigInt(
-                          Math.round(selectedAccountInfo.rentExemptReserve * LAMPORTS_PER_SOL)
-                        );
-                        const balance = BigInt(selectedAccountInfo.balanceLamports);
-                        const lamports = balance > reserve ? balance - reserve : BigInt(0);
+                        const lamports = getDrainWithdrawLamports(selectedAccountInfo);
                         const wholeSol = lamports / BigInt(LAMPORTS_PER_SOL);
                         const remainder = lamports % BigInt(LAMPORTS_PER_SOL);
                         // Convert to SOL with full precision: "wholePart.fractionalPart"
