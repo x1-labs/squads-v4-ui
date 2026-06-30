@@ -163,7 +163,7 @@ export function StakeAccountActions({
           </DropdownMenuItem>
 
           {/* Batch actions */}
-          {(canUndelegate || canWithdraw || canSplit || canMerge) && (
+          {(canUndelegate || account.state === 'inactive' || canSplit || canMerge) && (
             <>
               <DropdownMenuSeparator />
               {canUndelegate && (
