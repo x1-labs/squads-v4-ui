@@ -8,7 +8,8 @@ import {
   createStakeAccountWithSeedInstructions,
   createDelegateStakeInstruction,
   getCompatibleMergeAccounts,
-  getDrainWithdrawLamports,
+  getCloseWithdrawLamports,
+  isStakeCloseable,
 } from '@/lib/staking/validatorStakeUtils';
 
 type NewBatchItem = {
@@ -71,30 +72,31 @@ export function buildWithdrawBatchItem(
   vaultIndex: number,
   label: string
 ): NewBatchItem | null {
-  // Only fully inactive accounts can be drained in a batch. A 'deactivating' account
-  // still holds effective (locked) stake, so withdrawing balance - reserve would exceed
-  // its withdrawable (inactive) portion and fail on-chain — and because a VaultTransaction
-  // executes atomically, that single failure reverts the whole proposal. Such partial
-  // withdrawals must go through the single-withdraw dialog, which caps the amount at the
+  // Only fully inactive accounts can be withdrawn in a batch. A 'deactivating' account
+  // still holds effective (locked) stake, so any withdraw would exceed its withdrawable
+  // (inactive) portion and fail on-chain — and because a VaultTransaction executes
+  // atomically, that single failure reverts the whole proposal. Such partial withdrawals
+  // must go through the single-withdraw dialog, which caps the amount at the
   // already-cooled-down portion.
-  if (account.state !== 'inactive') {
+  if (!isStakeCloseable(account)) {
     return null;
   }
 
-  // Withdraw everything except the rent-exempt reserve rather than the full balance.
-  // Withdrawing the full balance closes the account, which the chain rejects while a
-  // freshly-deactivated stake is still finishing its cooldown (fails with
-  // InsufficientFunds, short by the reserve). Leaving the reserve always succeeds; the
-  // tiny leftover account can be closed later once fully inactive.
+  // Withdraw the FULL balance, which closes the account and reclaims the rent-exempt
+  // reserve into the vault in one shot — no rent stranded, no second signing round to
+  // sweep dust later. This is valid precisely because the account is fully inactive
+  // (effective stake 0); the pre-proposal simulation in submitBatchProposal verifies it
+  // against live chain state before anyone signs, so a not-yet-cooled account can never
+  // slip through and revert the atomic batch after approval.
   return {
     type: 'withdraw',
-    label: `Withdraw ${label}`,
+    label: `Withdraw & Close ${label}`,
     description: `${formatBalance(account.balance)} XNT - ${shortAddress(account.address)}`,
     instructions: [
       createWithdrawStakeInstruction(
         new PublicKey(account.address),
         vaultAddress,
-        getDrainWithdrawLamports(account)
+        getCloseWithdrawLamports(account)
       ),
     ],
     vaultIndex,

@@ -9,6 +9,10 @@ import {
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { waitForConfirmation } from '~/lib/transactionConfirmation';
 import { addMemoToInstructions } from '~/lib/utils/memoInstruction';
+import {
+  simulateVaultInstructions,
+  describeVaultSimulationError,
+} from '~/lib/transaction/simulateVaultInstructions';
 
 export interface BatchProposalItem {
   instructions: TransactionInstruction[];
@@ -63,6 +67,25 @@ export async function submitBatchProposal(
 
   if (memo) {
     addMemoToInstructions(allInstructions, memo, vaultAddress);
+  }
+
+  // Simulate the vault's instructions against live chain state BEFORE anyone signs.
+  // A VaultTransaction executes atomically, so a single failing instruction (e.g. a
+  // stake that isn't fully cooled down, or a full-balance close whose amount drifted)
+  // would revert the whole proposal — after the multisig members already spent their
+  // signatures approving it. A genuine revert here means nothing is submitted and no
+  // signatures are wasted. If the simulation itself can't run (RPC hiccup), warn and
+  // proceed rather than hard-block a proposal that would otherwise succeed.
+  const simulation = await simulateVaultInstructions(
+    connection,
+    wallet.publicKey,
+    allInstructions
+  );
+  if (!simulation.ok) {
+    if (simulation.simulated) {
+      throw new Error(describeVaultSimulationError(simulation));
+    }
+    console.warn('Pre-proposal simulation could not run; proceeding without it:', simulation.error);
   }
 
   const blockhash = (await connection.getLatestBlockhash()).blockhash;

@@ -83,7 +83,7 @@ export function StakeAccountActions({
     }
     const added = addItem(item);
     if (added) {
-      toast.success('Added withdrawal to batch queue');
+      toast.success('Added withdraw & close to batch queue');
     } else {
       toast.error('Not enough instruction space in batch');
     }
@@ -175,7 +175,7 @@ export function StakeAccountActions({
               {account.state === 'inactive' && (
                 <DropdownMenuItem onClick={addWithdrawToBatch} className="cursor-pointer">
                   <Layers className="mr-2 h-4 w-4" />
-                  Add Withdraw to Batch
+                  Add Withdraw &amp; Close to Batch
                 </DropdownMenuItem>
               )}
               {canSplit && (

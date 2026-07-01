@@ -38,7 +38,7 @@ export async function validateVoteAccount(
 export interface StakeAccountInfo {
   address: string;
   balance: number;
-  balanceLamports: number; // Store original lamports to avoid floating point errors
+  balanceLamports: string; // Exact lamports as a string — precise above 2^53, unlike a JS number
   delegated: number;
   state: 'activating' | 'active' | 'deactivating' | 'inactive';
   delegatedValidator?: string;
@@ -47,6 +47,54 @@ export interface StakeAccountInfo {
   rentExemptReserve: number;
   activeStake?: number;
   inactiveStake?: number;
+}
+
+/**
+ * Fetch exact lamports for a set of accounts as strings, keyed by base58 address.
+ *
+ * web3.js returns `lamports` as a JS number, which silently rounds above 2^53
+ * (~9M XNT). We read the raw JSON-RPC response and pull the integer `lamports`
+ * tokens as strings so large balances stay exact — important because a stake
+ * CLOSE must withdraw the balance to the lamport (an off-by-one becomes a
+ * reverting partial withdrawal). `dataSlice` length 0 keeps the response tiny and
+ * ensures the only `"lamports":` token per entry is the account's own balance.
+ */
+async function fetchPreciseLamports(
+  connection: Connection,
+  pubkeys: PublicKey[]
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const CHUNK = 100; // getMultipleAccounts caps at 100 addresses per request
+  for (let i = 0; i < pubkeys.length; i += CHUNK) {
+    const chunk = pubkeys.slice(i, i + CHUNK);
+    try {
+      const response = await fetch(connection.rpcEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getMultipleAccounts',
+          params: [
+            chunk.map((p) => p.toBase58()),
+            { encoding: 'base64', dataSlice: { offset: 0, length: 0 } },
+          ],
+        }),
+      });
+      const text = await response.text();
+      const matches = [...text.matchAll(/"lamports":(\d+)/g)];
+      // The value array is in request order with no data payload, so exactly one
+      // lamports token per account. If the count doesn't line up (e.g. a null
+      // account), skip this chunk so we never misalign an amount onto the wrong
+      // account — callers fall back to the (imprecise) parsed value.
+      if (matches.length === chunk.length) {
+        chunk.forEach((p, idx) => map.set(p.toBase58(), matches[idx][1]));
+      }
+    } catch (error) {
+      console.error('Failed to fetch precise lamports; large balances may be imprecise:', error);
+    }
+  }
+  return map;
 }
 
 export async function getStakeAccountsForVault(
@@ -66,6 +114,19 @@ export async function getStakeAccountsForVault(
       // Disable JSON parsing to get raw response with string lamports
     })) as any;
 
+    // Needed to correctly classify genesis stakes at their deactivation-epoch boundary
+    // (see the genesis handling below).
+    const { epoch: currentEpoch } = await connection.getEpochInfo();
+
+    // getParsedProgramAccounts returns each account's `lamports` as a JS number, which
+    // rounds above 2^53 (any stake over ~9M XNT). A close withdraws the EXACT balance,
+    // so an off-by-a-lamport amount becomes a reverting partial withdraw. Read the exact
+    // lamports as strings so `balanceLamports` (and the close amount) stays precise.
+    const preciseLamports = await fetchPreciseLamports(
+      connection,
+      accounts.map((a: any) => a.pubkey as PublicKey)
+    );
+
     const stakeAccounts: StakeAccountInfo[] = [];
 
     for (const account of accounts) {
@@ -78,21 +139,34 @@ export async function getStakeAccountsForVault(
 
         const stakeActivation = await getStakeActivation(connection as any, account.pubkey);
 
-        // Genesis/bootstrap stakes report activationEpoch = u64::MAX and are active
-        // from epoch 0. getStakeActivation reports them as inactive, so we correct it —
-        // but ONLY when the stake has not been deactivated. A bootstrap stake with a
-        // real deactivationEpoch has been unstaked, so we trust getStakeActivation
-        // (which correctly reports inactive/deactivating) rather than forcing 'active'.
-        // Forcing 'active' here previously let already-deactivated genesis stakes be
-        // re-deactivated, failing on-chain with StakeError::AlreadyDeactivated (0x2).
-        if (
-          stake?.delegation?.activationEpoch === '18446744073709551615' &&
-          stake?.delegation?.deactivationEpoch === '18446744073709551615'
-        ) {
+        // Genesis/bootstrap stakes report activationEpoch = u64::MAX, which breaks
+        // getStakeActivation's activation math and makes it report them as `inactive`
+        // regardless of their real state. We correct that here.
+        const isGenesisStake = stake?.delegation?.activationEpoch === '18446744073709551615';
+        const deactivationEpochStr = stake?.delegation?.deactivationEpoch;
+        if (isGenesisStake && deactivationEpochStr === '18446744073709551615') {
+          // Not deactivated: a genesis stake is active from epoch 0.
+          // (Forcing 'active' only when NOT deactivated avoids re-deactivating an
+          // already-unstaked genesis stake, which fails with AlreadyDeactivated 0x2.)
           stake.delegation.activationEpoch = '0';
           stakeActivation.status = 'active';
           stakeActivation.active = BigInt(stake.delegation.stake);
           stakeActivation.inactive = BigInt(account.account.lamports) - stakeActivation.active;
+        } else if (
+          isGenesisStake &&
+          deactivationEpochStr &&
+          currentEpoch <= Number(deactivationEpochStr)
+        ) {
+          // Deactivated, but we're still AT (or before) the deactivation epoch: the full
+          // stake is still effective and only cools to 0 at deactivationEpoch + 1, so it
+          // is DEACTIVATING, not inactive. getStakeActivation mis-reports it as inactive
+          // (activationEpoch = u64::MAX), so correct it — otherwise the UI offers a
+          // withdraw/close that the chain would reject (short by the whole stake). Once
+          // currentEpoch > deactivationEpoch the stake has cooled and getStakeActivation's
+          // 'inactive' is correct, so we leave it alone.
+          stakeActivation.status = 'deactivating';
+          stakeActivation.active = BigInt(stake.delegation.stake);
+          stakeActivation.inactive = BigInt(0);
         }
 
         let state = 'inactive';
@@ -103,12 +177,16 @@ export async function getStakeAccountsForVault(
         stakeAccounts.push({
           address: account.pubkey.toBase58(),
           balance: account.account.lamports / LAMPORTS_PER_SOL,
-          balanceLamports: account.account.lamports,
+          balanceLamports:
+            preciseLamports.get(account.pubkey.toBase58()) ?? String(account.account.lamports),
           delegated: stake.delegation.stake / LAMPORTS_PER_SOL,
           state: state as 'activating' | 'active' | 'deactivating' | 'inactive',
           delegatedValidator: stake.delegation?.voter,
-          activationEpoch: stake.activationEpoch,
-          deactivationEpoch: stake.deactivationEpoch,
+          // Epochs live on `stake.delegation`, not `stake` — and are u64 strings
+          // (u64::MAX = "not deactivated"). Parse to numbers so callers can reason
+          // about the deactivation cooldown.
+          activationEpoch: parseEpoch(stake.delegation?.activationEpoch),
+          deactivationEpoch: parseEpoch(stake.delegation?.deactivationEpoch),
           rentExemptReserve: meta.rentExemptReserve / LAMPORTS_PER_SOL,
           activeStake: Number(stakeActivation.active / BigInt(LAMPORTS_PER_SOL)),
           inactiveStake: Number(stakeActivation.inactive / BigInt(LAMPORTS_PER_SOL)),
@@ -123,7 +201,8 @@ export async function getStakeAccountsForVault(
         stakeAccounts.push({
           address: account.pubkey.toBase58(),
           balance: account.account.lamports / LAMPORTS_PER_SOL,
-          balanceLamports: account.account.lamports,
+          balanceLamports:
+            preciseLamports.get(account.pubkey.toBase58()) ?? String(account.account.lamports),
           delegated: delegated,
           state: 'inactive',
           rentExemptReserve: meta.rentExemptReserve / LAMPORTS_PER_SOL,
@@ -231,35 +310,52 @@ export function createWithdrawStakeInstruction(
   }).instructions[0];
 }
 
-/** Rent-exempt reserve of a stake account, in lamports. */
-export function rentReserveLamports(account: StakeAccountInfo): bigint {
-  return BigInt(Math.round(account.rentExemptReserve * LAMPORTS_PER_SOL));
+/** u64::MAX — the "not set" sentinel the stake program uses for activation/deactivation epochs. */
+const U64_MAX_STR = '18446744073709551615';
+
+/** Parse a u64 epoch string into a number, treating the u64::MAX sentinel as "unset". */
+function parseEpoch(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  const s = String(value);
+  if (s === U64_MAX_STR) return undefined;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 /**
- * Lamports to withdraw when draining an inactive stake account into the vault.
+ * Whether a stake account can be fully closed (withdraw the entire balance and
+ * deallocate) right now.
  *
- * A *full-balance* withdraw closes the account (removes the rent-exempt reserve
- * and deallocates it). The on-chain stake program only permits that once the
- * deactivation cooldown is fully complete. `getStakeActivation` reports a stake
- * as `inactive` one or more epochs BEFORE the chain will allow the close, so a
- * full-balance withdraw of a freshly-deactivated stake fails with
- * `InsufficientFunds` — short by exactly the rent-exempt reserve. In a batched
- * VaultTransaction (executed atomically) one such failure reverts the entire
- * proposal.
- *
- * To stay safe regardless of cooldown state we withdraw everything EXCEPT the
- * rent-exempt reserve. The leftover reserve is a tiny, rent-exempt empty stake
- * account that can be closed later once fully inactive.
- *
- * Precondition: `account.state === 'inactive'`. A 'deactivating' account still has
- * effective (locked) stake, so `balance - reserve` would exceed its withdrawable
- * portion and fail on-chain — callers must not pass one here.
+ * The on-chain stake program permits a full-balance close iff the account's
+ * *effective* stake is exactly 0 — i.e. it is fully cooled down. The withdraw
+ * check is `lamports + effective_stake + rent_reserve > balance`, so while any
+ * effective stake remains BOTH a full close AND a `balance - reserve` drain fail
+ * identically. Our `state === 'inactive'` verdict is exactly `effective_stake == 0`
+ * (from `getStakeActivation` / the client-side activation calc), so it is the
+ * correct gate. The residual epoch-boundary race (RPC reporting `inactive` an
+ * epoch early) is caught by the pre-proposal simulation, which runs the real
+ * withdraw against live chain state before anyone signs.
  */
-export function getDrainWithdrawLamports(account: StakeAccountInfo): bigint {
-  const balance = BigInt(account.balanceLamports);
-  const reserve = rentReserveLamports(account);
-  return balance > reserve ? balance - reserve : BigInt(0);
+export function isStakeCloseable(account: StakeAccountInfo): boolean {
+  return account.state === 'inactive';
+}
+
+/**
+ * Lamports to withdraw to CLOSE an inactive stake account — the full balance,
+ * which deallocates the account and reclaims the rent-exempt reserve into the
+ * vault in a single instruction (no rent left stranded, no second proposal).
+ *
+ * Uses exact integer lamports (never `float * 1e9`), because the close path is
+ * gated on `lamports == balance` exactly: an amount even one lamport short is
+ * treated as a partial withdrawal and reverts with `InsufficientFunds` for
+ * leaving less than the rent reserve. An inactive account's balance is stable
+ * (it earns no rewards), so this exact value stays valid through the
+ * sign→execute delay.
+ *
+ * Precondition: `isStakeCloseable(account)` (fully inactive / effective stake 0).
+ */
+export function getCloseWithdrawLamports(account: StakeAccountInfo): bigint {
+  return BigInt(account.balanceLamports);
 }
 
 export async function createSplitStakeInstructions(
