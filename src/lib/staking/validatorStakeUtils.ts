@@ -38,7 +38,7 @@ export async function validateVoteAccount(
 export interface StakeAccountInfo {
   address: string;
   balance: number;
-  balanceLamports: number; // Store original lamports to avoid floating point errors
+  balanceLamports: string; // Exact lamports as a string — precise above 2^53, unlike a JS number
   delegated: number;
   state: 'activating' | 'active' | 'deactivating' | 'inactive';
   delegatedValidator?: string;
@@ -47,6 +47,54 @@ export interface StakeAccountInfo {
   rentExemptReserve: number;
   activeStake?: number;
   inactiveStake?: number;
+}
+
+/**
+ * Fetch exact lamports for a set of accounts as strings, keyed by base58 address.
+ *
+ * web3.js returns `lamports` as a JS number, which silently rounds above 2^53
+ * (~9M XNT). We read the raw JSON-RPC response and pull the integer `lamports`
+ * tokens as strings so large balances stay exact — important because a stake
+ * CLOSE must withdraw the balance to the lamport (an off-by-one becomes a
+ * reverting partial withdrawal). `dataSlice` length 0 keeps the response tiny and
+ * ensures the only `"lamports":` token per entry is the account's own balance.
+ */
+async function fetchPreciseLamports(
+  connection: Connection,
+  pubkeys: PublicKey[]
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const CHUNK = 100; // getMultipleAccounts caps at 100 addresses per request
+  for (let i = 0; i < pubkeys.length; i += CHUNK) {
+    const chunk = pubkeys.slice(i, i + CHUNK);
+    try {
+      const response = await fetch(connection.rpcEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getMultipleAccounts',
+          params: [
+            chunk.map((p) => p.toBase58()),
+            { encoding: 'base64', dataSlice: { offset: 0, length: 0 } },
+          ],
+        }),
+      });
+      const text = await response.text();
+      const matches = [...text.matchAll(/"lamports":(\d+)/g)];
+      // The value array is in request order with no data payload, so exactly one
+      // lamports token per account. If the count doesn't line up (e.g. a null
+      // account), skip this chunk so we never misalign an amount onto the wrong
+      // account — callers fall back to the (imprecise) parsed value.
+      if (matches.length === chunk.length) {
+        chunk.forEach((p, idx) => map.set(p.toBase58(), matches[idx][1]));
+      }
+    } catch (error) {
+      console.error('Failed to fetch precise lamports; large balances may be imprecise:', error);
+    }
+  }
+  return map;
 }
 
 export async function getStakeAccountsForVault(
@@ -69,6 +117,15 @@ export async function getStakeAccountsForVault(
     // Needed to correctly classify genesis stakes at their deactivation-epoch boundary
     // (see the genesis handling below).
     const { epoch: currentEpoch } = await connection.getEpochInfo();
+
+    // getParsedProgramAccounts returns each account's `lamports` as a JS number, which
+    // rounds above 2^53 (any stake over ~9M XNT). A close withdraws the EXACT balance,
+    // so an off-by-a-lamport amount becomes a reverting partial withdraw. Read the exact
+    // lamports as strings so `balanceLamports` (and the close amount) stays precise.
+    const preciseLamports = await fetchPreciseLamports(
+      connection,
+      accounts.map((a: any) => a.pubkey as PublicKey)
+    );
 
     const stakeAccounts: StakeAccountInfo[] = [];
 
@@ -120,7 +177,8 @@ export async function getStakeAccountsForVault(
         stakeAccounts.push({
           address: account.pubkey.toBase58(),
           balance: account.account.lamports / LAMPORTS_PER_SOL,
-          balanceLamports: account.account.lamports,
+          balanceLamports:
+            preciseLamports.get(account.pubkey.toBase58()) ?? String(account.account.lamports),
           delegated: stake.delegation.stake / LAMPORTS_PER_SOL,
           state: state as 'activating' | 'active' | 'deactivating' | 'inactive',
           delegatedValidator: stake.delegation?.voter,
@@ -143,7 +201,8 @@ export async function getStakeAccountsForVault(
         stakeAccounts.push({
           address: account.pubkey.toBase58(),
           balance: account.account.lamports / LAMPORTS_PER_SOL,
-          balanceLamports: account.account.lamports,
+          balanceLamports:
+            preciseLamports.get(account.pubkey.toBase58()) ?? String(account.account.lamports),
           delegated: delegated,
           state: 'inactive',
           rentExemptReserve: meta.rentExemptReserve / LAMPORTS_PER_SOL,
