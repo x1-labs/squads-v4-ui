@@ -234,11 +234,6 @@ export function createWithdrawStakeInstruction(
   }).instructions[0];
 }
 
-/** Rent-exempt reserve of a stake account, in lamports. */
-export function rentReserveLamports(account: StakeAccountInfo): bigint {
-  return BigInt(Math.round(account.rentExemptReserve * LAMPORTS_PER_SOL));
-}
-
 /** u64::MAX — the "not set" sentinel the stake program uses for activation/deactivation epochs. */
 const U64_MAX_STR = '18446744073709551615';
 
@@ -285,24 +280,6 @@ export function isStakeCloseable(account: StakeAccountInfo): boolean {
  */
 export function getCloseWithdrawLamports(account: StakeAccountInfo): bigint {
   return BigInt(account.balanceLamports);
-}
-
-/**
- * Lamports to withdraw when draining an inactive stake account WITHOUT closing
- * it — everything except the rent-exempt reserve. This leaves a tiny rent-exempt
- * empty account behind and is only a fallback; prefer `getCloseWithdrawLamports`
- * so the rent is reclaimed in one shot.
- *
- * Note: this does NOT survive the deactivation cooldown — a `balance - reserve`
- * withdraw fails on-chain exactly when a full close does (both require
- * effective stake 0), so it is not a "safe during cooldown" alternative.
- *
- * Precondition: `account.state === 'inactive'`.
- */
-export function getDrainWithdrawLamports(account: StakeAccountInfo): bigint {
-  const balance = BigInt(account.balanceLamports);
-  const reserve = rentReserveLamports(account);
-  return balance > reserve ? balance - reserve : BigInt(0);
 }
 
 export async function createSplitStakeInstructions(

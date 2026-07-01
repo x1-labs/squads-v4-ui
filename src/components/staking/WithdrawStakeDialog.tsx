@@ -97,15 +97,11 @@ export function WithdrawStakeDialog({
   // - if is_staked && lamports_and_reserve > stake_account.get_lamports() => error
   // - if not full withdrawal && lamports_and_reserve > stake_account.get_lamports() => error
   let maxWithdrawable = 0;
-  let maxWithdrawableWithRent = 0; // Full balance including rent (closes account)
 
   const SAFETY_BUFFER_PERCENT = 0.01; // 1% safety buffer to prevent edge cases
 
   if (selectedAccountInfo) {
     const totalBalance = selectedAccountInfo.balance;
-    const rentReserve = selectedAccountInfo.rentExemptReserve;
-    const isStaked =
-      selectedAccountInfo.state === 'active' || selectedAccountInfo.state === 'activating';
     if (selectedAccountInfo.state === 'inactive') {
       // A fully inactive account can withdraw its ENTIRE balance, which closes the
       // account and reclaims the rent-exempt reserve into the vault in one shot. This
@@ -113,28 +109,32 @@ export function WithdrawStakeDialog({
       // means); the pre-submit simulation verifies it against live chain state before
       // the proposal is created, so a not-yet-cooled account never slips through.
       maxWithdrawable = totalBalance;
-      maxWithdrawableWithRent = totalBalance; // full balance (closes the account)
     } else if (selectedAccountInfo.state === 'deactivating') {
-      // Deactivating accounts can only withdraw the inactive portion
+      // Deactivating accounts can only withdraw the already-cooled inactive portion.
       const inactiveAmount = selectedAccountInfo.inactiveStake || 0;
       const safetyBuffer = inactiveAmount * SAFETY_BUFFER_PERCENT;
       maxWithdrawable = Math.max(0, inactiveAmount - safetyBuffer);
-      // For account closure, can withdraw full inactive amount + rent exempt portion
-      maxWithdrawableWithRent = Math.max(0, inactiveAmount + rentReserve);
     }
   }
 
   const parsedAmount = parseFloat(amount);
 
-  // For display and button click, convert exact lamports to SOL with full precision
-  const maxWithdrawableExact = selectedAccountInfo
-    ? Number(BigInt(selectedAccountInfo.balanceLamports)) / LAMPORTS_PER_SOL
-    : maxWithdrawable;
+  // Exact ceiling for validation and close detection. Only a fully-inactive account
+  // may withdraw its full balance (and thereby close), using exact integer lamports to
+  // avoid float rounding at the close boundary. For every other state the ceiling is
+  // maxWithdrawable (the cooled-down portion) — NOT the full balance.
+  const maxWithdrawableExact =
+    selectedAccountInfo && selectedAccountInfo.state === 'inactive'
+      ? Number(BigInt(selectedAccountInfo.balanceLamports)) / LAMPORTS_PER_SOL
+      : maxWithdrawable;
 
   const isAmountValid =
     !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= maxWithdrawableExact + 0.000000001; // Small tolerance for floating point precision
+  // Closing only happens when a fully-inactive account withdraws its entire balance.
   const isClosingAccount =
-    Math.abs(parsedAmount - maxWithdrawableExact) < 0.000000001 && maxWithdrawableExact > 0;
+    selectedAccountInfo?.state === 'inactive' &&
+    Math.abs(parsedAmount - maxWithdrawableExact) < 0.000000001 &&
+    maxWithdrawableExact > 0;
 
   const withdrawStake = async () => {
     if (!wallet.publicKey || !multisigAddress || !selectedAccountInfo) {
@@ -199,10 +199,14 @@ export function WithdrawStakeDialog({
 
     // Simulate against live chain state before creating the proposal, so a stake
     // that isn't actually closeable yet fails HERE — not as a revert after the
-    // multisig members have already approved it.
-    const simulation = await simulateVaultInstructions(connection, vaultAddress, instructions);
+    // multisig members have already approved it. If the simulation can't run (RPC
+    // hiccup), warn and proceed rather than block a withdrawal that would succeed.
+    const simulation = await simulateVaultInstructions(connection, wallet.publicKey, instructions);
     if (!simulation.ok) {
-      throw describeVaultSimulationError(simulation);
+      if (simulation.simulated) {
+        throw describeVaultSimulationError(simulation);
+      }
+      console.warn('Pre-proposal simulation could not run; proceeding without it:', simulation.error);
     }
 
     const multisigInfo = await multisig.accounts.Multisig.fromAccountAddress(
@@ -457,7 +461,7 @@ export function WithdrawStakeDialog({
               <div className="flex items-center gap-1 text-xs text-red-500">
                 <AlertCircle className="h-3 w-3" />
                 <span>
-                  Max withdrawable: {formatXNTCompact(maxWithdrawableWithRent * LAMPORTS_PER_SOL)}
+                  Max withdrawable: {formatXNTCompact(maxWithdrawableExact * LAMPORTS_PER_SOL)}
                 </span>
               </div>
             )}
