@@ -66,6 +66,10 @@ export async function getStakeAccountsForVault(
       // Disable JSON parsing to get raw response with string lamports
     })) as any;
 
+    // Needed to correctly classify genesis stakes at their deactivation-epoch boundary
+    // (see the genesis handling below).
+    const { epoch: currentEpoch } = await connection.getEpochInfo();
+
     const stakeAccounts: StakeAccountInfo[] = [];
 
     for (const account of accounts) {
@@ -78,21 +82,34 @@ export async function getStakeAccountsForVault(
 
         const stakeActivation = await getStakeActivation(connection as any, account.pubkey);
 
-        // Genesis/bootstrap stakes report activationEpoch = u64::MAX and are active
-        // from epoch 0. getStakeActivation reports them as inactive, so we correct it —
-        // but ONLY when the stake has not been deactivated. A bootstrap stake with a
-        // real deactivationEpoch has been unstaked, so we trust getStakeActivation
-        // (which correctly reports inactive/deactivating) rather than forcing 'active'.
-        // Forcing 'active' here previously let already-deactivated genesis stakes be
-        // re-deactivated, failing on-chain with StakeError::AlreadyDeactivated (0x2).
-        if (
-          stake?.delegation?.activationEpoch === '18446744073709551615' &&
-          stake?.delegation?.deactivationEpoch === '18446744073709551615'
-        ) {
+        // Genesis/bootstrap stakes report activationEpoch = u64::MAX, which breaks
+        // getStakeActivation's activation math and makes it report them as `inactive`
+        // regardless of their real state. We correct that here.
+        const isGenesisStake = stake?.delegation?.activationEpoch === '18446744073709551615';
+        const deactivationEpochStr = stake?.delegation?.deactivationEpoch;
+        if (isGenesisStake && deactivationEpochStr === '18446744073709551615') {
+          // Not deactivated: a genesis stake is active from epoch 0.
+          // (Forcing 'active' only when NOT deactivated avoids re-deactivating an
+          // already-unstaked genesis stake, which fails with AlreadyDeactivated 0x2.)
           stake.delegation.activationEpoch = '0';
           stakeActivation.status = 'active';
           stakeActivation.active = BigInt(stake.delegation.stake);
           stakeActivation.inactive = BigInt(account.account.lamports) - stakeActivation.active;
+        } else if (
+          isGenesisStake &&
+          deactivationEpochStr &&
+          currentEpoch <= Number(deactivationEpochStr)
+        ) {
+          // Deactivated, but we're still AT (or before) the deactivation epoch: the full
+          // stake is still effective and only cools to 0 at deactivationEpoch + 1, so it
+          // is DEACTIVATING, not inactive. getStakeActivation mis-reports it as inactive
+          // (activationEpoch = u64::MAX), so correct it — otherwise the UI offers a
+          // withdraw/close that the chain would reject (short by the whole stake). Once
+          // currentEpoch > deactivationEpoch the stake has cooled and getStakeActivation's
+          // 'inactive' is correct, so we leave it alone.
+          stakeActivation.status = 'deactivating';
+          stakeActivation.active = BigInt(stake.delegation.stake);
+          stakeActivation.inactive = BigInt(0);
         }
 
         let state = 'inactive';
