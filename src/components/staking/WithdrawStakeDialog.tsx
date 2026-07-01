@@ -28,10 +28,13 @@ import { waitForConfirmation } from '@/lib/transactionConfirmation';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import {
   createWithdrawStakeInstruction,
-  getDrainWithdrawLamports,
-  rentReserveLamports,
+  getCloseWithdrawLamports,
 } from '@/lib/staking/validatorStakeUtils';
 import { StakeAccountInfo as StakeAccountData } from '@/lib/staking/validatorStakeUtils';
+import {
+  simulateVaultInstructions,
+  describeVaultSimulationError,
+} from '@/lib/transaction/simulateVaultInstructions';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
 import {
   Select,
@@ -104,12 +107,12 @@ export function WithdrawStakeDialog({
     const isStaked =
       selectedAccountInfo.state === 'active' || selectedAccountInfo.state === 'activating';
     if (selectedAccountInfo.state === 'inactive') {
-      // Default to withdrawing everything EXCEPT the rent-exempt reserve. That always
-      // succeeds. Withdrawing the full balance closes the account, which the chain only
-      // allows once the deactivation cooldown is fully complete — getStakeActivation
-      // reports a stake `inactive` an epoch or more before the chain will let it close,
-      // so closing too early fails with "insufficient funds" (short by the reserve).
-      maxWithdrawable = Math.max(0, totalBalance - rentReserve);
+      // A fully inactive account can withdraw its ENTIRE balance, which closes the
+      // account and reclaims the rent-exempt reserve into the vault in one shot. This
+      // is valid precisely because the effective stake is 0 (that's what 'inactive'
+      // means); the pre-submit simulation verifies it against live chain state before
+      // the proposal is created, so a not-yet-cooled account never slips through.
+      maxWithdrawable = totalBalance;
       maxWithdrawableWithRent = totalBalance; // full balance (closes the account)
     } else if (selectedAccountInfo.state === 'deactivating') {
       // Deactivating accounts can only withdraw the inactive portion
@@ -144,22 +147,20 @@ export function WithdrawStakeDialog({
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     })[0];
 
-    // Determine the exact lamports to withdraw, preserving precision for very large
-    // balances (>2^53 lamports). Two "drain" intents withdraw most/all of the account:
-    //   - close: withdraw the full balance and deallocate the account
-    //   - safe drain: withdraw everything except the rent-exempt reserve. This always
-    //     succeeds, even while a freshly-deactivated stake is still finishing its
-    //     cooldown (when a full close would fail with "insufficient funds").
+    // Determine the exact lamports to withdraw.
+    //   - close: withdraw the FULL balance, deallocating the account and reclaiming
+    //     the rent-exempt reserve in one shot. The close path is gated on
+    //     `lamports == balance` EXACTLY — an amount even one lamport short is treated
+    //     as a partial withdraw and reverts for leaving < rent reserve — so we re-fetch
+    //     the live balance and use exact integer lamports (never `float * 1e9`).
+    //   - partial: an explicit smaller amount, floored to whole lamports.
     let lamports: number | bigint;
     const isClose = Math.abs(parsedAmount - selectedAccountInfo.balance) < 0.001;
-    const isSafeDrain =
-      selectedAccountInfo.state === 'inactive' &&
-      !isClose &&
-      Math.abs(parsedAmount - maxWithdrawable) < 0.001;
 
-    if (selectedAccountInfo.state === 'inactive' && (isClose || isSafeDrain)) {
+    if (selectedAccountInfo.state === 'inactive' && isClose) {
       // Re-fetch the live balance via raw RPC so large values aren't mangled by
-      // JSON.parse converting them to an imprecise Number.
+      // JSON.parse converting them to an imprecise Number, and so the close amount
+      // matches the on-chain balance exactly.
       let freshBalance = BigInt(selectedAccountInfo.balanceLamports);
       try {
         const response = await fetch(connection.rpcEndpoint, {
@@ -182,12 +183,7 @@ export function WithdrawStakeDialog({
         console.error('Failed to fetch fresh lamports via raw RPC, using cached balance:', error);
       }
 
-      if (isClose) {
-        lamports = freshBalance; // closes the account (only valid once fully inactive)
-      } else {
-        const reserve = rentReserveLamports(selectedAccountInfo);
-        lamports = freshBalance > reserve ? freshBalance - reserve : BigInt(0);
-      }
+      lamports = freshBalance; // closes the account (valid once fully inactive)
     } else {
       lamports = Math.floor(parsedAmount * LAMPORTS_PER_SOL);
     }
@@ -200,6 +196,14 @@ export function WithdrawStakeDialog({
 
     const instructions: TransactionInstruction[] = [withdrawInstruction];
     addMemoToInstructions(instructions, memo, vaultAddress);
+
+    // Simulate against live chain state before creating the proposal, so a stake
+    // that isn't actually closeable yet fails HERE — not as a revert after the
+    // multisig members have already approved it.
+    const simulation = await simulateVaultInstructions(connection, vaultAddress, instructions);
+    if (!simulation.ok) {
+      throw describeVaultSimulationError(simulation);
+    }
 
     const multisigInfo = await multisig.accounts.Multisig.fromAccountAddress(
       // @ts-ignore
@@ -392,10 +396,10 @@ export function WithdrawStakeDialog({
                     <span>Wait for deactivation to complete or account balance too low</span>
                   </div>
                 )}
-                {maxWithdrawableWithRent > maxWithdrawable && (
+                {selectedAccountInfo.state === 'inactive' && (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    💡 Withdraw {formatXNTCompact(maxWithdrawableWithRent * LAMPORTS_PER_SOL)} to
-                    close account
+                    💡 Withdrawing the full balance closes the account and returns the rent
+                    reserve to the vault.
                   </p>
                 )}
               </div>
@@ -416,72 +420,35 @@ export function WithdrawStakeDialog({
                 className="text-lg"
               />
               {selectedAccountInfo && maxWithdrawable > 0 && (
-                <div
-                  className={
-                    maxWithdrawableWithRent > maxWithdrawable &&
-                    selectedAccountInfo.state !== 'deactivating'
-                      ? 'grid grid-cols-2 gap-2'
-                      : ''
-                  }
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    // For inactive accounts, set the EXACT full balance (integer lamports,
+                    // no float rounding) so the withdraw closes the account. For a
+                    // deactivating account, only the already-cooled inactive portion is
+                    // withdrawable.
+                    if (
+                      selectedAccountInfo.state === 'inactive' &&
+                      selectedAccountInfo.balanceLamports
+                    ) {
+                      const lamports = getCloseWithdrawLamports(selectedAccountInfo);
+                      const wholeSol = lamports / BigInt(LAMPORTS_PER_SOL);
+                      const remainder = lamports % BigInt(LAMPORTS_PER_SOL);
+                      // Convert to SOL with full precision: "wholePart.fractionalPart"
+                      const fractional = remainder.toString().padStart(9, '0');
+                      setAmount(`${wholeSol}.${fractional}`);
+                    } else {
+                      setAmount(maxWithdrawable.toString());
+                    }
+                  }}
+                  className="w-full"
                 >
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      // For inactive accounts, use exact lamports to avoid floating point
-                      // errors. The default drains everything except the rent-exempt
-                      // reserve (always succeeds); closing the account is the separate
-                      // "Close" action below.
-                      if (
-                        selectedAccountInfo.state === 'inactive' &&
-                        selectedAccountInfo.balanceLamports
-                      ) {
-                        const lamports = getDrainWithdrawLamports(selectedAccountInfo);
-                        const wholeSol = lamports / BigInt(LAMPORTS_PER_SOL);
-                        const remainder = lamports % BigInt(LAMPORTS_PER_SOL);
-                        // Convert to SOL with full precision: "wholePart.fractionalPart"
-                        const fractional = remainder.toString().padStart(9, '0');
-                        setAmount(`${wholeSol}.${fractional}`);
-                      } else {
-                        setAmount(maxWithdrawable.toString());
-                      }
-                    }}
-                    className="w-full"
-                  >
-                    <span className="truncate">
-                      {selectedAccountInfo.state === 'inactive' ? 'Withdraw All' : 'Max'} •{' '}
-                      {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
-                    </span>
-                  </Button>
-                  {maxWithdrawableWithRent > maxWithdrawable &&
-                    selectedAccountInfo.state !== 'deactivating' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          // Close = withdraw the full balance. Use exact lamports for
-                          // inactive accounts to avoid floating point errors.
-                          if (
-                            selectedAccountInfo.state === 'inactive' &&
-                            selectedAccountInfo.balanceLamports
-                          ) {
-                            const lamports = BigInt(selectedAccountInfo.balanceLamports);
-                            const wholeSol = lamports / BigInt(LAMPORTS_PER_SOL);
-                            const remainder = lamports % BigInt(LAMPORTS_PER_SOL);
-                            const fractional = remainder.toString().padStart(9, '0');
-                            setAmount(`${wholeSol}.${fractional}`);
-                          } else {
-                            setAmount(maxWithdrawableWithRent.toString());
-                          }
-                        }}
-                        className="w-full"
-                      >
-                        <span className="truncate">
-                          Close • {formatXNTCompact(maxWithdrawableWithRent * LAMPORTS_PER_SOL)}
-                        </span>
-                      </Button>
-                    )}
-                </div>
+                  <span className="truncate">
+                    {selectedAccountInfo.state === 'inactive' ? 'Withdraw All & Close' : 'Max'} •{' '}
+                    {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
+                  </span>
+                </Button>
               )}
             </div>
 

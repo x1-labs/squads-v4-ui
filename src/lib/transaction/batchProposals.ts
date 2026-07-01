@@ -9,6 +9,10 @@ import {
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { waitForConfirmation } from '~/lib/transactionConfirmation';
 import { addMemoToInstructions } from '~/lib/utils/memoInstruction';
+import {
+  simulateVaultInstructions,
+  describeVaultSimulationError,
+} from '~/lib/transaction/simulateVaultInstructions';
 
 export interface BatchProposalItem {
   instructions: TransactionInstruction[];
@@ -63,6 +67,17 @@ export async function submitBatchProposal(
 
   if (memo) {
     addMemoToInstructions(allInstructions, memo, vaultAddress);
+  }
+
+  // Simulate the vault's instructions against live chain state BEFORE anyone signs.
+  // A VaultTransaction executes atomically, so a single failing instruction (e.g. a
+  // stake that isn't fully cooled down, or a full-balance close whose amount drifted)
+  // would revert the whole proposal — after the multisig members already spent their
+  // signatures approving it. Failing here means nothing is submitted and no signatures
+  // are wasted.
+  const simulation = await simulateVaultInstructions(connection, vaultAddress, allInstructions);
+  if (!simulation.ok) {
+    throw new Error(describeVaultSimulationError(simulation));
   }
 
   const blockhash = (await connection.getLatestBlockhash()).blockhash;

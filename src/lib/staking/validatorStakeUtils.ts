@@ -107,8 +107,11 @@ export async function getStakeAccountsForVault(
           delegated: stake.delegation.stake / LAMPORTS_PER_SOL,
           state: state as 'activating' | 'active' | 'deactivating' | 'inactive',
           delegatedValidator: stake.delegation?.voter,
-          activationEpoch: stake.activationEpoch,
-          deactivationEpoch: stake.deactivationEpoch,
+          // Epochs live on `stake.delegation`, not `stake` — and are u64 strings
+          // (u64::MAX = "not deactivated"). Parse to numbers so callers can reason
+          // about the deactivation cooldown.
+          activationEpoch: parseEpoch(stake.delegation?.activationEpoch),
+          deactivationEpoch: parseEpoch(stake.delegation?.deactivationEpoch),
           rentExemptReserve: meta.rentExemptReserve / LAMPORTS_PER_SOL,
           activeStake: Number(stakeActivation.active / BigInt(LAMPORTS_PER_SOL)),
           inactiveStake: Number(stakeActivation.inactive / BigInt(LAMPORTS_PER_SOL)),
@@ -236,25 +239,65 @@ export function rentReserveLamports(account: StakeAccountInfo): bigint {
   return BigInt(Math.round(account.rentExemptReserve * LAMPORTS_PER_SOL));
 }
 
+/** u64::MAX — the "not set" sentinel the stake program uses for activation/deactivation epochs. */
+const U64_MAX_STR = '18446744073709551615';
+
+/** Parse a u64 epoch string into a number, treating the u64::MAX sentinel as "unset". */
+function parseEpoch(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  const s = String(value);
+  if (s === U64_MAX_STR) return undefined;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 /**
- * Lamports to withdraw when draining an inactive stake account into the vault.
+ * Whether a stake account can be fully closed (withdraw the entire balance and
+ * deallocate) right now.
  *
- * A *full-balance* withdraw closes the account (removes the rent-exempt reserve
- * and deallocates it). The on-chain stake program only permits that once the
- * deactivation cooldown is fully complete. `getStakeActivation` reports a stake
- * as `inactive` one or more epochs BEFORE the chain will allow the close, so a
- * full-balance withdraw of a freshly-deactivated stake fails with
- * `InsufficientFunds` — short by exactly the rent-exempt reserve. In a batched
- * VaultTransaction (executed atomically) one such failure reverts the entire
- * proposal.
+ * The on-chain stake program permits a full-balance close iff the account's
+ * *effective* stake is exactly 0 — i.e. it is fully cooled down. The withdraw
+ * check is `lamports + effective_stake + rent_reserve > balance`, so while any
+ * effective stake remains BOTH a full close AND a `balance - reserve` drain fail
+ * identically. Our `state === 'inactive'` verdict is exactly `effective_stake == 0`
+ * (from `getStakeActivation` / the client-side activation calc), so it is the
+ * correct gate. The residual epoch-boundary race (RPC reporting `inactive` an
+ * epoch early) is caught by the pre-proposal simulation, which runs the real
+ * withdraw against live chain state before anyone signs.
+ */
+export function isStakeCloseable(account: StakeAccountInfo): boolean {
+  return account.state === 'inactive';
+}
+
+/**
+ * Lamports to withdraw to CLOSE an inactive stake account — the full balance,
+ * which deallocates the account and reclaims the rent-exempt reserve into the
+ * vault in a single instruction (no rent left stranded, no second proposal).
  *
- * To stay safe regardless of cooldown state we withdraw everything EXCEPT the
- * rent-exempt reserve. The leftover reserve is a tiny, rent-exempt empty stake
- * account that can be closed later once fully inactive.
+ * Uses exact integer lamports (never `float * 1e9`), because the close path is
+ * gated on `lamports == balance` exactly: an amount even one lamport short is
+ * treated as a partial withdrawal and reverts with `InsufficientFunds` for
+ * leaving less than the rent reserve. An inactive account's balance is stable
+ * (it earns no rewards), so this exact value stays valid through the
+ * sign→execute delay.
  *
- * Precondition: `account.state === 'inactive'`. A 'deactivating' account still has
- * effective (locked) stake, so `balance - reserve` would exceed its withdrawable
- * portion and fail on-chain — callers must not pass one here.
+ * Precondition: `isStakeCloseable(account)` (fully inactive / effective stake 0).
+ */
+export function getCloseWithdrawLamports(account: StakeAccountInfo): bigint {
+  return BigInt(account.balanceLamports);
+}
+
+/**
+ * Lamports to withdraw when draining an inactive stake account WITHOUT closing
+ * it — everything except the rent-exempt reserve. This leaves a tiny rent-exempt
+ * empty account behind and is only a fallback; prefer `getCloseWithdrawLamports`
+ * so the rent is reclaimed in one shot.
+ *
+ * Note: this does NOT survive the deactivation cooldown — a `balance - reserve`
+ * withdraw fails on-chain exactly when a full close does (both require
+ * effective stake 0), so it is not a "safe during cooldown" alternative.
+ *
+ * Precondition: `account.state === 'inactive'`.
  */
 export function getDrainWithdrawLamports(account: StakeAccountInfo): bigint {
   const balance = BigInt(account.balanceLamports);
