@@ -5,11 +5,19 @@ import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { WalletError } from '@solana/wallet-adapter-base';
 import { TorusWalletAdapter, LedgerWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { getRpcUrl } from '@/hooks/useSettings';
+import { useWalletAutoReconnect } from '@/hooks/useWalletAutoReconnect';
 
 import '@solana/wallet-adapter-react-ui/styles.css';
 
 type Props = {
   children?: React.ReactNode;
+};
+
+// Runs the silent reconnect-on-focus logic. Must live inside WalletProvider so
+// it can read the wallet context; rendering it here keeps Wallet's tree intact.
+const AutoReconnect: FC<{ children: React.ReactNode }> = ({ children }) => {
+  useWalletAutoReconnect();
+  return <>{children}</>;
 };
 
 export const Wallet: FC<Props> = ({ children }) => {
@@ -38,7 +46,9 @@ export const Wallet: FC<Props> = ({ children }) => {
   return (
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} onError={onError} autoConnect>
-        <WalletModalProvider>{children}</WalletModalProvider>
+        <WalletModalProvider>
+          <AutoReconnect>{children}</AutoReconnect>
+        </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
   );
