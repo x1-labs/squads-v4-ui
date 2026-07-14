@@ -10,6 +10,9 @@ export function formatInstructionTitle(instructionName: string): string {
   const specialCases: Record<string, string> = {
     transferchecked: 'Transfer Checked',
     mintto: 'Mint To',
+    minttochecked: 'Mint To Checked',
+    burn: 'Burn',
+    burnchecked: 'Burn Checked',
     burnfrom: 'Burn From',
     initializemint: 'Initialize Mint',
     initializeaccount: 'Initialize Account',
