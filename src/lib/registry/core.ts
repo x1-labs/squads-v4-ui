@@ -57,6 +57,18 @@ interface RegisteredProgram {
 }
 
 /**
+ * Normalize an instruction name for registry lookups.
+ *
+ * The decoder emits PascalCase names built from the IDL (`update_config` ->
+ * `UpdateConfig`), while registrations are written in whatever style the IDL
+ * uses. Stripping separators and casing lets `update_config`, `updateConfig`
+ * and `Update Config` all resolve to the same entry.
+ */
+function normalizeInstructionName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+}
+
+/**
  * Central registry for all program metadata
  */
 class ProgramRegistry {
@@ -94,7 +106,7 @@ class ProgramRegistry {
     // Process instruction configurations
     if (config.instructions) {
       for (const [instructionName, instructionConfig] of Object.entries(config.instructions)) {
-        program.instructions.set(instructionName.toLowerCase(), {
+        program.instructions.set(normalizeInstructionName(instructionName), {
           ...instructionConfig,
           tags: instructionConfig.tags
             ? Array.isArray(instructionConfig.tags)
@@ -142,7 +154,7 @@ class ProgramRegistry {
     const program = this.programs.get(programId);
     if (!program) return undefined;
 
-    const instruction = program.instructions.get(instructionName.toLowerCase());
+    const instruction = program.instructions.get(normalizeInstructionName(instructionName));
     return instruction?.summary;
   }
 
@@ -161,7 +173,9 @@ class ProgramRegistry {
     }
 
     // Add instruction-specific tags
-    const instructionConfig = program.instructions.get(instruction.instructionName.toLowerCase());
+    const instructionConfig = program.instructions.get(
+      normalizeInstructionName(instruction.instructionName)
+    );
     if (instructionConfig?.tags) {
       tags.push(...instructionConfig.tags);
     }
