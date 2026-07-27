@@ -1,6 +1,6 @@
 import { Connection, PublicKey } from '@solana/web3.js';
-import { BorshAccountsCoder } from '@coral-xyz/anchor';
 import delegationProgramIdl from '../idls/delegation_program.json';
+import { createAnchorAccountFetcher } from '../idls/accountFetcher';
 
 /**
  * Program IDs the delegation program is deployed under. The UI runs against
@@ -97,61 +97,11 @@ export interface ValidatorInfoAccount {
   last_stake_change_epoch: unknown;
 }
 
-let accountsCoder: BorshAccountsCoder | null | undefined;
-
-function getAccountsCoder(): BorshAccountsCoder | null {
-  if (accountsCoder === undefined) {
-    try {
-      accountsCoder = new BorshAccountsCoder(delegationProgramIdl as any);
-    } catch (error) {
-      console.warn('Failed to build delegation program accounts coder:', error);
-      accountsCoder = null;
-    }
-  }
-  return accountsCoder;
-}
-
-const CACHE_TTL_MS = 30_000;
-const accountCache = new Map<string, { fetchedAt: number; value: Promise<unknown> }>();
-
-/**
- * Fetch and decode a delegation program account, briefly caching the result
- * because several summaries can render for the same transaction. Resolves to
- * null when the account is missing or cannot be decoded, and failures are not
- * cached so a transient RPC error doesn't suppress the next render.
- */
-function fetchDelegationAccount<T>(
-  connection: Connection,
-  accountName: string,
-  address: PublicKey
-): Promise<T | null> {
-  const cacheKey = `${accountName}:${address.toBase58()}`;
-  const cached = accountCache.get(cacheKey);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
-    return cached.value as Promise<T | null>;
-  }
-
-  const value = (async () => {
-    const coder = getAccountsCoder();
-    if (!coder) return null;
-
-    try {
-      const info = await connection.getAccountInfo(address);
-      if (!info) return null;
-      return coder.decode<T>(accountName, info.data);
-    } catch (error) {
-      console.warn(`Failed to fetch delegation ${accountName} at ${address.toBase58()}:`, error);
-      return null;
-    }
-  })();
-
-  value.then((result) => {
-    if (result === null) accountCache.delete(cacheKey);
-  });
-
-  accountCache.set(cacheKey, { fetchedAt: Date.now(), value });
-  return value as Promise<T | null>;
-}
+/** Cached reader for this program's on-chain accounts. */
+const fetchDelegationAccount = createAnchorAccountFetcher(
+  delegationProgramIdl,
+  'delegation program'
+);
 
 /**
  * Fetch the current on-chain `DelegationConfig`. Summaries use this to show

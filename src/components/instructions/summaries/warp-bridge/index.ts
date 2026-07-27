@@ -1,17 +1,41 @@
-// Warp Bridge instruction summary components
-export { BridgeInitializeSummary } from './BridgeInitializeSummary';
-export { BridgeTransferAdminSummary } from './BridgeTransferAdminSummary';
-export { BridgeSetGuardiansSummary } from './BridgeSetGuardiansSummary';
-export { BridgeSetRoleSummary } from './BridgeSetRoleSummary';
-export { BridgeSetFeesSummary } from './BridgeSetFeesSummary';
-export { BridgeRegisterTokenSummary } from './BridgeRegisterTokenSummary';
-export { BridgeDeregisterTokenSummary } from './BridgeDeregisterTokenSummary';
-export { BridgeUpdateTokenRegistrySummary } from './BridgeUpdateTokenRegistrySummary';
-export { BridgeSetTokenFeesSummary } from './BridgeSetTokenFeesSummary';
-export { BridgeSetWhaleLimitsSummary } from './BridgeSetWhaleLimitsSummary';
-export { BridgeInitializeVaultSummary } from './BridgeInitializeVaultSummary';
-export { BridgeInitializeRolesSummary } from './BridgeInitializeRolesSummary';
-export { BridgeSetVaultBalanceSummary } from './BridgeSetVaultBalanceSummary';
-export { BridgeMigrateConfigSummary } from './BridgeMigrateConfigSummary';
-export { BridgeMigrateTokenRegistrySummary } from './BridgeMigrateTokenRegistrySummary';
-export { BridgeTransferMintAuthoritySummary } from './BridgeTransferMintAuthoritySummary';
+/**
+ * Instruction summaries for the Warp Bridge program.
+ *
+ * The bridge's admin surface — guardian rotations, token limits, fees, pauses
+ * and authority handovers — is what a multisig proposes. Each summary states
+ * what the instruction does and, where a current value can be read from chain,
+ * what it changes rather than only what it sets.
+ */
+export { BridgeInV2Summary, BridgeOutSummary, BridgeClaimSummary } from './TransferSummaries';
+
+export {
+  BridgeRegisterTokenSummary,
+  BridgeDeregisterTokenSummary,
+  BridgeUpdateTokenRegistrySummary,
+  BridgeSetTokenFeesSummary,
+  BridgeSetWhaleLimitsSummary,
+  BridgeInitializeVaultSummary,
+  BridgeSetVaultBalanceSummary,
+  BridgeTransferMintAuthoritySummary,
+  BridgeMigrateTokenRegistrySummary,
+} from './TokenSummaries';
+
+export {
+  BridgeInitializeSummary,
+  BridgeSetFeesSummary,
+  BridgeSetChainIdSummary,
+  BridgeTransferAdminSummary,
+  BridgePauseSummary,
+  BridgeUnpauseSummary,
+  BridgeInitializeRolesSummary,
+  BridgeSetRoleSummary,
+  BridgeSetV1DisabledSummary,
+  BridgeMigrateConfigSummary,
+} from './ConfigSummaries';
+
+export {
+  BridgeSetGuardiansV2Summary,
+  BridgeInitializeGuardianSetV2Summary,
+  BridgePostSignaturesSummary,
+  BridgeCloseSignatureSetSummary,
+} from './GuardianSummaries';
