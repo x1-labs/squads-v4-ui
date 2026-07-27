@@ -231,6 +231,287 @@
       ]
     },
     {
+      "name": "bridge_in_v2",
+      "docs": [
+        "Bridge tokens in using a staged v2 signature set."
+      ],
+      "discriminator": [
+        103,
+        27,
+        86,
+        139,
+        109,
+        189,
+        53,
+        246
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "guardian_set",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100,
+                  105,
+                  97,
+                  110,
+                  95,
+                  115,
+                  101,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "signature_set",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  105,
+                  103,
+                  95,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guardian_set.guardian_set_index",
+                "account": "GuardianSet"
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              },
+              {
+                "kind": "arg",
+                "path": "sender"
+              },
+              {
+                "kind": "arg",
+                "path": "source_token_mint"
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              },
+              {
+                "kind": "arg",
+                "path": "amount"
+              },
+              {
+                "kind": "arg",
+                "path": "source_timestamp"
+              }
+            ]
+          }
+        },
+        {
+          "name": "incoming_msg",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  118,
+                  116,
+                  95,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "recipient",
+          "docs": [
+            "Recipient account - must match sender from source chain (bridge to self)"
+          ],
+          "writable": true
+        },
+        {
+          "name": "recipient_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_mint",
+          "writable": true
+        },
+        {
+          "name": "mint_authority",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "source_seq",
+          "type": "u64"
+        },
+        {
+          "name": "sender",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "source_token_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "source_timestamp",
+          "type": "i64"
+        }
+      ]
+    },
+    {
       "name": "bridge_out",
       "docs": [
         "Bridge tokens out (burn wrapped or lock native)",
@@ -609,6 +890,163 @@
       ]
     },
     {
+      "name": "close_signature_set",
+      "docs": [
+        "Close a consumed or expired v2 signature set and reclaim rent."
+      ],
+      "discriminator": [
+        64,
+        154,
+        185,
+        168,
+        234,
+        229,
+        218,
+        103
+      ],
+      "accounts": [
+        {
+          "name": "guardian_set",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100,
+                  105,
+                  97,
+                  110,
+                  95,
+                  115,
+                  101,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "signature_set",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  105,
+                  103,
+                  95,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "guardian_set_index"
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              },
+              {
+                "kind": "arg",
+                "path": "sender"
+              },
+              {
+                "kind": "arg",
+                "path": "source_token_mint"
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              },
+              {
+                "kind": "arg",
+                "path": "amount"
+              },
+              {
+                "kind": "arg",
+                "path": "source_timestamp"
+              }
+            ]
+          }
+        },
+        {
+          "name": "refund_recipient",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "source_seq",
+          "type": "u64"
+        },
+        {
+          "name": "sender",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "source_token_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "source_timestamp",
+          "type": "i64"
+        },
+        {
+          "name": "guardian_set_index",
+          "type": "u32"
+        }
+      ]
+    },
+    {
       "name": "deregister_token",
       "docs": [
         "Admin: Deregister a token (closes TokenRegistryEntry PDA)",
@@ -760,6 +1198,81 @@
           "type": "pubkey"
         }
       ]
+    },
+    {
+      "name": "initialize_guardian_set_v2",
+      "docs": [
+        "Admin: initialize the v2 guardian set from the existing v1 Config."
+      ],
+      "discriminator": [
+        163,
+        235,
+        103,
+        157,
+        149,
+        127,
+        57,
+        155
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "guardian_set",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100,
+                  105,
+                  97,
+                  110,
+                  95,
+                  115,
+                  101,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "initialize_roles",
@@ -1212,6 +1725,187 @@
       ]
     },
     {
+      "name": "post_signatures",
+      "docs": [
+        "Stage verified guardian signatures for a source message."
+      ],
+      "discriminator": [
+        138,
+        2,
+        53,
+        166,
+        45,
+        77,
+        137,
+        51
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "guardian_set",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100,
+                  105,
+                  97,
+                  110,
+                  95,
+                  115,
+                  101,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "signature_set",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  105,
+                  103,
+                  95,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "guardian_set.guardian_set_index",
+                "account": "GuardianSet"
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              },
+              {
+                "kind": "arg",
+                "path": "sender"
+              },
+              {
+                "kind": "arg",
+                "path": "source_token_mint"
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              },
+              {
+                "kind": "arg",
+                "path": "amount"
+              },
+              {
+                "kind": "arg",
+                "path": "source_timestamp"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "instruction_sysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "source_seq",
+          "type": "u64"
+        },
+        {
+          "name": "sender",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "source_token_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "source_timestamp",
+          "type": "i64"
+        }
+      ]
+    },
+    {
       "name": "register_token",
       "docs": [
         "Register a new token"
@@ -1313,6 +2007,58 @@
       ]
     },
     {
+      "name": "set_chain_id",
+      "docs": [
+        "Admin: Set chain ID for this deployment",
+        "Chain IDs: 0 = Solana, 1 = X1, 2-15 reserved for future chains.",
+        "Enables chain discriminator validation in bridge_out and bridge_in."
+      ],
+      "discriminator": [
+        57,
+        174,
+        29,
+        202,
+        84,
+        216,
+        7,
+        148
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "chain_id",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "set_fees",
       "docs": [
         "Admin: Update SOL fees (legacy)"
@@ -1396,6 +2142,87 @@
                   102,
                   105,
                   103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "guardians",
+          "type": {
+            "vec": "pubkey"
+          }
+        },
+        {
+          "name": "threshold",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "set_guardians_v2",
+      "docs": [
+        "Admin: update the v2 guardian set, supporting up to 9 guardians."
+      ],
+      "discriminator": [
+        29,
+        116,
+        205,
+        0,
+        240,
+        41,
+        169,
+        76
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "guardian_set",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100,
+                  105,
+                  97,
+                  110,
+                  95,
+                  115,
+                  101,
+                  116
                 ]
               }
             ]
@@ -1588,6 +2415,57 @@
         {
           "name": "fee_collector_ata",
           "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_v1_bridge_in_disabled",
+      "docs": [
+        "Admin: Enable or disable legacy v1 bridge_in.",
+        "Set true only after v2 staged consensus is active on both directions."
+      ],
+      "discriminator": [
+        45,
+        179,
+        219,
+        34,
+        210,
+        30,
+        209,
+        17
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "disabled",
+          "type": "bool"
         }
       ]
     },
@@ -2098,6 +2976,19 @@
       ]
     },
     {
+      "name": "GuardianSet",
+      "discriminator": [
+        120,
+        77,
+        74,
+        98,
+        34,
+        83,
+        96,
+        125
+      ]
+    },
+    {
       "name": "IncomingMsg",
       "discriminator": [
         186,
@@ -2137,6 +3028,19 @@
       ]
     },
     {
+      "name": "SignatureSet",
+      "discriminator": [
+        17,
+        212,
+        246,
+        114,
+        183,
+        159,
+        65,
+        246
+      ]
+    },
+    {
       "name": "TokenRegistryEntry",
       "discriminator": [
         197,
@@ -2166,13 +3070,268 @@
   "errors": [
     {
       "code": 6000,
-      "name": "BelowMinimum",
-      "msg": "Amount below minimum limit"
+      "name": "BridgePaused",
+      "msg": "Bridge is paused"
     },
     {
       "code": 6001,
-      "name": "AboveMaximum",
-      "msg": "Amount above maximum limit"
+      "name": "TokenPaused",
+      "msg": "Token is paused"
+    },
+    {
+      "code": 6002,
+      "name": "NotProcessed",
+      "msg": "Incoming message not yet processed"
+    },
+    {
+      "code": 6003,
+      "name": "AlreadyClaimed",
+      "msg": "Transfer already claimed"
+    },
+    {
+      "code": 6004,
+      "name": "UnauthorizedClaimer",
+      "msg": "Unauthorized claimer - must be original sender"
+    },
+    {
+      "code": 6005,
+      "name": "ImmediateTransfer",
+      "msg": "This was an immediate transfer, no claim needed"
+    },
+    {
+      "code": 6006,
+      "name": "DelayNotElapsed",
+      "msg": "Delay period has not elapsed yet"
+    },
+    {
+      "code": 6007,
+      "name": "VaultRequired",
+      "msg": "Vault account is required for native chain"
+    },
+    {
+      "code": 6008,
+      "name": "VaultTokenAccountRequired",
+      "msg": "Vault token account is required for native chain"
+    },
+    {
+      "code": 6009,
+      "name": "MintAuthorityRequired",
+      "msg": "Mint authority is required for wrapped tokens"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidVault",
+      "msg": "Invalid vault"
+    },
+    {
+      "code": 6011,
+      "name": "InvalidVaultOwner",
+      "msg": "Invalid vault owner"
+    },
+    {
+      "code": 6012,
+      "name": "InsufficientVaultBalance",
+      "msg": "Insufficient vault balance"
+    },
+    {
+      "code": 6013,
+      "name": "Underflow",
+      "msg": "Arithmetic underflow"
+    },
+    {
+      "code": 6014,
+      "name": "ZeroAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidSignatures",
+      "msg": "Invalid signatures - threshold not met"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidSourceChain",
+      "msg": "Invalid source chain"
+    },
+    {
+      "code": 6017,
+      "name": "InvalidDestinationChain",
+      "msg": "Invalid destination chain"
+    },
+    {
+      "code": 6018,
+      "name": "RecipientMismatch",
+      "msg": "Recipient must match sender (bridge to self)"
+    },
+    {
+      "code": 6019,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6020,
+      "name": "InvalidSeq",
+      "msg": "Invalid sequence number format"
+    },
+    {
+      "code": 6021,
+      "name": "DailyCapExceeded",
+      "msg": "Daily cap exceeded"
+    },
+    {
+      "code": 6022,
+      "name": "FeeExceedsAmount",
+      "msg": "Token fee exceeds transfer amount"
+    },
+    {
+      "code": 6023,
+      "name": "ZeroNetAmount",
+      "msg": "Net amount after fee must be greater than zero"
+    },
+    {
+      "code": 6024,
+      "name": "FeeCollectorRequired",
+      "msg": "Fee collector token account required when token fees configured"
+    },
+    {
+      "code": 6025,
+      "name": "InvalidFeeCollector",
+      "msg": "Invalid fee collector token account"
+    },
+    {
+      "code": 6026,
+      "name": "Unauthorized",
+      "msg": "Unauthorized - must be admin or have appropriate role"
+    },
+    {
+      "code": 6027,
+      "name": "TooManyGuardians",
+      "msg": "Too many guardians (max 5)"
+    },
+    {
+      "code": 6028,
+      "name": "NoGuardians",
+      "msg": "At least one guardian required"
+    },
+    {
+      "code": 6029,
+      "name": "InvalidThreshold",
+      "msg": "Invalid threshold"
+    },
+    {
+      "code": 6030,
+      "name": "InvalidFee",
+      "msg": "Invalid fee (percentage must be <= 10000 bps)"
+    },
+    {
+      "code": 6031,
+      "name": "InvalidAmountLimits",
+      "msg": "Invalid amount limits (max must be >= min)"
+    },
+    {
+      "code": 6032,
+      "name": "InvalidDelay",
+      "msg": "Invalid delay (must be >= 0)"
+    },
+    {
+      "code": 6033,
+      "name": "AccountDidNotDeserialize",
+      "msg": "Account data could not be deserialized"
+    },
+    {
+      "code": 6034,
+      "name": "InvalidNewAdmin",
+      "msg": "Invalid new admin address (cannot be zero)"
+    },
+    {
+      "code": 6035,
+      "name": "AdminUnchanged",
+      "msg": "New admin is same as current admin"
+    },
+    {
+      "code": 6036,
+      "name": "CannotTransferNativeMintAuthority",
+      "msg": "Cannot transfer mint authority for native token (bridge doesn't control it)"
+    },
+    {
+      "code": 6037,
+      "name": "MintMismatch",
+      "msg": "Mint address mismatch"
+    },
+    {
+      "code": 6038,
+      "name": "InvalidNewAuthority",
+      "msg": "Invalid new authority address (cannot be zero)"
+    },
+    {
+      "code": 6039,
+      "name": "NewAuthorityMustBePda",
+      "msg": "New authority must be a PDA (off-curve), not a wallet"
+    },
+    {
+      "code": 6040,
+      "name": "InvalidChainId",
+      "msg": "Invalid chain ID (must be 0-15)"
+    },
+    {
+      "code": 6041,
+      "name": "SymbolTooLong",
+      "msg": "Symbol too long (max 12 characters)"
+    },
+    {
+      "code": 6042,
+      "name": "InvalidDecimals",
+      "msg": "Invalid decimals (max 18)"
+    },
+    {
+      "code": 6043,
+      "name": "NotNativeToken",
+      "msg": "Token is not native, vault not needed"
+    },
+    {
+      "code": 6044,
+      "name": "DuplicateGuardian",
+      "msg": "Duplicate guardian pubkey"
+    },
+    {
+      "code": 6045,
+      "name": "VaultNotEmpty",
+      "msg": "Vault must be empty"
+    },
+    {
+      "code": 6046,
+      "name": "InvalidOperation",
+      "msg": "Invalid bridge operation"
+    },
+    {
+      "code": 6047,
+      "name": "StaleGuardianSet",
+      "msg": "Guardian set is stale"
+    },
+    {
+      "code": 6048,
+      "name": "SignatureSetHashMismatch",
+      "msg": "Signature set message hash mismatch"
+    },
+    {
+      "code": 6049,
+      "name": "SignatureSetConsumed",
+      "msg": "Signature set already consumed"
+    },
+    {
+      "code": 6050,
+      "name": "SignatureSetNotExpired",
+      "msg": "Signature set is not expired"
+    },
+    {
+      "code": 6051,
+      "name": "NoNewSignatures",
+      "msg": "No new guardian signatures were verified"
+    },
+    {
+      "code": 6052,
+      "name": "V1BridgeInDisabled",
+      "msg": "Legacy v1 bridge_in is disabled"
     }
   ],
   "types": [
@@ -2292,14 +3451,89 @@
             }
           },
           {
+            "name": "chain_id",
+            "docs": [
+              "Chain ID for this deployment (0 = Solana, 1 = X1)",
+              "Used to validate seq encoding in bridge_out and bridge_in"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "v1_in_disabled",
+            "docs": [
+              "Disable legacy v1 bridge_in once v2 staged consensus is active."
+            ],
+            "type": "bool"
+          },
+          {
             "name": "_reserved",
             "docs": [
               "Reserved space for future fields"
             ],
             "type": {
               "array": [
-                "u64",
-                2
+                "u8",
+                14
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "GuardianSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "guardian_set_index",
+            "docs": [
+              "Monotonic index incremented every time the v2 guardian set changes."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "num_guardians",
+            "docs": [
+              "Number of active guardian keys."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "threshold",
+            "docs": [
+              "Required signatures for staged v2 consensus."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "guardians",
+            "docs": [
+              "Active guardian keys. Entries after num_guardians are zeroed."
+            ],
+            "type": {
+              "array": [
+                "pubkey",
+                9
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "docs": [
+              "Reserved for future consensus metadata."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
               ]
             }
           }
@@ -2584,6 +3818,94 @@
               "array": [
                 "u8",
                 128
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SignatureSet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "source_seq",
+            "docs": [
+              "Source-chain sequence number this staged signature set authorizes."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "message_hash",
+            "docs": [
+              "Domain-separated canonical message hash signed by guardians."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "guardian_set_index",
+            "docs": [
+              "GuardianSet index used when signatures were staged."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "signer_bitmap",
+            "docs": [
+              "Bit i means guardian_set.guardians[i] has been verified."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "signature_count",
+            "docs": [
+              "Cached popcount of signer_bitmap."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "consumed",
+            "docs": [
+              "True once bridge_in_v2 consumes this set."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "expires_at",
+            "docs": [
+              "Unix timestamp after which the set may be closed if unconsumed."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "refund_recipient",
+            "docs": [
+              "Account that may receive rent on close."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "_reserved",
+            "docs": [
+              "Reserved for future metadata."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                16
               ]
             }
           }

@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { DecodedInstruction } from '@/lib/transaction/simpleDecoder';
 import {
@@ -10,52 +9,14 @@ import {
   fetchValidatorInfo,
 } from '@/lib/delegation/accounts';
 import { accountByName } from './shared';
-
-/**
- * Run a delegation account fetch, tracking loading state and ignoring results
- * that arrive after the summary has moved on.
- */
-function useDelegationAccount<T>(
-  key: string | undefined,
-  load: () => Promise<T | null>
-): { data: T | null; loading: boolean } {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(Boolean(key));
-
-  useEffect(() => {
-    if (!key) {
-      setData(null);
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-
-    load()
-      .then((result) => {
-        if (!cancelled) setData(result);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-    // `load` closes over the same inputs `key` is derived from.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-
-  return { data, loading };
-}
+import { useProgramAccount } from '../useProgramAccount';
 
 /** Current on-chain `DelegationConfig` for the deployment an instruction targets. */
 export function useDelegationConfig(
   instruction: DecodedInstruction,
   connection: Connection
 ): { config: DelegationConfigAccount | null; loading: boolean } {
-  const { data, loading } = useDelegationAccount(`config:${instruction.programId}`, () =>
+  const { data, loading } = useProgramAccount(`config:${instruction.programId}`, () =>
     fetchDelegationConfig(connection, instruction.programId)
   );
   return { config: data, loading };
@@ -66,7 +27,7 @@ export function useDelegationClusterInfo(
   instruction: DecodedInstruction,
   connection: Connection
 ): { clusterInfo: ClusterInfoAccount | null; loading: boolean } {
-  const { data, loading } = useDelegationAccount(`cluster:${instruction.programId}`, () =>
+  const { data, loading } = useProgramAccount(`cluster:${instruction.programId}`, () =>
     fetchClusterInfo(connection, instruction.programId)
   );
   return { clusterInfo: data, loading };
@@ -105,7 +66,7 @@ export function useDelegationValidator(
   connection: Connection
 ): DelegationValidatorTarget {
   const validatorPda = accountByName(instruction, 'validator', 0);
-  const { data: info, loading } = useDelegationAccount(
+  const { data: info, loading } = useProgramAccount(
     validatorPda && `validator:${validatorPda}`,
     () => fetchValidatorInfo(connection, validatorPda!)
   );

@@ -19,29 +19,34 @@ import { CreateAccountWithSeedSummary } from './components/instructions/summarie
 import { UpdateCommissionSummary } from './components/instructions/summaries/UpdateCommissionSummary';
 import { VoteWithdrawSummary } from './components/instructions/summaries/VoteWithdrawSummary';
 import { VoteAuthorizeSummary } from './components/instructions/summaries/VoteAuthorizeSummary';
-import { BridgeOutSummary } from './components/instructions/summaries/BridgeOutSummary';
-import { BridgeInSummary } from './components/instructions/summaries/BridgeInSummary';
 import { ProgramUpgradeSummary } from './components/instructions/summaries/ProgramUpgradeSummary';
-import { BridgeClaimSummary } from './components/instructions/summaries/BridgeClaimSummary';
-import { BridgePauseSummary } from './components/instructions/summaries/BridgePauseSummary';
-import { BridgeUnpauseSummary } from './components/instructions/summaries/BridgeUnpauseSummary';
 import {
-  BridgeInitializeSummary,
-  BridgeTransferAdminSummary,
-  BridgeSetGuardiansSummary,
-  BridgeSetRoleSummary,
-  BridgeSetFeesSummary,
+  BridgeInV2Summary,
+  BridgeOutSummary,
+  BridgeClaimSummary,
   BridgeRegisterTokenSummary,
   BridgeDeregisterTokenSummary,
   BridgeUpdateTokenRegistrySummary,
   BridgeSetTokenFeesSummary,
   BridgeSetWhaleLimitsSummary,
   BridgeInitializeVaultSummary,
-  BridgeInitializeRolesSummary,
   BridgeSetVaultBalanceSummary,
-  BridgeMigrateConfigSummary,
-  BridgeMigrateTokenRegistrySummary,
   BridgeTransferMintAuthoritySummary,
+  BridgeMigrateTokenRegistrySummary,
+  BridgeInitializeSummary,
+  BridgeSetFeesSummary,
+  BridgeSetChainIdSummary,
+  BridgeTransferAdminSummary,
+  BridgePauseSummary,
+  BridgeUnpauseSummary,
+  BridgeInitializeRolesSummary,
+  BridgeSetRoleSummary,
+  BridgeSetV1DisabledSummary,
+  BridgeMigrateConfigSummary,
+  BridgeSetGuardiansV2Summary,
+  BridgeInitializeGuardianSetV2Summary,
+  BridgePostSignaturesSummary,
+  BridgeCloseSignatureSetSummary,
 } from './components/instructions/summaries/warp-bridge';
 import {
   DelegationUpdateConfigSummary,
@@ -67,6 +72,7 @@ import {
   DelegationForceReleaseLockSummary,
 } from './components/instructions/summaries/delegation';
 import { DELEGATION_PROGRAM_ID_LIST } from './lib/delegation/accounts';
+import { WARP_BRIDGE_PROGRAM_ID } from './lib/warpBridge/accounts';
 
 // Import IDLs
 import squadsV4Idl from './lib/idls/squads-v4.json';
@@ -389,24 +395,31 @@ registry.register({
 // ============================================
 // Warp Bridge
 // ============================================
+// One program ID on every chain the bridge spans.
 registry.register({
-  programId: '6JbPTuxVuoTgyQeXFb9MH8C8nUY8NBbLP1Lu4B13JfMD',
+  programId: WARP_BRIDGE_PROGRAM_ID,
   name: 'Warp Bridge',
   idl: warpBridgeIdl,
   instructions: {
-    // Core bridge operations
+    // Transfers
     bridge_out: {
       summary: BridgeOutSummary,
       tags: { label: 'Bridge Out', color: 'orange', variant: 'subtle' },
     },
-    bridge_in: {
-      summary: BridgeInSummary,
+    bridge_in_v2: {
+      summary: BridgeInV2Summary,
       tags: { label: 'Bridge In', color: 'green', variant: 'subtle' },
+    },
+    // Legacy v1 paths: retired in favour of staged v2 consensus (the on-chain
+    // `v1_in_disabled` flag is set), so these are tagged but not summarized.
+    bridge_in: {
+      tags: { label: 'Bridge In (v1, legacy)', color: 'gray', variant: 'subtle' },
     },
     claim: {
       summary: BridgeClaimSummary,
       tags: { label: 'Claim', color: 'blue', variant: 'subtle' },
     },
+
     // Token management
     register_token: {
       summary: BridgeRegisterTokenSummary,
@@ -428,7 +441,45 @@ registry.register({
       summary: BridgeSetWhaleLimitsSummary,
       tags: { label: 'Set Whale Limits', color: 'amber', variant: 'subtle' },
     },
-    // Admin operations
+    initialize_vault: {
+      summary: BridgeInitializeVaultSummary,
+      tags: { label: 'Initialize Vault', color: 'teal', variant: 'subtle' },
+    },
+    set_vault_balance: {
+      summary: BridgeSetVaultBalanceSummary,
+      tags: { label: 'Set Vault Balance', color: 'amber', variant: 'subtle' },
+    },
+    transfer_mint_authority: {
+      summary: BridgeTransferMintAuthoritySummary,
+      tags: { label: 'Transfer Mint Auth', color: 'red', variant: 'subtle' },
+    },
+
+    // Guardians and staged consensus
+    set_guardians_v2: {
+      summary: BridgeSetGuardiansV2Summary,
+      tags: { label: 'Set Guardians', color: 'blue', variant: 'subtle' },
+    },
+    set_guardians: {
+      tags: { label: 'Set Guardians (v1, legacy)', color: 'gray', variant: 'subtle' },
+    },
+    initialize_guardian_set_v2: {
+      summary: BridgeInitializeGuardianSetV2Summary,
+      tags: { label: 'Init Guardian Set', color: 'purple', variant: 'subtle' },
+    },
+    post_signatures: {
+      summary: BridgePostSignaturesSummary,
+      tags: { label: 'Post Signatures', color: 'blue', variant: 'subtle' },
+    },
+    close_signature_set: {
+      summary: BridgeCloseSignatureSetSummary,
+      tags: { label: 'Close Signature Set', color: 'gray', variant: 'subtle' },
+    },
+    set_v1_bridge_in_disabled: {
+      summary: BridgeSetV1DisabledSummary,
+      tags: { label: 'Toggle v1 Bridge In', color: 'amber', variant: 'subtle' },
+    },
+
+    // Global configuration
     initialize: {
       summary: BridgeInitializeSummary,
       tags: { label: 'Initialize', color: 'purple', variant: 'subtle' },
@@ -436,10 +487,6 @@ registry.register({
     initialize_roles: {
       summary: BridgeInitializeRolesSummary,
       tags: { label: 'Initialize Roles', color: 'indigo', variant: 'subtle' },
-    },
-    initialize_vault: {
-      summary: BridgeInitializeVaultSummary,
-      tags: { label: 'Initialize Vault', color: 'teal', variant: 'subtle' },
     },
     pause: {
       summary: BridgePauseSummary,
@@ -453,27 +500,20 @@ registry.register({
       summary: BridgeSetFeesSummary,
       tags: { label: 'Set Fees', color: 'gray', variant: 'subtle' },
     },
-    set_guardians: {
-      summary: BridgeSetGuardiansSummary,
-      tags: { label: 'Set Guardians', color: 'blue', variant: 'subtle' },
+    set_chain_id: {
+      summary: BridgeSetChainIdSummary,
+      tags: { label: 'Set Chain ID', color: 'red', variant: 'subtle' },
     },
     set_role: {
       summary: BridgeSetRoleSummary,
       tags: { label: 'Set Role', color: 'indigo', variant: 'subtle' },
     },
-    set_vault_balance: {
-      summary: BridgeSetVaultBalanceSummary,
-      tags: { label: 'Set Vault Balance', color: 'teal', variant: 'subtle' },
-    },
     transfer_admin: {
       summary: BridgeTransferAdminSummary,
-      tags: { label: 'Transfer Admin', color: 'purple', variant: 'subtle' },
+      tags: { label: 'Transfer Admin', color: 'red', variant: 'subtle' },
     },
-    transfer_mint_authority: {
-      summary: BridgeTransferMintAuthoritySummary,
-      tags: { label: 'Transfer Mint Auth', color: 'red', variant: 'subtle' },
-    },
-    // Migration operations
+
+    // Account migrations
     migrate_config: {
       summary: BridgeMigrateConfigSummary,
       tags: { label: 'Migrate Config', color: 'yellow', variant: 'subtle' },
