@@ -43,6 +43,30 @@ import {
   BridgeMigrateTokenRegistrySummary,
   BridgeTransferMintAuthoritySummary,
 } from './components/instructions/summaries/warp-bridge';
+import {
+  DelegationUpdateConfigSummary,
+  DelegationCreateValidatorSummary,
+  DelegationApplyValidatorSummary,
+  DelegationApproveValidatorSummary,
+  DelegationRejectValidatorSummary,
+  DelegationRemoveValidatorSummary,
+  DelegationWithdrawValidatorSummary,
+  DelegationUpdateValidatorStatusSummary,
+  DelegationUpdateValidatorCriteriaSummary,
+  DelegationUpdateValidatorMultiplierSummary,
+  DelegationUpdateStakeChangeEpochSummary,
+  DelegationInitializeConfigSummary,
+  DelegationTransferAuthoritySummary,
+  DelegationUpdateBotAuthoritySummary,
+  DelegationUpdateReviewerAuthoritySummary,
+  DelegationInitializeClusterInfoSummary,
+  DelegationUpdateClusterInfoSummary,
+  DelegationSetClusterEpochSummary,
+  DelegationAcquireEpochLockSummary,
+  DelegationReleaseEpochLockSummary,
+  DelegationForceReleaseLockSummary,
+} from './components/instructions/summaries/delegation';
+import { DELEGATION_PROGRAM_ID_LIST } from './lib/delegation/accounts';
 
 // Import IDLs
 import squadsV4Idl from './lib/idls/squads-v4.json';
@@ -225,28 +249,103 @@ registry.register({
 // ============================================
 // Delegation Program
 // ============================================
+// Registered for every network the UI serves — mainnet, testnet and localnet
+// each deploy the program under a different ID.
 registry.register({
-  programId: 'X1DPvnLXekvd6EtDsPVqahzhziKx3Zj1z8WkD93xebg',
+  programId: DELEGATION_PROGRAM_ID_LIST,
   name: 'Delegation Program',
   idl: delegationProgramIdl,
   instructions: {
-    UpdateConfig: {
+    // Global configuration
+    update_config: {
+      summary: DelegationUpdateConfigSummary,
       tags: { label: 'Update Config', color: 'blue', variant: 'subtle' },
     },
-    CreateValidator: {
+    initialize_config: {
+      summary: DelegationInitializeConfigSummary,
+      tags: { label: 'Initialize Config', color: 'purple', variant: 'subtle' },
+    },
+
+    // Validator lifecycle
+    create_validator: {
+      summary: DelegationCreateValidatorSummary,
       tags: { label: 'Create Validator', color: 'blue', variant: 'subtle' },
     },
-    RemoveValidator: {
-      tags: { label: 'Remove Validator', color: 'blue', variant: 'subtle' },
+    apply_validator: {
+      summary: DelegationApplyValidatorSummary,
+      tags: { label: 'Apply Validator', color: 'blue', variant: 'subtle' },
     },
-    ApproveValidator: {
-      tags: { label: 'Approve Validator', color: 'blue', variant: 'subtle' },
+    approve_validator: {
+      summary: DelegationApproveValidatorSummary,
+      tags: { label: 'Approve Validator', color: 'green', variant: 'subtle' },
     },
-    RejectValidator: {
+    reject_validator: {
+      summary: DelegationRejectValidatorSummary,
       tags: { label: 'Reject Validator', color: 'red', variant: 'subtle' },
     },
-    UpdateValidatorStatus: {
+    remove_validator: {
+      summary: DelegationRemoveValidatorSummary,
+      tags: { label: 'Remove Validator', color: 'red', variant: 'subtle' },
+    },
+    withdraw_validator: {
+      summary: DelegationWithdrawValidatorSummary,
+      tags: { label: 'Withdraw Validator', color: 'orange', variant: 'subtle' },
+    },
+    update_validator_status: {
+      summary: DelegationUpdateValidatorStatusSummary,
       tags: { label: 'Update Validator Status', color: 'blue', variant: 'subtle' },
+    },
+    update_validator_criteria: {
+      summary: DelegationUpdateValidatorCriteriaSummary,
+      tags: { label: 'Update Criteria', color: 'amber', variant: 'subtle' },
+    },
+    update_validator_multiplier: {
+      summary: DelegationUpdateValidatorMultiplierSummary,
+      tags: { label: 'Stake Multiplier', color: 'purple', variant: 'subtle' },
+    },
+    update_stake_change_epoch: {
+      summary: DelegationUpdateStakeChangeEpochSummary,
+      tags: { label: 'Stake Change Epoch', color: 'gray', variant: 'subtle' },
+    },
+
+    // Authorities
+    transfer_authority: {
+      summary: DelegationTransferAuthoritySummary,
+      tags: { label: 'Transfer Admin', color: 'red', variant: 'subtle' },
+    },
+    update_bot_authority: {
+      summary: DelegationUpdateBotAuthoritySummary,
+      tags: { label: 'Update Bot Authority', color: 'purple', variant: 'subtle' },
+    },
+    update_reviewer_authority: {
+      summary: DelegationUpdateReviewerAuthoritySummary,
+      tags: { label: 'Update Reviewer', color: 'blue', variant: 'subtle' },
+    },
+
+    // Cluster state and the bot's epoch lock
+    initialize_cluster_info: {
+      summary: DelegationInitializeClusterInfoSummary,
+      tags: { label: 'Initialize Cluster', color: 'purple', variant: 'subtle' },
+    },
+    update_cluster_info: {
+      summary: DelegationUpdateClusterInfoSummary,
+      tags: { label: 'Update Cluster', color: 'gray', variant: 'subtle' },
+    },
+    set_cluster_epoch: {
+      summary: DelegationSetClusterEpochSummary,
+      tags: { label: 'Set Cluster Epoch', color: 'amber', variant: 'subtle' },
+    },
+    acquire_epoch_lock: {
+      summary: DelegationAcquireEpochLockSummary,
+      tags: { label: 'Acquire Epoch Lock', color: 'gray', variant: 'subtle' },
+    },
+    release_epoch_lock: {
+      summary: DelegationReleaseEpochLockSummary,
+      tags: { label: 'Release Epoch Lock', color: 'green', variant: 'subtle' },
+    },
+    force_release_lock: {
+      summary: DelegationForceReleaseLockSummary,
+      tags: { label: 'Force Release Lock', color: 'amber', variant: 'subtle' },
     },
   },
 });
