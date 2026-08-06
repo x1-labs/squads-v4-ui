@@ -31,6 +31,25 @@ const formatLamports = (value: unknown): string => {
 const formatBool = (value: unknown): string => (value ? 'Enabled' : 'Disabled');
 
 /**
+ * Basis points shown as the percentage an operator would recognise. Zero is
+ * called out, because for the strike fields it means the penalty is switched off
+ * rather than simply set to nothing.
+ */
+const formatBpsAsPercent = (value: unknown): string => {
+  const n = toNumber(value);
+  if (n === null) return '—';
+  if (n === 0) return 'Disabled';
+  return `${n / 100}%`;
+};
+
+const formatEpochs = (value: unknown): string => {
+  const n = toNumber(value);
+  if (n === null) return '—';
+  if (n === 0) return 'Disabled';
+  return n === 1 ? '1 epoch' : `${n} epochs`;
+};
+
+/**
  * Every field of `UpdateConfigParams`, in the order the program declares them.
  * The summary renders straight from this list, so a new config parameter only
  * needs an entry here plus a refreshed IDL.
@@ -119,5 +138,26 @@ export const CONFIG_FIELDS: ConfigFieldSpec[] = [
     label: 'Min stake adjustment',
     description: "Smallest change that triggers a rebalance of a validator's stake",
     format: formatPercent,
+  },
+  {
+    key: 'strike_penalty_bps',
+    label: 'Repeat removal penalty',
+    description:
+      'Delegation ceiling taken away for each recent removal for poor performance. Zero switches the penalty off entirely',
+    format: formatBpsAsPercent,
+  },
+  {
+    key: 'strike_min_cap_bps',
+    label: 'Repeat removal floor',
+    description:
+      'Lowest ceiling the repeat removal penalty can impose, no matter how many times a validator has been removed',
+    format: formatBpsAsPercent,
+  },
+  {
+    key: 'strike_decay_epochs',
+    label: 'Repeat removal decay',
+    description:
+      'Good epochs that work off a single removal. Zero switches the penalty off entirely',
+    format: formatEpochs,
   },
 ];

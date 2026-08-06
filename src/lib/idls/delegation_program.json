@@ -1497,6 +1497,98 @@
       ]
     },
     {
+      "name": "update_validator_removal_score",
+      "docs": [
+        "Update a validator's repeat-removal penalty score (admin or bot authority)",
+        "",
+        "The score is penalty points, not a removal count: a removal for failing performance",
+        "criteria adds `strike_decay_epochs` points and every eligible epoch removes one. The",
+        "caller computes the new value; this instruction is a plain setter so the arithmetic",
+        "stays in one place off-chain."
+      ],
+      "discriminator": [
+        234,
+        7,
+        212,
+        199,
+        237,
+        82,
+        84,
+        255
+      ],
+      "accounts": [
+        {
+          "name": "validator",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  108,
+                  105,
+                  100,
+                  97,
+                  116,
+                  111,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "validator.vote_account",
+                "account": "ValidatorInfo"
+              }
+            ]
+          }
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  95,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "signer",
+          "docs": [
+            "The signer (either admin authority or bot authority)"
+          ],
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "removal_score",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "update_validator_status",
       "docs": [
         "Rewrite a validator account to the provided state (admin or reviewer authority)",
@@ -2005,6 +2097,33 @@
             "type": "pubkey"
           },
           {
+            "name": "strike_penalty_bps",
+            "docs": [
+              "Basis points of delegation removed from a validator's ceiling per recent removal.",
+              "With 2000, one removal caps a validator at 80% of normal delegation, two at 60%."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "strike_min_cap_bps",
+            "docs": [
+              "Floor for the penalised ceiling, in basis points. A validator can never be pushed",
+              "below this no matter how many times it has been removed."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "strike_decay_epochs",
+            "docs": [
+              "Good epochs required to work off a single removal. Also the number of penalty points",
+              "a removal adds to `ValidatorInfo::removal_score`.",
+              "",
+              "Zero disables the whole mechanism, which is what configs created before this field",
+              "existed read out of `_reserved`."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "_reserved",
             "docs": [
               "Reserved space for future use"
@@ -2012,7 +2131,7 @@
             "type": {
               "array": [
                 "u8",
-                480
+                475
               ]
             }
           }
@@ -2151,6 +2270,24 @@
             "type": {
               "option": "u8"
             }
+          },
+          {
+            "name": "strike_penalty_bps",
+            "type": {
+              "option": "u16"
+            }
+          },
+          {
+            "name": "strike_min_cap_bps",
+            "type": {
+              "option": "u16"
+            }
+          },
+          {
+            "name": "strike_decay_epochs",
+            "type": {
+              "option": "u8"
+            }
           }
         ]
       }
@@ -2231,6 +2368,21 @@
             "type": "u64"
           },
           {
+            "name": "removal_score",
+            "docs": [
+              "Penalty points for recent removals from the delegation pool.",
+              "",
+              "This is NOT a raw removal count. A removal for failing performance criteria adds",
+              "`DelegationConfig::strike_decay_epochs` points, and every epoch the validator is",
+              "eligible removes one. Divide by `strike_decay_epochs` to get the removal count",
+              "(see `strike_tier`); the value itself is the number of good epochs remaining",
+              "before the penalty is fully cleared.",
+              "",
+              "Carved out of `_reserved` so the account size is unchanged for deployed validators."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "_reserved",
             "docs": [
               "Reserved space for future use"
@@ -2238,7 +2390,7 @@
             "type": {
               "array": [
                 "u8",
-                502
+                500
               ]
             }
           }

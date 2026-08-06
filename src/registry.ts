@@ -59,6 +59,7 @@ import {
   DelegationUpdateValidatorStatusSummary,
   DelegationUpdateValidatorCriteriaSummary,
   DelegationUpdateValidatorMultiplierSummary,
+  DelegationUpdateValidatorRemovalScoreSummary,
   DelegationUpdateStakeChangeEpochSummary,
   DelegationInitializeConfigSummary,
   DelegationTransferAuthoritySummary,
@@ -308,6 +309,10 @@ registry.register({
     update_validator_multiplier: {
       summary: DelegationUpdateValidatorMultiplierSummary,
       tags: { label: 'Stake Multiplier', color: 'purple', variant: 'subtle' },
+    },
+    update_validator_removal_score: {
+      summary: DelegationUpdateValidatorRemovalScoreSummary,
+      tags: { label: 'Removal Penalty', color: 'amber', variant: 'subtle' },
     },
     update_stake_change_epoch: {
       summary: DelegationUpdateStakeChangeEpochSummary,

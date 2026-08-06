@@ -17,7 +17,8 @@ import {
   ValueChange,
   accountByName,
 } from './shared';
-import { useDelegationValidator } from './hooks';
+import { useDelegationConfig, useDelegationValidator } from './hooks';
+import { DelegationConfigAccount } from '@/lib/delegation/accounts';
 
 /** Describe a `ValidatorStatus` enum value, falling back to the raw variant. */
 function describeStatus(value: unknown): { label: string; description?: string } {
@@ -326,6 +327,126 @@ export const DelegationUpdateValidatorMultiplierSummary: React.FC<InstructionSum
             )
           }
         />
+        {signer && <AddressWithButtons address={signer} label="Signer" />}
+      </DetailBlock>
+    </SummaryShell>
+  );
+};
+
+/**
+ * Translate a raw removal score into the terms an approver needs to judge it.
+ *
+ * The score is penalty points, not a removal count: a removal adds
+ * `strike_decay_epochs` points and each eligible epoch works one off. The raw
+ * number alone says nothing about what the proposal does to the validator, so
+ * derive the removal count and the delegation ceiling it imposes.
+ */
+function describeRemovalScore(
+  score: number | null,
+  config: DelegationConfigAccount | null
+): { removals: number; capBps: number } | null {
+  if (score === null || !config) return null;
+
+  const decayEpochs = toNumber(config.strike_decay_epochs);
+  const penaltyBps = toNumber(config.strike_penalty_bps);
+  const minCapBps = toNumber(config.strike_min_cap_bps);
+  if (!decayEpochs || !penaltyBps || minCapBps === null) return null;
+
+  const removals = Math.floor(score / decayEpochs);
+  return {
+    removals,
+    capBps: Math.max(10000 - removals * penaltyBps, minCapBps),
+  };
+}
+
+/**
+ * `update_validator_removal_score` — records or works off the repeat-removal
+ * penalty. Raising it lowers the validator's delegation ceiling and slows its
+ * ramp back up; the bot lowers it by one for every epoch the validator stays
+ * eligible.
+ */
+export const DelegationUpdateValidatorRemovalScoreSummary: React.FC<InstructionSummaryProps> = ({
+  instruction,
+  connection,
+}) => {
+  const { voteAccount, validatorPda, info } = useDelegationValidator(instruction, connection);
+  const { config } = useDelegationConfig(instruction, connection);
+  const signer = accountByName(instruction, 'signer', 2);
+
+  const newScore = toNumber(instruction.args?.removal_score);
+  const currentScore = info ? toNumber(info.removal_score) : null;
+  const changed = currentScore !== null && newScore !== null && currentScore !== newScore;
+  const increased = currentScore !== null && newScore !== null && newScore > currentScore;
+
+  const next = describeRemovalScore(newScore, config);
+  const current = describeRemovalScore(currentScore, config);
+
+  return (
+    <SummaryShell
+      icon="⛔"
+      title="Update Repeat Removal Penalty"
+      subtitle={
+        newScore === null
+          ? "Adjusts this validator's repeat-removal penalty"
+          : newScore === 0
+            ? 'Clears the penalty and restores full delegation eligibility'
+            : increased
+              ? 'Penalises this validator for being removed again for poor performance'
+              : "Works off part of this validator's repeat-removal penalty"
+      }
+      tone={increased ? 'red' : 'amber'}
+    >
+      <DetailBlock>
+        <ValidatorTarget voteAccount={voteAccount} validatorPda={validatorPda} />
+        <Field
+          label="Penalty points"
+          hint="Also the number of good epochs left before the penalty clears"
+          value={
+            changed ? (
+              <ValueChange
+                from={currentScore?.toLocaleString() ?? '—'}
+                to={newScore?.toLocaleString() ?? '—'}
+                tone={increased ? 'red' : 'amber'}
+              />
+            ) : (
+              (newScore?.toLocaleString() ?? '—')
+            )
+          }
+        />
+        {next && (
+          <>
+            <Field
+              label="Recent removals"
+              hint="Penalty points divided by the configured decay period"
+              value={
+                current && current.removals !== next.removals ? (
+                  <ValueChange
+                    from={String(current.removals)}
+                    to={String(next.removals)}
+                    tone={increased ? 'red' : 'amber'}
+                  />
+                ) : (
+                  String(next.removals)
+                )
+              }
+            />
+            <Field
+              label="Delegation ceiling"
+              hint="Most stake this validator may receive while the penalty stands"
+              value={
+                current && current.capBps !== next.capBps ? (
+                  <ValueChange
+                    from={formatBasisPoints(current.capBps)}
+                    to={formatBasisPoints(next.capBps)}
+                    tone={increased ? 'red' : 'amber'}
+                  />
+                ) : (
+                  formatBasisPoints(next.capBps)
+                )
+              }
+            />
+          </>
+        )}
         {signer && <AddressWithButtons address={signer} label="Signer" />}
       </DetailBlock>
     </SummaryShell>
