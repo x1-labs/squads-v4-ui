@@ -75,6 +75,9 @@ export interface DelegationConfigAccount {
   min_stake_adjustment_pct: number;
   bot_authority: PublicKey;
   reviewer_authority: PublicKey;
+  strike_penalty_bps: number;
+  strike_min_cap_bps: number;
+  strike_decay_epochs: number;
 }
 
 /** The on-chain `ClusterInfo`, tracking epoch processing and the bot's lock. */
@@ -95,6 +98,12 @@ export interface ValidatorInfoAccount {
   failing_criteria: unknown[];
   stake_multiplier_bps: number;
   last_stake_change_epoch: unknown;
+  /**
+   * Penalty points for recent removals, not a removal count. A removal for poor
+   * performance adds `strike_decay_epochs` points and each eligible epoch works one
+   * off, so the value doubles as the good epochs left before the penalty clears.
+   */
+  removal_score: number;
 }
 
 /** Cached reader for this program's on-chain accounts. */

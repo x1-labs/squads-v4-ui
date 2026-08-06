@@ -18,6 +18,7 @@ export {
   DelegationUpdateValidatorStatusSummary,
   DelegationUpdateValidatorCriteriaSummary,
   DelegationUpdateValidatorMultiplierSummary,
+  DelegationUpdateValidatorRemovalScoreSummary,
   DelegationUpdateStakeChangeEpochSummary,
 } from './ValidatorSummaries';
 
