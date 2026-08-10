@@ -352,7 +352,10 @@ function describeRemovalScore(
   const minCapBps = toNumber(config.strike_min_cap_bps);
   if (!decayEpochs || !penaltyBps || minCapBps === null) return null;
 
-  const removals = Math.floor(score / decayEpochs);
+  // Rounds up, matching `strike_tier` on-chain: a removal holds its full weight until
+  // every one of its points is worked off. Rounding down here would tell a signer that a
+  // score of 5 means one removal at an 80% ceiling when the program applies two at 60%.
+  const removals = Math.ceil(score / decayEpochs);
   return {
     removals,
     capBps: Math.max(10000 - removals * penaltyBps, minCapBps),
