@@ -1,0 +1,102 @@
+import {
+  ComputeBudgetProgram,
+  Connection,
+  PublicKey,
+  TransactionInstruction,
+} from '@solana/web3.js';
+
+/**
+ * Priority fee floor, in micro-lamports per compute unit.
+ *
+ * Solana's fee market is quiet most of the time — `getRecentPrioritizationFees`
+ * routinely reports 0 for every sampled slot — but a zero-fee transaction is the
+ * first thing dropped when a slot does fill up. A small floor costs a fraction of
+ * a cent at realistic compute budgets and buys a place in the queue ahead of the
+ * genuinely unpriced traffic.
+ */
+const FEE_FLOOR_MICRO_LAMPORTS = 1_000;
+
+/**
+ * Ceiling, so a single congested account in the sample can't turn a proposal
+ * approval into a visibly expensive transaction. At the ~50k CU these actions
+ * consume this caps the priority portion at 0.005 SOL.
+ */
+const FEE_CEILING_MICRO_LAMPORTS = 100_000;
+
+/** Percentile of the recent-fee sample to bid. High enough to beat the median slot. */
+const FEE_PERCENTILE = 0.75;
+
+/**
+ * Compute-unit headroom over what simulation actually consumed.
+ *
+ * The budget instructions are added *after* the simulation that measures usage,
+ * so the limit has to cover both the measured work and the two ComputeBudget
+ * instructions themselves (150 CU each).
+ */
+const CU_MARGIN = 1.2;
+const CU_BUDGET_INSTRUCTION_OVERHEAD = 600;
+
+/** Fallback when simulation didn't report usage. Comfortably above any proposal action. */
+const CU_FALLBACK = 200_000;
+
+/**
+ * Bid the 75th percentile of what recently landed against these accounts.
+ *
+ * `getRecentPrioritizationFees` reports, per slot, the lowest priority fee among
+ * transactions that wrote to the given accounts — so it describes the going rate
+ * for contending with *this* proposal's writes specifically, not the chain as a
+ * whole. Failure is never fatal: a fee lookup that errors or rate-limits must not
+ * block an approval, so we fall back to the floor.
+ */
+export async function getPriorityFeeMicroLamports(
+  connection: Connection,
+  writableAccounts: PublicKey[]
+): Promise<number> {
+  try {
+    const response = await connection.getRecentPrioritizationFees({
+      // The RPC caps this list at 128 accounts.
+      lockedWritableAccounts: writableAccounts.slice(0, 128),
+    });
+
+    if (!response.length) return FEE_FLOOR_MICRO_LAMPORTS;
+
+    const fees = response.map((sample) => sample.prioritizationFee).sort((a, b) => a - b);
+    const percentileFee = fees[Math.min(fees.length - 1, Math.floor(fees.length * FEE_PERCENTILE))];
+
+    return Math.min(FEE_CEILING_MICRO_LAMPORTS, Math.max(FEE_FLOOR_MICRO_LAMPORTS, percentileFee));
+  } catch (error) {
+    console.warn('[priorityFee] Falling back to floor, fee lookup failed:', error);
+    return FEE_FLOOR_MICRO_LAMPORTS;
+  }
+}
+
+/**
+ * Compute budget instructions to prepend to a transaction.
+ *
+ * Both are needed together: the priority fee is `price × limit`, so setting a
+ * price without a limit bids against the default request (200k CU per
+ * instruction) and overpays several-fold for work that actually costs ~50k.
+ *
+ * Pass `unitsConsumed` from a prior `simulateTransaction` to size the limit to
+ * the real cost. These instructions change the transaction after that
+ * simulation, which is safe because they are deterministic and the send path
+ * keeps preflight enabled — the RPC re-simulates the final form before accepting.
+ */
+export async function buildComputeBudgetInstructions(
+  connection: Connection,
+  writableAccounts: PublicKey[],
+  unitsConsumed?: number | null
+): Promise<TransactionInstruction[]> {
+  const microLamports = await getPriorityFeeMicroLamports(connection, writableAccounts);
+
+  const units = unitsConsumed
+    ? Math.ceil(unitsConsumed * CU_MARGIN) + CU_BUDGET_INSTRUCTION_OVERHEAD
+    : CU_FALLBACK;
+
+  console.log('[priorityFee] Compute budget:', { microLamports, units, unitsConsumed });
+
+  return [
+    ComputeBudgetProgram.setComputeUnitLimit({ units }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports }),
+  ];
+}

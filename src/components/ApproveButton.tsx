@@ -6,7 +6,8 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
-import { waitForConfirmation } from '../lib/transactionConfirmation';
+import { getSendableBlockhash, sendAndConfirm } from '../lib/transaction/sendAndConfirm';
+import { buildComputeBudgetInstructions } from '../lib/transaction/priorityFee';
 
 type ApproveButtonProps = {
   multisigPda: string;
@@ -125,19 +126,44 @@ const ApproveButton = ({
         throw new Error(`Transaction simulation failed: ${JSON.stringify(simulation.value.err)}`);
       }
 
-      // Get FRESH blockhash right before sending (after user sees the simulation success)
-      // This minimizes the time between getting blockhash and wallet approval
+      // Price the transaction against what recently landed on the accounts it
+      // writes to, and size the compute limit to what simulation just measured.
+      const [proposalPda] = multisig.getProposalPda({
+        multisigPda: new PublicKey(multisigPda),
+        transactionIndex: bigIntTransactionIndex,
+        programId: actualProgramId,
+      });
+      const computeBudgetInstructions = await buildComputeBudgetInstructions(
+        connection,
+        [proposalPda, new PublicKey(multisigPda)],
+        simulation.value.unitsConsumed
+      );
+
+      // Rebuild with the budget instructions first — a compute budget applies to
+      // the whole transaction regardless of position, but keeping them at the
+      // front matches convention and keeps the decoded instruction list readable.
+      const finalTransaction = new Transaction();
+      finalTransaction.feePayer = wallet.publicKey;
+      finalTransaction.add(...computeBudgetInstructions, ...transaction.instructions);
+
+      // Get FRESH blockhash right before sending (after user sees the simulation
+      // success). This minimizes the time between getting blockhash and wallet
+      // approval, and 'confirmed' avoids spending ~12s of the validity window on
+      // a blockhash that is already 31 blocks old.
       console.log('[ApproveButton] Fetching FRESH blockhash for sending');
       const startFreshBlockhash = Date.now();
-      const { blockhash: freshBlockhash } = await connection.getLatestBlockhash();
+      const { blockhash: freshBlockhash, lastValidBlockHeight } =
+        await getSendableBlockhash(connection);
       console.log(
         '[ApproveButton] Got fresh blockhash:',
         freshBlockhash,
+        'valid through block',
+        lastValidBlockHeight,
         'in',
         Date.now() - startFreshBlockhash,
         'ms'
       );
-      transaction.recentBlockhash = freshBlockhash;
+      finalTransaction.recentBlockhash = freshBlockhash;
 
       // If simulation passes, sign with the wallet and broadcast via the app's
       // connection. Signing only (instead of wallet.sendTransaction) means the
@@ -149,50 +175,18 @@ const ApproveButton = ({
         throw new Error('Wallet does not support transaction signing');
       }
       const startSend = Date.now();
-      const signedTransaction = await wallet.signTransaction(transaction);
-      signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: false,
-        maxRetries: 3,
-      });
-      console.log(
-        '[ApproveButton] Transaction sent! Signature:',
-        signature,
-        'Time to sign:',
-        Date.now() - startSend,
-        'ms'
-      );
+      const signedTransaction = await wallet.signTransaction(finalTransaction);
+      console.log('[ApproveButton] Signed in', Date.now() - startSend, 'ms');
+
       toast.loading('Confirming approval...', {
         id: 'transaction',
       });
 
-      console.log('[ApproveButton] Waiting for confirmation');
-      const startConfirm = Date.now();
-      const confirmations = await waitForConfirmation(connection, [signature]);
-      console.log(
-        '[ApproveButton] Confirmation result:',
-        confirmations,
-        'Time to confirm:',
-        Date.now() - startConfirm,
-        'ms'
-      );
-
-      // Check if transaction failed
-      const status = confirmations[0];
-      if (!status || status.err !== null) {
-        if (!status) {
-          throw new Error(`Transaction not found or expired. Signature: ${signature}`);
-        }
-        if (status.err) {
-          const errorStr = JSON.stringify(status.err);
-          if (errorStr.includes('InstructionError')) {
-            throw new Error(
-              `Transaction failed with instruction error. Check explorer for signature: ${signature}`
-            );
-          }
-          throw new Error(`Transaction failed: ${errorStr}`);
-        }
-        throw new Error(`Transaction failed. Check explorer for signature: ${signature}`);
-      }
+      // Sends, then rebroadcasts every 2s until the signature confirms or the
+      // blockhash expires. Throws TransactionFailedError / TransactionExpiredError.
+      signature = await sendAndConfirm(connection, signedTransaction, lastValidBlockHeight, {
+        label: 'ApproveButton',
+      });
 
       // Invalidate all relevant queries to refresh data
       console.log('[ApproveButton] Invalidating queries');
