@@ -1,9 +1,5 @@
-import {
-  ComputeBudgetProgram,
-  Connection,
-  PublicKey,
-  TransactionInstruction,
-} from '@solana/web3.js';
+import { ComputeBudgetProgram } from '@solana/web3.js';
+import type { Connection, PublicKey, TransactionInstruction } from '@solana/web3.js';
 
 /**
  * Priority fee floor, in micro-lamports per compute unit.
@@ -71,11 +67,39 @@ export async function getPriorityFeeMicroLamports(
 }
 
 /**
- * Compute budget instructions to prepend to a transaction.
+ * Compute-unit limit to request for work that simulation measured at
+ * `unitsConsumed`. Returns the fallback when there is no measurement, and never
+ * less than `minUnits` so a caller can let the user raise the floor.
+ */
+export function sizeComputeUnitLimit(unitsConsumed?: number | null, minUnits = 0): number {
+  const sized = unitsConsumed
+    ? Math.ceil(unitsConsumed * CU_MARGIN) + CU_BUDGET_INSTRUCTION_OVERHEAD
+    : CU_FALLBACK;
+  return Math.max(minUnits, sized);
+}
+
+/**
+ * The two ComputeBudget instructions, always together: the priority fee is
+ * `price × limit`, so setting a price without a limit bids against the default
+ * request (200k CU per instruction) and overpays several-fold for work that
+ * actually costs ~50k.
  *
- * Both are needed together: the priority fee is `price × limit`, so setting a
- * price without a limit bids against the default request (200k CU per
- * instruction) and overpays several-fold for work that actually costs ~50k.
+ * `microLamports` must be a non-negative integer — web3.js converts it with
+ * `BigInt()`, which throws on fractions and NaN.
+ */
+export function computeBudgetInstructions(params: {
+  units: number;
+  microLamports: number;
+}): TransactionInstruction[] {
+  return [
+    ComputeBudgetProgram.setComputeUnitLimit({ units: params.units }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: params.microLamports }),
+  ];
+}
+
+/**
+ * Compute budget instructions to prepend to a transaction, priced from the
+ * live fee market for `writableAccounts`.
  *
  * Pass `unitsConsumed` from a prior `simulateTransaction` to size the limit to
  * the real cost. These instructions change the transaction after that
@@ -88,15 +112,9 @@ export async function buildComputeBudgetInstructions(
   unitsConsumed?: number | null
 ): Promise<TransactionInstruction[]> {
   const microLamports = await getPriorityFeeMicroLamports(connection, writableAccounts);
-
-  const units = unitsConsumed
-    ? Math.ceil(unitsConsumed * CU_MARGIN) + CU_BUDGET_INSTRUCTION_OVERHEAD
-    : CU_FALLBACK;
+  const units = sizeComputeUnitLimit(unitsConsumed);
 
   console.log('[priorityFee] Compute budget:', { microLamports, units, unitsConsumed });
 
-  return [
-    ComputeBudgetProgram.setComputeUnitLimit({ units }),
-    ComputeBudgetProgram.setComputeUnitPrice({ microLamports }),
-  ];
+  return computeBudgetInstructions({ units, microLamports });
 }

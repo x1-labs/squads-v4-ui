@@ -6,8 +6,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
-import { getSendableBlockhash, sendAndConfirm } from '../lib/transaction/sendAndConfirm';
-import { buildComputeBudgetInstructions } from '../lib/transaction/priorityFee';
+import { signSendAndConfirm } from '../lib/transaction/signSendAndConfirm';
 
 type CancelButtonProps = {
   multisigPda: string;
@@ -44,6 +43,7 @@ const CancelButton = ({
     }
 
     const bigIntTransactionIndex = BigInt(transactionIndex);
+    const actualProgramId = programId ? new PublicKey(programId) : multisig.PROGRAM_ID;
 
     if (!canCancel) {
       toast.error("You can only cancel approved proposals that haven't been executed.");
@@ -63,7 +63,7 @@ const CancelButton = ({
         multisigPda: new PublicKey(multisigPda),
         member: wallet.publicKey,
         transactionIndex: bigIntTransactionIndex,
-        programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+        programId: actualProgramId,
       });
       transaction.add(cancelInstruction);
 
@@ -113,63 +113,20 @@ const CancelButton = ({
         throw new Error(`Transaction simulation failed: ${JSON.stringify(simulation.value.err)}`);
       }
 
-      // Price the transaction against what recently landed on the accounts it
-      // writes to, and size the compute limit to what simulation just measured.
-      const actualProgramId = programId ? new PublicKey(programId) : multisig.PROGRAM_ID;
       const [proposalPda] = multisig.getProposalPda({
         multisigPda: new PublicKey(multisigPda),
         transactionIndex: bigIntTransactionIndex,
         programId: actualProgramId,
       });
-      const computeBudgetInstructions = await buildComputeBudgetInstructions(
-        connection,
-        [proposalPda, new PublicKey(multisigPda)],
-        simulation.value.unitsConsumed
-      );
 
-      const finalTransaction = new Transaction();
-      finalTransaction.feePayer = wallet.publicKey;
-      finalTransaction.add(...computeBudgetInstructions, ...transaction.instructions);
-
-      // Get FRESH blockhash right before sending (after user sees the simulation
-      // success). 'confirmed' avoids spending ~12s of the validity window on a
-      // blockhash that is already 31 blocks old.
-      console.log('[CancelButton] Fetching FRESH blockhash for sending');
-      const startFreshBlockhash = Date.now();
-      const { blockhash: freshBlockhash, lastValidBlockHeight } =
-        await getSendableBlockhash(connection);
-      console.log(
-        '[CancelButton] Got fresh blockhash:',
-        freshBlockhash,
-        'valid through block',
-        lastValidBlockHeight,
-        'in',
-        Date.now() - startFreshBlockhash,
-        'ms'
-      );
-      finalTransaction.recentBlockhash = freshBlockhash;
-
-      // If simulation passes, sign with the wallet and broadcast via the app's
-      // connection. Signing only (instead of wallet.sendTransaction) means the
-      // wallet never broadcasts, so it doesn't need to be pointed at this
-      // network's RPC — the app always submits to the configured endpoint. This
-      // also avoids the "Plugin Closed" errors some wallets throw on send.
-      console.log('[CancelButton] Requesting wallet signature');
-      if (!wallet.signTransaction) {
-        throw new Error('Wallet does not support transaction signing');
-      }
-      const startSend = Date.now();
-      const signedTransaction = await wallet.signTransaction(finalTransaction);
-      console.log('[CancelButton] Signed in', Date.now() - startSend, 'ms');
-
-      toast.loading('Confirming cancellation...', {
-        id: 'transaction',
-      });
-
-      // Sends, then rebroadcasts every 2s until the signature confirms or the
-      // blockhash expires. Throws TransactionFailedError / TransactionExpiredError.
-      signature = await sendAndConfirm(connection, signedTransaction, lastValidBlockHeight, {
+      // Attaches a priced compute budget, signs, then rebroadcasts until the
+      // signature confirms or the blockhash expires. Throws
+      // TransactionFailedError / TransactionExpiredError.
+      signature = await signSendAndConfirm(connection, wallet, transaction.instructions, {
+        writableAccounts: [proposalPda, new PublicKey(multisigPda)],
+        unitsConsumed: simulation.value.unitsConsumed,
         label: 'CancelButton',
+        onSigned: () => toast.loading('Confirming cancellation...', { id: 'transaction' }),
       });
 
       // Invalidate all relevant queries to refresh data
