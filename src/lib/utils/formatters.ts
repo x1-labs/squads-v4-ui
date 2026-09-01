@@ -1,33 +1,46 @@
+import { NativeSymbol } from '@/lib/network';
+
 /**
- * Format lamports to XNT with proper decimal places
- * 1 XNT = 1,000,000,000 lamports (9 decimals)
+ * Number of decimals in the native token. Identical on X1 and Solana — both
+ * split the native unit into 1,000,000,000 lamports — so only the ticker
+ * printed alongside an amount is chain-dependent.
  */
-export function formatXNT(lamports: bigint | number | string | undefined | null): string {
+const NATIVE_DECIMALS = 9;
+
+/**
+ * Format lamports as an amount of the chain's native token.
+ *
+ * The symbol is passed in rather than baked in: the same bundle serves X1
+ * (XNT) and Solana (SOL). Components read it from `useNativeSymbol()`.
+ */
+export function formatNativeAmount(
+  lamports: bigint | number | string | undefined | null,
+  symbol: NativeSymbol
+): string {
   if (lamports === undefined || lamports === null) {
-    return '0 XNT';
+    return `0 ${symbol}`;
   }
 
   const lamportsBigInt = typeof lamports === 'bigint' ? lamports : BigInt(lamports.toString());
-  const XNT_DECIMALS = 9;
-  const divisor = BigInt(10 ** XNT_DECIMALS);
+  const divisor = BigInt(10 ** NATIVE_DECIMALS);
 
   const wholePart = lamportsBigInt / divisor;
   const fractionalPart = lamportsBigInt % divisor;
 
   // Format fractional part with leading zeros
-  const fractionalStr = fractionalPart.toString().padStart(XNT_DECIMALS, '0');
+  const fractionalStr = fractionalPart.toString().padStart(NATIVE_DECIMALS, '0');
 
   // Remove trailing zeros and decimal point if not needed
   const trimmedFractional = fractionalStr.replace(/0+$/, '');
 
   if (trimmedFractional === '') {
-    return `${wholePart.toLocaleString()} XNT`;
+    return `${wholePart.toLocaleString()} ${symbol}`;
   }
 
   // Limit to 2 decimal places
   const limitedFractional = trimmedFractional.substring(0, 2);
 
-  return `${wholePart.toLocaleString()}.${limitedFractional} XNT`;
+  return `${wholePart.toLocaleString()}.${limitedFractional} ${symbol}`;
 }
 
 /**
@@ -87,30 +100,31 @@ export function formatLargeNumber(value: number, decimals: number = 2): string {
 }
 
 /**
- * Format XNT with abbreviated units for large amounts
+ * Format the native token with abbreviated units for large amounts.
  */
-export function formatXNTCompact(lamports: bigint | number | string | undefined | null): string {
+export function formatNativeAmountCompact(
+  lamports: bigint | number | string | undefined | null,
+  symbol: NativeSymbol
+): string {
   if (lamports === undefined || lamports === null) {
-    return '0 XNT';
+    return `0 ${symbol}`;
   }
 
   // Handle decimal numbers by rounding them first
-  const lamportsBigInt = typeof lamports === 'bigint' 
-    ? lamports 
-    : BigInt(Math.round(Number(lamports)));
-  const XNT_DECIMALS = 9;
+  const lamportsBigInt =
+    typeof lamports === 'bigint' ? lamports : BigInt(Math.round(Number(lamports)));
 
-  // Convert to XNT as a number
-  const xntValue = Number(lamportsBigInt) / 10 ** XNT_DECIMALS;
+  // Convert lamports to whole native units
+  const value = Number(lamportsBigInt) / 10 ** NATIVE_DECIMALS;
 
-  if (xntValue < 1000) {
-    return `${xntValue.toFixed(2)} XNT`;
-  } else if (xntValue < 1000000) {
-    return `${(xntValue / 1000).toFixed(2)}K XNT`;
-  } else if (xntValue < 1000000000) {
-    return `${(xntValue / 1000000).toFixed(2)}M XNT`;
+  if (value < 1000) {
+    return `${value.toFixed(2)} ${symbol}`;
+  } else if (value < 1000000) {
+    return `${(value / 1000).toFixed(2)}K ${symbol}`;
+  } else if (value < 1000000000) {
+    return `${(value / 1000000).toFixed(2)}M ${symbol}`;
   } else {
-    return `${(xntValue / 1000000000).toFixed(2)}B XNT`;
+    return `${(value / 1000000000).toFixed(2)}B ${symbol}`;
   }
 }
 

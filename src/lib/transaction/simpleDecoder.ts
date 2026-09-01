@@ -679,7 +679,7 @@ export class SimpleDecoder {
               lamports: lamports.toString(),
               voteAccount: accountKeys[0]?.pubkey?.toBase58(),
               destination: accountKeys[1]?.pubkey?.toBase58(),
-              withdrawAuthority: accountKeys[2]?.pubkey?.toBase58()
+              withdrawAuthority: accountKeys[2]?.pubkey?.toBase58(),
             };
           } catch (e) {
             console.error('Error parsing Vote Withdraw instruction:', e);
@@ -702,7 +702,7 @@ export class SimpleDecoder {
             args = {
               commission,
               voteAccount: accountKeys[0]?.pubkey?.toBase58(),
-              withdrawAuthority: accountKeys[1]?.pubkey?.toBase58()
+              withdrawAuthority: accountKeys[1]?.pubkey?.toBase58(),
             };
           } catch (e) {
             console.error('Error parsing UpdateCommission instruction:', e);
@@ -753,7 +753,7 @@ export class SimpleDecoder {
       programName: 'Vote Program',
       instructionName: registryInstructionName,
       instructionTitle: instructionName,
-      data: args,  // Pass args as data for summary components
+      data: args, // Pass args as data for summary components
       accounts: accountKeys.map((key, i) => ({
         name: accountNames[i] || `Account ${i}`,
         pubkey: key.pubkey ? key.pubkey.toBase58() : 'Unknown',
@@ -772,7 +772,7 @@ export class SimpleDecoder {
     switch (instructionType) {
       case 0: // InitializeAccount
         return ['Vote Account', 'Rent Sysvar', 'Clock Sysvar', 'Node Account'];
-      case 1: // Authorize  
+      case 1: // Authorize
         return ['Vote Account', 'Clock Sysvar', 'Authority', 'New Authority'];
       case 2: // Vote
         return ['Vote Account', 'Slot Hashes Sysvar', 'Clock Sysvar', 'Authority'];
@@ -1284,7 +1284,7 @@ export class SimpleDecoder {
           args = {
             lamports: lamports.toString(),
           };
-          // Create typed data for XNT transfer
+          // Create typed data for the native transfer
           instructionData = {
             from: accountKeys[0]?.pubkey?.toBase58() || 'Unknown',
             to: accountKeys[1]?.pubkey?.toBase58() || 'Unknown',
@@ -1313,12 +1313,12 @@ export class SimpleDecoder {
             // [N-N+8]: lamports (u64)
             // [N+8-N+16]: space (u64)
             // [N+16-N+48]: owner pubkey (32 bytes)
-            
+
             const base = new PublicKey(data.slice(4, 36));
             // Bincode uses u64 for string length, not u32
             const seedLength = Number(data.readBigUInt64LE(36));
             const seed = data.slice(44, 44 + seedLength).toString('utf-8');
-            
+
             const lamportsOffset = 44 + seedLength;
             const lamports = data.readBigUInt64LE(lamportsOffset);
 
@@ -1328,7 +1328,7 @@ export class SimpleDecoder {
               seed,
               lamportsOffset,
               lamports: lamports.toString(),
-              lamportsFormatted: (Number(lamports) / 10**9).toLocaleString() + ' XNT'
+              lamportsFormatted: (Number(lamports) / 10 ** 9).toLocaleString(),
             });
 
             const space = data.readBigUInt64LE(lamportsOffset + 8);

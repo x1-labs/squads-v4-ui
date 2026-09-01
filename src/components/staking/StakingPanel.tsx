@@ -3,9 +3,11 @@ import { DepositXntDialog } from './DepositXntDialog';
 import { WithdrawXntDialog } from './WithdrawXntDialog';
 import { useStakePools } from '@/hooks/useStakePools';
 import { Skeleton } from '../ui/skeleton';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 
 export function StakingPanel() {
   const { data: stakePools, isLoading: poolsLoading } = useStakePools();
+  const nativeSymbol = useNativeSymbol();
 
   // Group pools by staked/available
   const stakedPools = stakePools?.filter((p) => p.userBalance && p.userBalance > 0) || [];
@@ -16,7 +18,7 @@ export function StakingPanel() {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle>Stake Pools</CardTitle>
-            <CardDescription>Stake XNT to earn rewards</CardDescription>
+            <CardDescription>Stake {nativeSymbol} to earn rewards</CardDescription>
           </div>
           <div className="flex gap-2">
             <DepositXntDialog />

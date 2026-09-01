@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { InstructionSummaryProps } from '@/lib/instructions/types';
-import { formatXNT } from '@/lib/utils/formatters';
+import { formatNativeAmount } from '@/lib/utils/formatters';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 import { PublicKey } from '@solana/web3.js';
 import { useValidatorMetadata } from '@/hooks/useValidatorMetadata';
@@ -13,6 +14,7 @@ export const WithdrawStakeSummary: React.FC<InstructionSummaryProps> = ({
   instruction,
   connection,
 }) => {
+  const nativeSymbol = useNativeSymbol();
   const [voteAccount, setVoteAccount] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -63,7 +65,7 @@ export const WithdrawStakeSummary: React.FC<InstructionSummaryProps> = ({
       <div className="space-y-1.5">
         <div className="grid grid-cols-[80px,1fr] gap-2">
           <span className="text-muted-foreground">Amount:</span>
-          <span className="font-medium">{formatXNT(lamports)}</span>
+          <span className="font-medium">{formatNativeAmount(lamports, nativeSymbol)}</span>
         </div>
         <AddressWithButtons address={stakeAccount} label="Stake Account" />
         {voteAccount && !isLoading && (

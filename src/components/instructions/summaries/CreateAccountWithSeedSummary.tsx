@@ -1,6 +1,7 @@
 import React from 'react';
 import { InstructionSummaryProps } from '@/lib/instructions/types';
-import { formatXNT, formatXNTCompact } from '@/lib/utils/formatters';
+import { formatNativeAmount, formatNativeAmountCompact } from '@/lib/utils/formatters';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 
 /**
@@ -9,6 +10,7 @@ import { AddressWithButtons } from '@/components/AddressWithButtons';
 export const CreateAccountWithSeedSummary: React.FC<InstructionSummaryProps> = ({
   instruction,
 }) => {
+  const nativeSymbol = useNativeSymbol();
   // Get the create account details from args
   const lamports = instruction.args?.lamports;
   const owner = instruction.args?.owner;
@@ -33,8 +35,8 @@ export const CreateAccountWithSeedSummary: React.FC<InstructionSummaryProps> = (
       <div className="space-y-1.5">
         <div className="grid grid-cols-[80px,1fr] gap-2">
           <span className="text-muted-foreground">Amount:</span>
-          <span className="font-medium" title={formatXNT(lamports)}>
-            {formatXNTCompact(lamports)}
+          <span className="font-medium" title={formatNativeAmount(lamports, nativeSymbol)}>
+            {formatNativeAmountCompact(lamports, nativeSymbol)}
           </span>
         </div>
         {createdAccount && <AddressWithButtons address={createdAccount} label="New Account" />}

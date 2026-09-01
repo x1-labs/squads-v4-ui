@@ -1,9 +1,11 @@
 import React from 'react';
 import { InstructionSummaryProps } from '@/lib/instructions/types';
-import { formatXNT } from '@/lib/utils/formatters';
+import { formatNativeAmount } from '@/lib/utils/formatters';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 
 export const StakePoolDepositSummary: React.FC<InstructionSummaryProps> = ({ instruction }) => {
+  const nativeSymbol = useNativeSymbol();
   // Extract the amount from instruction args
   const lamports = instruction.args?.lamports;
 
@@ -15,8 +17,8 @@ export const StakePoolDepositSummary: React.FC<InstructionSummaryProps> = ({ ins
   const fromAddress = instruction.accounts?.[3]?.pubkey || 'Unknown';
   const stakePoolAddress = instruction.accounts?.[0]?.pubkey || 'Unknown';
 
-  // Use the formatXNT function which handles proper formatting with commas
-  const amount = formatXNT(lamports);
+  // Use the formatNativeAmount function which handles proper formatting with commas
+  const amount = formatNativeAmount(lamports, nativeSymbol);
 
   return (
     <div className="space-y-2 text-sm">

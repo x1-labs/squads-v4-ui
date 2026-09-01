@@ -81,18 +81,28 @@ import delegationProgramIdl from './lib/idls/delegation_program.json';
 import tokenProgramIdl from './lib/idls/token_program.json';
 import stakePoolIdl from './lib/idls/stake_pool.json';
 import warpBridgeIdl from './lib/idls/warp_bridge.json';
+import { getNativeSymbol } from '@/lib/network';
+import { getRpcUrl } from '@/hooks/useSettings';
 // Stake program IDL is registered but uses custom parsing
 
 // ============================================
 // System Program
 // ============================================
+/**
+ * Transaction tags are baked in when this module first loads, so unlike the
+ * summary components they cannot follow a mid-session RPC change. That is fine
+ * in practice: the network switcher navigates to a different origin, which
+ * reloads the bundle.
+ */
+const NATIVE_SYMBOL = getNativeSymbol(getRpcUrl());
+
 registry.register({
   programId: '11111111111111111111111111111111',
   name: 'System Program',
   instructions: {
     Transfer: {
       summary: XntTransferSummary,
-      tags: { label: 'XNT Transfer', color: 'purple', variant: 'subtle' },
+      tags: { label: `${NATIVE_SYMBOL} Transfer`, color: 'purple', variant: 'subtle' },
     },
     CreateAccount: {
       tags: { label: 'Create Account', color: 'blue', variant: 'subtle' },

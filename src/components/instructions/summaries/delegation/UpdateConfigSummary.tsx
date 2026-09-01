@@ -5,6 +5,7 @@ import { CONFIG_FIELDS, ConfigFieldSpec } from '@/lib/delegation/configFields';
 import { percentChange, toBigInt } from '@/lib/delegation/values';
 import { DetailBlock, Field, SummaryShell, ValueChange, accountByName } from './shared';
 import { useDelegationConfig } from './hooks';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 
 type FieldState = 'changed' | 'unchanged' | 'unknown' | 'untouched';
 
@@ -52,6 +53,7 @@ export const DelegationUpdateConfigSummary: React.FC<InstructionSummaryProps> = 
   instruction,
   connection,
 }) => {
+  const nativeSymbol = useNativeSymbol();
   const { config: currentConfig, loading } = useDelegationConfig(instruction, connection);
 
   const params = (instruction.args?.params ?? instruction.args ?? {}) as Record<string, unknown>;
@@ -120,8 +122,8 @@ export const DelegationUpdateConfigSummary: React.FC<InstructionSummaryProps> = 
                 value={
                   <>
                     <ValueChange
-                      from={spec.format(current)}
-                      to={spec.format(submitted)}
+                      from={spec.format(current, nativeSymbol)}
+                      to={spec.format(submitted, nativeSymbol)}
                       tone={spec.key === 'emergency_pause' && submitted === true ? 'red' : 'amber'}
                     />
                     {delta && <span className="ml-2 text-xs text-muted-foreground">({delta})</span>}
@@ -145,7 +147,7 @@ export const DelegationUpdateConfigSummary: React.FC<InstructionSummaryProps> = 
                 key={spec.key}
                 label={spec.label}
                 hint={spec.description}
-                value={spec.format(submitted)}
+                value={spec.format(submitted, nativeSymbol)}
               />
             ))}
         </DetailBlock>
@@ -161,7 +163,7 @@ export const DelegationUpdateConfigSummary: React.FC<InstructionSummaryProps> = 
               <div key={spec.key} className="flex flex-wrap items-baseline gap-x-2">
                 <span className="text-xs text-muted-foreground">{spec.label}:</span>
                 <span className="font-mono text-xs text-muted-foreground">
-                  {spec.format(submitted)}
+                  {spec.format(submitted, nativeSymbol)}
                 </span>
               </div>
             ))}

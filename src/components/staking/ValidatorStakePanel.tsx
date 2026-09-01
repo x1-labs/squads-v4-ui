@@ -5,6 +5,7 @@ import { BatchDelegateDialog } from './BatchDelegateDialog';
 import { useStakeAccounts } from '@/hooks/useStakeAccounts';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { Skeleton } from '../ui/skeleton';
 import { Badge } from '../ui/badge';
 import { StakeAccountActions } from './StakeAccountActions';
@@ -12,6 +13,7 @@ import { SplitButton } from '../ui/split-button';
 
 export function ValidatorStakePanel() {
   const { vaultIndex } = useMultisigData();
+  const nativeSymbol = useNativeSymbol();
   const { data: stakeAccounts, isLoading } = useStakeAccounts(vaultIndex);
   const [batchDelegateOpen, setBatchDelegateOpen] = useState(false);
 
@@ -61,67 +63,67 @@ export function ValidatorStakePanel() {
   };
 
   return (
-  <>
-    <Card>
-      <CardHeader>
-        <div className="space-y-4">
-          <div className="flex flex-col space-y-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
-            <div className="space-y-1">
-              <CardTitle>Validator Staking</CardTitle>
-              <CardDescription>Stake XNT directly to validators</CardDescription>
+    <>
+      <Card>
+        <CardHeader>
+          <div className="space-y-4">
+            <div className="flex flex-col space-y-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
+              <div className="space-y-1">
+                <CardTitle>Validator Staking</CardTitle>
+                <CardDescription>Stake {nativeSymbol} directly to validators</CardDescription>
+              </div>
+              <SplitButton
+                size="default"
+                items={[{ label: 'Batch Stake', onClick: () => setBatchDelegateOpen(true) }]}
+              >
+                <DelegateStakeDialog vaultIndex={vaultIndex} />
+              </SplitButton>
             </div>
-            <SplitButton
-              size="default"
-              items={[{ label: 'Batch Stake', onClick: () => setBatchDelegateOpen(true) }]}
-            >
-              <DelegateStakeDialog vaultIndex={vaultIndex} />
-            </SplitButton>
+            {/* Summary Stats */}
+            {totals.totalBalance > 0 && (
+              <div className="grid grid-cols-1 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-3 sm:gap-4">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">Total Balance</p>
+                  <p className="text-sm font-medium sm:text-base">
+                    {totals.totalBalance.toLocaleString(undefined, {
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    {nativeSymbol}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">Active</p>
+                  <p className="text-sm font-medium text-emerald-600 sm:text-base">
+                    {totals.totalActive.toLocaleString(undefined, {
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    {nativeSymbol}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">Inactive</p>
+                  <p className="text-sm font-medium text-gray-600 sm:text-base">
+                    {totals.totalInactive.toLocaleString(undefined, {
+                      maximumFractionDigits: 2,
+                    })}{' '}
+                    {nativeSymbol}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
-          {/* Summary Stats */}
-          {totals.totalBalance > 0 && (
-            <div className="grid grid-cols-1 gap-3 rounded-lg bg-muted/50 p-4 sm:grid-cols-3 sm:gap-4">
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground">Total Balance</p>
-                <p className="text-sm font-medium sm:text-base">
-                  {totals.totalBalance.toLocaleString(undefined, {
-                    maximumFractionDigits: 2,
-                  })}{' '}
-                  XNT
-                </p>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
               </div>
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground">Active</p>
-                <p className="text-sm font-medium text-emerald-600 sm:text-base">
-                  {totals.totalActive.toLocaleString(undefined, {
-                    maximumFractionDigits: 2,
-                  })}{' '}
-                  XNT
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-muted-foreground">Inactive</p>
-                <p className="text-sm font-medium text-gray-600 sm:text-base">
-                  {totals.totalInactive.toLocaleString(undefined, {
-                    maximumFractionDigits: 2,
-                  })}{' '}
-                  XNT
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-16 w-full" />
-              <Skeleton className="h-16 w-full" />
-            </div>
-          ) : stakeAccounts && stakeAccounts.length > 0 ? (
-            <div className="space-y-2">
-              <h3 className="mb-3 text-sm font-medium text-muted-foreground">Stake Accounts</h3>
-              {sortedAccounts.map((account) => (
+            ) : stakeAccounts && stakeAccounts.length > 0 ? (
+              <div className="space-y-2">
+                <h3 className="mb-3 text-sm font-medium text-muted-foreground">Stake Accounts</h3>
+                {sortedAccounts.map((account) => (
                   <div
                     key={account.address}
                     className={`space-y-3 rounded-lg p-3 transition-colors ${
@@ -230,7 +232,7 @@ export function ValidatorStakePanel() {
                               ).toLocaleString(undefined, {
                                 maximumFractionDigits: 2,
                               })}{' '}
-                              XNT
+                              {nativeSymbol}
                             </p>
                             <div className="grid gap-1 text-xs text-muted-foreground sm:gap-0.5">
                               {account.activeStake !== undefined &&
@@ -244,7 +246,7 @@ export function ValidatorStakePanel() {
                                       {account.activeStake.toLocaleString(undefined, {
                                         maximumFractionDigits: 2,
                                       })}{' '}
-                                      XNT
+                                      {nativeSymbol}
                                     </span>
                                   </div>
                                 )}
@@ -259,7 +261,7 @@ export function ValidatorStakePanel() {
                                       {account.inactiveStake.toLocaleString(undefined, {
                                         maximumFractionDigits: 2,
                                       })}{' '}
-                                      XNT
+                                      {nativeSymbol}
                                     </span>
                                   </div>
                                 )}
@@ -307,26 +309,26 @@ export function ValidatorStakePanel() {
                     </div>
                   </div>
                 ))}
-            </div>
-          ) : (
-            <div className="py-8 text-center">
-              <p className="text-sm text-muted-foreground">No stake accounts found</p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Create a stake account by delegating XNT to a validator
-              </p>
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+              </div>
+            ) : (
+              <div className="py-8 text-center">
+                <p className="text-sm text-muted-foreground">No stake accounts found</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Create a stake account by delegating {nativeSymbol} to a validator
+                </p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
-    {batchDelegateOpen && (
-      <BatchDelegateDialog
-        vaultIndex={vaultIndex}
-        isOpen={batchDelegateOpen}
-        onOpenChange={setBatchDelegateOpen}
-      />
-    )}
-  </>
+      {batchDelegateOpen && (
+        <BatchDelegateDialog
+          vaultIndex={vaultIndex}
+          isOpen={batchDelegateOpen}
+          onOpenChange={setBatchDelegateOpen}
+        />
+      )}
+    </>
   );
 }

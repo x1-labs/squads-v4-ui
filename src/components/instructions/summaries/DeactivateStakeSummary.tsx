@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { InstructionSummaryProps } from '@/lib/instructions/types';
-import { formatXNT } from '@/lib/utils/formatters';
+import { formatNativeAmount } from '@/lib/utils/formatters';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 import { PublicKey } from '@solana/web3.js';
 import { useValidatorMetadata } from '@/hooks/useValidatorMetadata';
@@ -13,6 +14,7 @@ export const DeactivateStakeSummary: React.FC<InstructionSummaryProps> = ({
   instruction,
   connection,
 }) => {
+  const nativeSymbol = useNativeSymbol();
   const [stakeAmount, setStakeAmount] = useState<string | null>(null);
   const [voteAccount, setVoteAccount] = useState<string | undefined>(undefined);
 
@@ -30,7 +32,7 @@ export const DeactivateStakeSummary: React.FC<InstructionSummaryProps> = ({
         const accountInfo = await connection.getParsedAccountInfo(stakeAccountPubkey);
         if (accountInfo.value) {
           // Get balance
-          setStakeAmount(formatXNT(accountInfo.value.lamports));
+          setStakeAmount(formatNativeAmount(accountInfo.value.lamports, nativeSymbol));
 
           // Get validator from parsed data
           const parsedData = accountInfo.value.data as any;
@@ -44,7 +46,7 @@ export const DeactivateStakeSummary: React.FC<InstructionSummaryProps> = ({
     };
 
     fetchStakeAccountInfo();
-  }, [stakeAccount, connection]);
+  }, [stakeAccount, connection, nativeSymbol]);
 
   if (!stakeAccount) {
     return null;

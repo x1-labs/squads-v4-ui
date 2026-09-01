@@ -1,12 +1,14 @@
 import React from 'react';
 import { InstructionSummaryProps } from '@/lib/instructions/types';
-import { formatXNT } from '@/lib/utils/formatters';
+import { formatNativeAmount } from '@/lib/utils/formatters';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 
 /**
  * Summary component for Stake Split instructions
  */
 export const SplitStakeSummary: React.FC<InstructionSummaryProps> = ({ instruction }) => {
+  const nativeSymbol = useNativeSymbol();
   // Get the split amount and accounts from the instruction
   const lamports = instruction.args?.lamports;
   const sourceStakeAccount = instruction.accounts?.[0]?.pubkey;
@@ -29,7 +31,7 @@ export const SplitStakeSummary: React.FC<InstructionSummaryProps> = ({ instructi
       <div className="space-y-1.5">
         <div className="grid grid-cols-[80px,1fr] gap-2">
           <span className="text-muted-foreground">Amount:</span>
-          <span className="font-medium">{formatXNT(lamports)}</span>
+          <span className="font-medium">{formatNativeAmount(lamports, nativeSymbol)}</span>
         </div>
         <AddressWithButtons address={sourceStakeAccount} label="From" />
         <AddressWithButtons address={newStakeAccount} label="To" />

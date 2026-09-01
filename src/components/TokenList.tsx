@@ -7,6 +7,7 @@ import { useBalance, useGetTokens } from '~/hooks/useServices';
 import { useEffect, useState, useMemo } from 'react';
 import { getTokenMetadata, TokenMetadata } from '~/lib/token/tokenMetadata';
 import { useRpcUrl } from '~/hooks/useSettings';
+import { useNativeSymbol } from '~/hooks/useNativeSymbol';
 
 type TokenListProps = {
   multisigPda: string;
@@ -17,6 +18,7 @@ export function TokenList({ multisigPda }: TokenListProps) {
   const { data: solBalance } = useBalance();
   const { data: tokens = null } = useGetTokens();
   const { rpcUrl } = useRpcUrl();
+  const nativeSymbol = useNativeSymbol();
   const connection = useMemo(
     () => new Connection(rpcUrl || 'https://rpc.testnet.x1.xyz'),
     [rpcUrl]
@@ -67,7 +69,7 @@ export function TokenList({ multisigPda }: TokenListProps) {
       return amount.toExponential(2);
     }
 
-    // For XNT and tokens with high value, show 4 decimal places
+    // For the native token and others with high value, show 4 decimal places
     if (decimals === undefined || decimals === 9) {
       return amount.toLocaleString(undefined, {
         minimumFractionDigits: 0,
@@ -90,17 +92,17 @@ export function TokenList({ multisigPda }: TokenListProps) {
         <CardDescription>Vault holdings</CardDescription>
       </CardHeader>
       <CardContent>
-        {/* XNT Balance */}
+        {/* Native token balance */}
         <div className="space-y-3">
           <div className="flex items-center justify-between rounded-lg bg-muted/30 p-3 transition-colors hover:bg-muted/50">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500">
-                <span className="text-sm font-bold text-white">XNT</span>
+                <span className="text-sm font-bold text-white">{nativeSymbol}</span>
               </div>
               <div>
-                <p className="font-medium">XNT</p>
+                <p className="font-medium">{nativeSymbol}</p>
                 <p className="text-sm text-muted-foreground">
-                  {formatBalance((solBalance || 0) / LAMPORTS_PER_SOL, 9)} XNT
+                  {formatBalance((solBalance || 0) / LAMPORTS_PER_SOL, 9)} {nativeSymbol}
                 </p>
               </div>
             </div>
@@ -139,7 +141,7 @@ export function TokenList({ multisigPda }: TokenListProps) {
                         )}
                       </div>
                       <div>
-                        <p className="font-medium break-all">
+                        <p className="break-all font-medium">
                           {isLoading ? (
                             <span className="text-muted-foreground">Loading...</span>
                           ) : (
@@ -153,7 +155,7 @@ export function TokenList({ multisigPda }: TokenListProps) {
                           )}{' '}
                           {metadata?.symbol || 'tokens'}
                         </p>
-                        <p className="font-mono text-xs text-muted-foreground break-all">
+                        <p className="break-all font-mono text-xs text-muted-foreground">
                           {formatMint(mint)}
                         </p>
                       </div>

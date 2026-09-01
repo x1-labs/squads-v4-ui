@@ -2,7 +2,8 @@ import React from 'react';
 import { PublicKey } from '@solana/web3.js';
 import { InstructionSummaryProps } from '@/lib/instructions/types';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
-import { formatXNT } from '@/lib/utils/formatters';
+import { formatNativeAmount } from '@/lib/utils/formatters';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import {
   describeRole,
   formatBps,
@@ -34,6 +35,7 @@ function readPubkey(value: unknown): string | undefined {
 
 /** `initialize` — one-time creation of the bridge config. */
 export const BridgeInitializeSummary: React.FC<InstructionSummaryProps> = ({ instruction }) => {
+  const nativeSymbol = useNativeSymbol();
   const guardians = (instruction.args?.guardians ?? []).map((g: unknown) => readPubkey(g) ?? '?');
   const threshold = toNumber(instruction.args?.threshold);
   const config = accountByName(instruction, 'config', 0);
@@ -52,7 +54,10 @@ export const BridgeInitializeSummary: React.FC<InstructionSummaryProps> = ({ ins
         {admin && <AddressWithButtons address={admin} label="Admin" />}
         <Field
           label="Flat fee"
-          value={formatXNT(toBigInt(instruction.args?.flat_fee_lamports) ?? 0)}
+          value={formatNativeAmount(
+            toBigInt(instruction.args?.flat_fee_lamports) ?? 0,
+            nativeSymbol
+          )}
           hint="Charged per bridge operation, in native currency"
         />
         <Field label="Percentage fee" value={formatBps(instruction.args?.percentage_fee_bps)} />
@@ -75,6 +80,7 @@ export const BridgeSetFeesSummary: React.FC<InstructionSummaryProps> = ({
   instruction,
   connection,
 }) => {
+  const nativeSymbol = useNativeSymbol();
   const { config } = useBridgeConfig(instruction, connection);
   const admin = accountByName(instruction, 'admin', 1);
 
@@ -104,9 +110,12 @@ export const BridgeSetFeesSummary: React.FC<InstructionSummaryProps> = ({
           hint="Charged once per bridge operation, in native currency"
           value={
             flatChanged ? (
-              <ValueChange from={formatXNT(currentFlat!)} to={formatXNT(flatFee!)} />
+              <ValueChange
+                from={formatNativeAmount(currentFlat!, nativeSymbol)}
+                to={formatNativeAmount(flatFee!, nativeSymbol)}
+              />
             ) : (
-              formatXNT(flatFee ?? 0)
+              formatNativeAmount(flatFee ?? 0, nativeSymbol)
             )
           }
         />

@@ -1,16 +1,21 @@
 import { DelegationConfigAccount } from './accounts';
-import { formatXNT } from '../utils/formatters';
+import { formatNativeAmount } from '../utils/formatters';
+import { NativeSymbol } from '../network';
 import { formatValidatorVersion, toBigInt, toNumber } from './values';
 
 /**
  * Describes one `UpdateConfigParams` field: how to label it, what it controls,
  * and how to turn a raw decoded value into something readable.
+ *
+ * `format` takes the native ticker because lamport-denominated fields have to
+ * name the chain they are rendered on; formatters that ignore it simply drop
+ * the second argument.
  */
 export interface ConfigFieldSpec {
   key: keyof DelegationConfigAccount & string;
   label: string;
   description: string;
-  format: (value: unknown) => string;
+  format: (value: unknown, nativeSymbol: NativeSymbol) => string;
 }
 
 const formatPercent = (value: unknown): string => {
@@ -23,9 +28,9 @@ const formatCount = (value: unknown): string => {
   return n === null ? '—' : n.toLocaleString();
 };
 
-const formatLamports = (value: unknown): string => {
+const formatLamports = (value: unknown, nativeSymbol: NativeSymbol): string => {
   const big = toBigInt(value);
-  return big === null ? '—' : formatXNT(big);
+  return big === null ? '—' : formatNativeAmount(big, nativeSymbol);
 };
 
 const formatBool = (value: unknown): string => (value ? 'Enabled' : 'Disabled');

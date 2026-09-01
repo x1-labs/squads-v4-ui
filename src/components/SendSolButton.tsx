@@ -25,6 +25,7 @@ import { isPublickey } from '~/lib/isPublickey';
 import { useMultisigData } from '~/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '../hooks/useAccess';
+import { useNativeSymbol } from '../hooks/useNativeSymbol';
 import { waitForConfirmation } from '../lib/transactionConfirmation';
 import { addMemoToInstructions } from '../lib/utils/memoInstruction';
 
@@ -46,6 +47,7 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
   const parsedAmount = parseFloat(amount);
   const isAmountValid = !isNaN(parsedAmount) && parsedAmount > 0;
   const isMember = useAccess();
+  const nativeSymbol = useNativeSymbol();
 
   const transfer = async () => {
     if (!wallet.publicKey) {
@@ -165,9 +167,9 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Transfer XNT</DialogTitle>
+          <DialogTitle>Transfer {nativeSymbol}</DialogTitle>
           <DialogDescription>
-            Create a proposal to transfer XNT to another address.
+            Create a proposal to transfer {nativeSymbol} to another address.
           </DialogDescription>
         </DialogHeader>
         <Input placeholder="Recipient" type="text" onChange={(e) => setRecipient(e.target.value)} />

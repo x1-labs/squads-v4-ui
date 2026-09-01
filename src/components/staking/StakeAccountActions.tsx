@@ -23,6 +23,7 @@ import {
 } from '@/lib/staking/batchStakeActions';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
 import { toast } from 'sonner';
 
@@ -45,6 +46,7 @@ export function StakeAccountActions({
   const [batchSplitOpen, setBatchSplitOpen] = useState(false);
   const { addItem } = useBatchTransactions();
   const { multisigVault } = useMultisigData();
+  const nativeSymbol = useNativeSymbol();
 
   const validatorAddresses = account.delegatedValidator ? [account.delegatedValidator] : [];
   const { data: validatorMetadata } = useValidatorsMetadata(validatorAddresses);
@@ -59,7 +61,7 @@ export function StakeAccountActions({
 
   const addUnstakeToBatch = () => {
     if (!multisigVault) return;
-    const item = buildUnstakeBatchItem(account, multisigVault, vaultIndex, label);
+    const item = buildUnstakeBatchItem(account, multisigVault, vaultIndex, label, nativeSymbol);
     if (!item) {
       toast.error('This stake account is already deactivating or inactive');
       return;
@@ -74,7 +76,7 @@ export function StakeAccountActions({
 
   const addWithdrawToBatch = () => {
     if (!multisigVault) return;
-    const item = buildWithdrawBatchItem(account, multisigVault, vaultIndex, label);
+    const item = buildWithdrawBatchItem(account, multisigVault, vaultIndex, label, nativeSymbol);
     if (!item) {
       toast.error(
         'Only fully inactive accounts can be batch-withdrawn. Use the Withdraw dialog for a deactivating account.'
@@ -96,7 +98,9 @@ export function StakeAccountActions({
 
     let count = 0;
     for (const source of compatible) {
-      const added = addItem(buildMergeBatchItem(account, source, multisigVault, vaultIndex, label));
+      const added = addItem(
+        buildMergeBatchItem(account, source, multisigVault, vaultIndex, label, nativeSymbol)
+      );
       if (added) count++;
       else break;
     }

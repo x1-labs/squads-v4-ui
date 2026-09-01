@@ -23,6 +23,7 @@ import {
 import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useStakePools } from '@/hooks/useStakePools';
 import { useMultisig } from '@/hooks/useServices';
 import { useQueryClient } from '@tanstack/react-query';
@@ -48,6 +49,7 @@ export function WithdrawXntDialog() {
     multisigAddress,
     vaultIndex,
   } = useMultisigData();
+  const nativeSymbol = useNativeSymbol();
   const { data: stakePools, isLoading: poolsLoading } = useStakePools();
   const { data: multisigInfo } = useMultisig();
   const queryClient = useQueryClient();
@@ -99,7 +101,7 @@ export function WithdrawXntDialog() {
         new PublicKey(stakePoolProgramId)
       );
 
-      // Create the withdraw XNT instruction
+      // Create the withdraw instruction for the native token
       const withdrawInstructions = [
         StakePoolInstruction.withdrawSol({
           programId: new PublicKey(stakePoolProgramId),
@@ -107,7 +109,7 @@ export function WithdrawXntDialog() {
           sourcePoolAccount: poolTokenAccount,
           withdrawAuthority,
           reserveStake: stakePool.reserveStake,
-          destinationSystemAccount: vaultAddress, // Vault receives the XNT
+          destinationSystemAccount: vaultAddress, // Vault receives the native token
           sourceTransferAuthority: vaultAddress, // Vault owns the pool tokens
           solWithdrawAuthority: undefined,
           managerFeeAccount: stakePool.managerFeeAccount,
@@ -251,8 +253,8 @@ export function WithdrawXntDialog() {
         <DialogHeader>
           <DialogTitle>Unstake from Stake Pool</DialogTitle>
           <DialogDescription>
-            Withdraw your staked XNT from a pool. Select a pool and enter the amount of pool tokens
-            to burn.
+            Withdraw your staked {nativeSymbol} from a pool. Select a pool and enter the amount of
+            pool tokens to burn.
           </DialogDescription>
         </DialogHeader>
 

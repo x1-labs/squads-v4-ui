@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { InstructionSummaryProps } from '@/lib/instructions/types';
-import { formatXNT } from '@/lib/utils/formatters';
+import { formatNativeAmount } from '@/lib/utils/formatters';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 import { PublicKey } from '@solana/web3.js';
 import { useValidatorMetadata } from '@/hooks/useValidatorMetadata';
@@ -13,6 +14,7 @@ export const DelegateStakeSummary: React.FC<InstructionSummaryProps> = ({
   instruction,
   connection,
 }) => {
+  const nativeSymbol = useNativeSymbol();
   const [stakeAmount, setStakeAmount] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -34,14 +36,13 @@ export const DelegateStakeSummary: React.FC<InstructionSummaryProps> = ({
         const stakeAccountPubkey = new PublicKey(stakeAccount);
         const accountInfo = await connection.getAccountInfo(stakeAccountPubkey);
         if (accountInfo) {
-          // Convert lamports to XNT
-          setStakeAmount(formatXNT(accountInfo.lamports));
+          setStakeAmount(formatNativeAmount(accountInfo.lamports, nativeSymbol));
         } else {
           // Account doesn't exist yet, might be created in this transaction
           // Try to get parsed account info to see if it's a new account
           const parsedInfo = await connection.getParsedAccountInfo(stakeAccountPubkey);
           if (parsedInfo.value) {
-            setStakeAmount(formatXNT(parsedInfo.value.lamports));
+            setStakeAmount(formatNativeAmount(parsedInfo.value.lamports, nativeSymbol));
           } else {
             // If account doesn't exist, it's likely being created in this transaction
             // We can't determine the amount without looking at other instructions
@@ -58,7 +59,7 @@ export const DelegateStakeSummary: React.FC<InstructionSummaryProps> = ({
     };
 
     fetchStakeAccountBalance();
-  }, [stakeAccount, connection]);
+  }, [stakeAccount, connection, nativeSymbol]);
 
   if (!stakeAccount || !voteAccount) {
     return null;
