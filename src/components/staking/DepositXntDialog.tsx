@@ -23,6 +23,7 @@ import {
 import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useStakePools } from '@/hooks/useStakePools';
 import { useBalance, useMultisig } from '@/hooks/useServices';
 import { useQueryClient } from '@tanstack/react-query';
@@ -48,6 +49,7 @@ export function DepositXntDialog() {
     multisigAddress,
     vaultIndex,
   } = useMultisigData();
+  const nativeSymbol = useNativeSymbol();
   const { data: stakePools, isLoading: poolsLoading } = useStakePools();
   const { data: solBalance } = useBalance();
   const { data: multisigInfo } = useMultisig();
@@ -123,7 +125,7 @@ export function DepositXntDialog() {
         new PublicKey(stakePoolProgramId)
       );
 
-      // Create the deposit XNT instruction
+      // Create the deposit instruction for the native token
       // For multisig vaults, the vault itself is the funding account
       depositInstructions.push(
         StakePoolInstruction.depositSol({
@@ -228,7 +230,7 @@ export function DepositXntDialog() {
       }
 
       toast.success(
-        `Successfully proposed staking ${parsedAmount} XNT to ${selectedPoolInfo.name}`,
+        `Successfully proposed staking ${parsedAmount} ${nativeSymbol} to ${selectedPoolInfo.name}`,
         {
           id: 'stake-transaction',
         }
@@ -272,7 +274,7 @@ export function DepositXntDialog() {
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Stake XNT</DialogTitle>
+          <DialogTitle>Stake {nativeSymbol}</DialogTitle>
           <DialogDescription>
             Stake to earn rewards. Select a pool and enter the amount to stake.
           </DialogDescription>
@@ -286,7 +288,7 @@ export function DepositXntDialog() {
                 maximumFractionDigits: 4,
                 minimumFractionDigits: 0,
               })}{' '}
-              XNT
+              {nativeSymbol}
             </div>
           </div>
 

@@ -12,11 +12,12 @@ import { useState } from 'react';
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
 import { createSplitStakeInstructions, StakeAccountInfo } from '@/lib/staking/validatorStakeUtils';
 import { getStakeAccountLabel } from '@/lib/staking/batchStakeActions';
-import { formatXNTCompact } from '@/lib/utils/formatters';
+import { formatNativeAmountCompact } from '@/lib/utils/formatters';
 import { AlertCircle, Layers } from 'lucide-react';
 import { StakeAccountDisplay } from './StakeAccountDisplay';
 
@@ -36,6 +37,7 @@ export function BatchSplitDialog({
   const [amount, setAmount] = useState<string>('');
   const [isAdding, setIsAdding] = useState(false);
   const { connection, multisigVault } = useMultisigData();
+  const nativeSymbol = useNativeSymbol();
   const { addItem } = useBatchTransactions();
 
   const validatorAddresses = preSelectedAccount.delegatedValidator
@@ -72,7 +74,7 @@ export function BatchSplitDialog({
       const added = addItem({
         type: 'split',
         label: `Split ${label}`,
-        description: `${parsedAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT from ${preSelectedAccount.address.slice(0, 8)}...`,
+        description: `${parsedAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${nativeSymbol} from ${preSelectedAccount.address.slice(0, 8)}...`,
         instructions,
         vaultIndex,
       });
@@ -116,7 +118,7 @@ export function BatchSplitDialog({
                   {preSelectedAccount.balance.toLocaleString(undefined, {
                     maximumFractionDigits: 2,
                   })}{' '}
-                  XNT
+                  {nativeSymbol}
                 </p>
               </div>
               <div>
@@ -125,7 +127,7 @@ export function BatchSplitDialog({
                   {maxSplitable.toLocaleString(undefined, {
                     maximumFractionDigits: 2,
                   })}{' '}
-                  XNT
+                  {nativeSymbol}
                 </p>
               </div>
             </div>
@@ -138,7 +140,7 @@ export function BatchSplitDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="split-amount">Split Amount (XNT)</Label>
+            <Label htmlFor="split-amount">Split Amount ({nativeSymbol})</Label>
             <div className="space-y-2">
               <Input
                 id="split-amount"
@@ -170,7 +172,8 @@ export function BatchSplitDialog({
                     className="flex-1"
                   >
                     <span className="truncate">
-                      Max ({formatXNTCompact(maxSplitable * LAMPORTS_PER_SOL)})
+                      Max (
+                      {formatNativeAmountCompact(maxSplitable * LAMPORTS_PER_SOL, nativeSymbol)})
                     </span>
                   </Button>
                 </div>
@@ -183,7 +186,7 @@ export function BatchSplitDialog({
                 <span>
                   {parsedAmount <= 0
                     ? 'Amount must be greater than 0'
-                    : `Max splitable: ${maxSplitable.toFixed(2)} XNT`}
+                    : `Max splitable: ${maxSplitable.toFixed(2)} ${nativeSymbol}`}
                 </span>
               </div>
             )}

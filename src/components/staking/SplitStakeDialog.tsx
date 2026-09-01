@@ -21,13 +21,14 @@ import {
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '@/hooks/useAccess';
 import { waitForConfirmation } from '@/lib/transactionConfirmation';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import { createSplitStakeInstructions } from '@/lib/staking/validatorStakeUtils';
 import { StakeAccountInfo as StakeAccountData } from '@/lib/staking/validatorStakeUtils';
-import { formatXNTCompact } from '@/lib/utils/formatters';
+import { formatNativeAmountCompact } from '@/lib/utils/formatters';
 import { AlertCircle, Split } from 'lucide-react';
 import { StakeAccountDisplay } from './StakeAccountDisplay';
 
@@ -54,6 +55,7 @@ export function SplitStakeDialog({
   const [amount, setAmount] = useState<string>('');
   const [memo, setMemo] = useState('');
   const { connection, programId, multisigAddress } = useMultisigData();
+  const nativeSymbol = useNativeSymbol();
   const queryClient = useQueryClient();
   const isMember = useAccess();
 
@@ -65,7 +67,7 @@ export function SplitStakeDialog({
   const maxSplitable = Math.max(
     0,
     preSelectedAccount.balance - preSelectedAccount.rentExemptReserve - 0.1
-  ); // Leave 0.1 XNT minimum
+  ); // Leave a 0.1 native-token minimum
 
   const parsedAmount = parseFloat(amount);
   const isAmountValid = !isNaN(parsedAmount) && parsedAmount > 0 && parsedAmount <= maxSplitable;
@@ -221,7 +223,7 @@ export function SplitStakeDialog({
                   {preSelectedAccount.balance.toLocaleString(undefined, {
                     maximumFractionDigits: 2,
                   })}{' '}
-                  XNT
+                  {nativeSymbol}
                 </p>
               </div>
               <div>
@@ -230,7 +232,7 @@ export function SplitStakeDialog({
                   {maxSplitable.toLocaleString(undefined, {
                     maximumFractionDigits: 2,
                   })}{' '}
-                  XNT
+                  {nativeSymbol}
                 </p>
               </div>
             </div>
@@ -267,7 +269,7 @@ export function SplitStakeDialog({
                   className="w-full"
                 >
                   <span className="truncate">
-                    Max • {formatXNTCompact(maxSplitable * LAMPORTS_PER_SOL)}
+                    Max • {formatNativeAmountCompact(maxSplitable * LAMPORTS_PER_SOL, nativeSymbol)}
                   </span>
                 </Button>
               )}
@@ -280,7 +282,7 @@ export function SplitStakeDialog({
                 <span>
                   {parsedAmount <= 0
                     ? 'Amount must be greater than 0'
-                    : `Max splitable: ${maxSplitable.toFixed(2)} XNT`}
+                    : `Max splitable: ${maxSplitable.toFixed(2)} ${nativeSymbol}`}
                 </span>
               </div>
             )}

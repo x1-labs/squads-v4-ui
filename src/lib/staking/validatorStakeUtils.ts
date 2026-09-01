@@ -53,7 +53,7 @@ export interface StakeAccountInfo {
  * Fetch exact lamports for a set of accounts as strings, keyed by base58 address.
  *
  * web3.js returns `lamports` as a JS number, which silently rounds above 2^53
- * (~9M XNT). We read the raw JSON-RPC response and pull the integer `lamports`
+ * (~9M native tokens). We read the raw JSON-RPC response and pull the integer `lamports`
  * tokens as strings so large balances stay exact — important because a stake
  * CLOSE must withdraw the balance to the lamport (an off-by-one becomes a
  * reverting partial withdrawal). `dataSlice` length 0 keeps the response tiny and
@@ -119,7 +119,7 @@ export async function getStakeAccountsForVault(
     const { epoch: currentEpoch } = await connection.getEpochInfo();
 
     // getParsedProgramAccounts returns each account's `lamports` as a JS number, which
-    // rounds above 2^53 (any stake over ~9M XNT). A close withdraws the EXACT balance,
+    // rounds above 2^53 (any stake over ~9M native tokens). A close withdraws the EXACT balance,
     // so an off-by-a-lamport amount becomes a reverting partial withdraw. Read the exact
     // lamports as strings so `balanceLamports` (and the close amount) stays precise.
     const preciseLamports = await fetchPreciseLamports(

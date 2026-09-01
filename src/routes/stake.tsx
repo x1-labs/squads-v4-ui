@@ -4,9 +4,11 @@ import { BatchPanel } from '@/components/batch/BatchPanel';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Suspense } from 'react';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 
 const StakePage = () => {
   const { multisigAddress } = useMultisigData();
+  const nativeSymbol = useNativeSymbol();
 
   if (!multisigAddress) {
     return (
@@ -32,7 +34,7 @@ const StakePage = () => {
           <div className="border-b border-border pb-4">
             <h1 className="text-2xl font-bold sm:text-3xl">Staking</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Manage your XNT stake pools and validator delegations
+              Manage your {nativeSymbol} stake pools and validator delegations
             </p>
           </div>
 

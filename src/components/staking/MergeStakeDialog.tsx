@@ -28,6 +28,7 @@ import {
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '@/hooks/useAccess';
 import { waitForConfirmation } from '@/lib/transactionConfirmation';
@@ -66,6 +67,7 @@ export function MergeStakeDialog({
   const [selectedSourceAccount, setSelectedSourceAccount] = useState<string>('');
   const [memo, setMemo] = useState('');
   const { connection, programId, multisigAddress } = useMultisigData();
+  const nativeSymbol = useNativeSymbol();
   const queryClient = useQueryClient();
   const isMember = useAccess();
 
@@ -275,7 +277,7 @@ export function MergeStakeDialog({
                         </div>
                         <span className="text-xs text-muted-foreground">
                           {account.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}{' '}
-                          XNT
+                          {nativeSymbol}
                         </span>
                         <span
                           className={`text-xs capitalize text-muted-foreground ${
@@ -312,7 +314,7 @@ export function MergeStakeDialog({
                     {preSelectedAccount.balance.toLocaleString(undefined, {
                       maximumFractionDigits: 2,
                     })}{' '}
-                    XNT
+                    {nativeSymbol}
                   </p>
                 </div>
                 <div className="flex justify-center">
@@ -324,7 +326,7 @@ export function MergeStakeDialog({
                     {combinedBalance.toLocaleString(undefined, {
                       maximumFractionDigits: 2,
                     })}{' '}
-                    XNT
+                    {nativeSymbol}
                   </p>
                 </div>
               </div>

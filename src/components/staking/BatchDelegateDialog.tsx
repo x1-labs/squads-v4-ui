@@ -13,6 +13,7 @@ import { LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { toast } from 'sonner';
 import { isPublickey } from '@/lib/isPublickey';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useBatchTransactions } from '@/hooks/useBatchTransactions';
 import { useValidatorMetadata } from '@/hooks/useValidatorMetadata';
 import { getMinimumStakeAmount, validateVoteAccount } from '@/lib/staking/validatorStakeUtils';
@@ -36,6 +37,7 @@ export function BatchDelegateDialog({
   const [isAdding, setIsAdding] = useState(false);
   const [minStake, setMinStake] = useState<number>(1);
   const { connection, multisigVault } = useMultisigData();
+  const nativeSymbol = useNativeSymbol();
   const { addItem } = useBatchTransactions();
   const { data: validatorInfo } = useValidatorMetadata(
     isPublickey(validatorAddress) ? validatorAddress : undefined
@@ -67,7 +69,8 @@ export function BatchDelegateDialog({
         validatorInfo?.name,
         parsedAmount,
         multisigVault,
-        vaultIndex
+        vaultIndex,
+        nativeSymbol
       );
 
       const added = addItem(item);
@@ -148,10 +151,10 @@ export function BatchDelegateDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="stake-amount">Amount (XNT)</Label>
+            <Label htmlFor="stake-amount">Amount ({nativeSymbol})</Label>
             <Input
               id="stake-amount"
-              placeholder={`Enter amount (min ${minStake} XNT)`}
+              placeholder={`Enter amount (min ${minStake} ${nativeSymbol})`}
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
@@ -162,7 +165,7 @@ export function BatchDelegateDialog({
                 <AlertCircle className="h-3 w-3" />
                 <span>
                   {parsedAmount < minStake
-                    ? `Minimum stake is ${minStake} XNT`
+                    ? `Minimum stake is ${minStake} ${nativeSymbol}`
                     : 'Invalid amount'}
                 </span>
               </div>

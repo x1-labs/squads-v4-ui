@@ -4,6 +4,8 @@ import { TransactionTag, InstructionSummaryComponent } from '../instructions/typ
 import { detectIdlFormat, IdlFormat } from '../idls/idlFormats';
 import { KinobiIdlParser } from '../idls/kinobiParser';
 import { DecodedInstruction } from '../transaction/simpleDecoder';
+import { getNativeSymbol } from '../network';
+import { getRpcUrl } from '@/hooks/useSettings';
 
 /**
  * Configuration for a single instruction
@@ -215,7 +217,8 @@ export function registerTransferProgram(
   tokenType: 'native' | 'spl',
   color: string = 'purple'
 ): void {
-  const label = tokenType === 'native' ? 'XNT Transfer' : 'Token Transfer';
+  const label =
+    tokenType === 'native' ? `${getNativeSymbol(getRpcUrl())} Transfer` : 'Token Transfer';
 
   registry.register({
     programId,

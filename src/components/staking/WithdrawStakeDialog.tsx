@@ -22,6 +22,7 @@ import {
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '@/hooks/useAccess';
 import { waitForConfirmation } from '@/lib/transactionConfirmation';
@@ -43,7 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { formatXNTCompact } from '@/lib/utils/formatters';
+import { formatNativeAmountCompact } from '@/lib/utils/formatters';
 import { AlertCircle, Wallet, ArrowDown } from 'lucide-react';
 import { StakeAccountDisplay } from './StakeAccountDisplay';
 
@@ -73,6 +74,7 @@ export function WithdrawStakeDialog({
   const [amount, setAmount] = useState<string>('');
   const [memo, setMemo] = useState('');
   const { connection, programId, multisigAddress } = useMultisigData();
+  const nativeSymbol = useNativeSymbol();
   const queryClient = useQueryClient();
   const isMember = useAccess();
 
@@ -206,7 +208,10 @@ export function WithdrawStakeDialog({
       if (simulation.simulated) {
         throw describeVaultSimulationError(simulation);
       }
-      console.warn('Pre-proposal simulation could not run; proceeding without it:', simulation.error);
+      console.warn(
+        'Pre-proposal simulation could not run; proceeding without it:',
+        simulation.error
+      );
     }
 
     const multisigInfo = await multisig.accounts.Multisig.fromAccountAddress(
@@ -318,7 +323,7 @@ export function WithdrawStakeDialog({
             Withdraw Stake
           </DialogTitle>
           <DialogDescription>
-            Withdraw XNT from stake accounts. Fully deactivated accounts can be closed.
+            Withdraw {nativeSymbol} from stake accounts. Fully deactivated accounts can be closed.
           </DialogDescription>
         </DialogHeader>
 
@@ -350,9 +355,12 @@ export function WithdrawStakeDialog({
                   <p className="mb-1 text-xs text-muted-foreground">Total Balance</p>
                   <p
                     className="font-medium"
-                    title={`${selectedAccountInfo.balance.toFixed(9)} XNT`}
+                    title={`${selectedAccountInfo.balance.toFixed(9)} ${nativeSymbol}`}
                   >
-                    {formatXNTCompact(selectedAccountInfo.balance * LAMPORTS_PER_SOL)}
+                    {formatNativeAmountCompact(
+                      selectedAccountInfo.balance * LAMPORTS_PER_SOL,
+                      nativeSymbol
+                    )}
                   </p>
                 </div>
                 {selectedAccountInfo.activeStake !== undefined &&
@@ -361,16 +369,19 @@ export function WithdrawStakeDialog({
                       <p className="mb-1 text-xs text-muted-foreground">Active Stake</p>
                       <p
                         className="font-medium"
-                        title={`${selectedAccountInfo.activeStake.toFixed(9)} XNT`}
+                        title={`${selectedAccountInfo.activeStake.toFixed(9)} ${nativeSymbol}`}
                       >
-                        {formatXNTCompact(selectedAccountInfo.activeStake * LAMPORTS_PER_SOL)}
+                        {formatNativeAmountCompact(
+                          selectedAccountInfo.activeStake * LAMPORTS_PER_SOL,
+                          nativeSymbol
+                        )}
                       </p>
                     </div>
                   )}
                 <div>
                   <p className="mb-1 text-xs text-muted-foreground">Rent Reserve</p>
                   <p className="font-medium">
-                    {selectedAccountInfo.rentExemptReserve.toFixed(4)} XNT
+                    {selectedAccountInfo.rentExemptReserve.toFixed(4)} {nativeSymbol}
                   </p>
                 </div>
               </div>
@@ -381,9 +392,9 @@ export function WithdrawStakeDialog({
                   <span className="text-sm text-muted-foreground">Max Withdrawable</span>
                   <span
                     className="text-lg font-semibold"
-                    title={`${maxWithdrawable.toFixed(9)} XNT`}
+                    title={`${maxWithdrawable.toFixed(9)} ${nativeSymbol}`}
                   >
-                    {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
+                    {formatNativeAmountCompact(maxWithdrawable * LAMPORTS_PER_SOL, nativeSymbol)}
                   </span>
                 </div>
                 {maxWithdrawable === 0 &&
@@ -402,8 +413,8 @@ export function WithdrawStakeDialog({
                 )}
                 {selectedAccountInfo.state === 'inactive' && (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    💡 Withdrawing the full balance closes the account and returns the rent
-                    reserve to the vault.
+                    💡 Withdrawing the full balance closes the account and returns the rent reserve
+                    to the vault.
                   </p>
                 )}
               </div>
@@ -450,7 +461,7 @@ export function WithdrawStakeDialog({
                 >
                   <span className="truncate">
                     {selectedAccountInfo.state === 'inactive' ? 'Withdraw All & Close' : 'Max'} •{' '}
-                    {formatXNTCompact(maxWithdrawable * LAMPORTS_PER_SOL)}
+                    {formatNativeAmountCompact(maxWithdrawable * LAMPORTS_PER_SOL, nativeSymbol)}
                   </span>
                 </Button>
               )}
@@ -461,7 +472,8 @@ export function WithdrawStakeDialog({
               <div className="flex items-center gap-1 text-xs text-red-500">
                 <AlertCircle className="h-3 w-3" />
                 <span>
-                  Max withdrawable: {formatXNTCompact(maxWithdrawableExact * LAMPORTS_PER_SOL)}
+                  Max withdrawable:{' '}
+                  {formatNativeAmountCompact(maxWithdrawableExact * LAMPORTS_PER_SOL, nativeSymbol)}
                 </span>
               </div>
             )}

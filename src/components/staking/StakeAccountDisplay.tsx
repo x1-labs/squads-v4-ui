@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { StakeAccountInfo } from '@/lib/staking/validatorStakeUtils';
 import { useValidatorsMetadata } from '@/hooks/useValidatorMetadata';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 
 type StakeAccountDisplayProps = {
   account: StakeAccountInfo;
@@ -8,6 +9,7 @@ type StakeAccountDisplayProps = {
 };
 
 export function StakeAccountDisplay({ account, showBalance = true }: StakeAccountDisplayProps) {
+  const nativeSymbol = useNativeSymbol();
   const { data: validatorMetadata } = useValidatorsMetadata(
     account.delegatedValidator ? [account.delegatedValidator] : []
   );
@@ -63,7 +65,8 @@ export function StakeAccountDisplay({ account, showBalance = true }: StakeAccoun
           </div>
           {showBalance && (
             <div className="flex-shrink-0 text-xs font-semibold">
-              {account.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} XNT
+              {account.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}{' '}
+              {nativeSymbol}
             </div>
           )}
         </div>

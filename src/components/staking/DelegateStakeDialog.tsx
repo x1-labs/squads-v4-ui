@@ -22,6 +22,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
 import { isPublickey } from '@/lib/isPublickey';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useValidatorMetadata } from '@/hooks/useValidatorMetadata';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '@/hooks/useAccess';
@@ -47,6 +48,7 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
   const [validatorAddress, setValidatorAddress] = useState('');
   const [memo, setMemo] = useState('');
   const { connection, programId, multisigAddress } = useMultisigData();
+  const nativeSymbol = useNativeSymbol();
   const queryClient = useQueryClient();
   const parsedAmount = parseFloat(amount);
   const isAmountValid = !isNaN(parsedAmount) && parsedAmount > 0;
@@ -208,7 +210,7 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
         <DialogHeader>
           <DialogTitle>Delegate Stake to Validator</DialogTitle>
           <DialogDescription>
-            Create a stake account and delegate XNT to a validator
+            Create a stake account and delegate {nativeSymbol} to a validator
           </DialogDescription>
         </DialogHeader>
 
@@ -256,14 +258,16 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
         </div>
 
         <Input
-          placeholder={`Amount (min ${minStake} XNT)`}
+          placeholder={`Amount (min ${minStake} ${nativeSymbol})`}
           type="number"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
         {amount && (!isAmountValid || parsedAmount < minStake) && (
           <p className="text-xs text-red-500">
-            {parsedAmount < minStake ? `Minimum stake is ${minStake} XNT` : 'Invalid amount'}
+            {parsedAmount < minStake
+              ? `Minimum stake is ${minStake} ${nativeSymbol}`
+              : 'Invalid amount'}
           </p>
         )}
 

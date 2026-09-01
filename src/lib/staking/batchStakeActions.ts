@@ -1,5 +1,6 @@
 import { LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import { BatchItemType } from '@/hooks/useBatchTransactions';
+import { NativeSymbol } from '@/lib/network';
 import {
   StakeAccountInfo,
   createDeactivateStakeInstruction,
@@ -47,7 +48,8 @@ export function buildUnstakeBatchItem(
   account: StakeAccountInfo,
   vaultAddress: PublicKey,
   vaultIndex: number,
-  label: string
+  label: string,
+  nativeSymbol: NativeSymbol
 ): NewBatchItem | null {
   // Only active/activating accounts can be deactivated. Re-deactivating an account
   // that is already deactivating/inactive fails on-chain with StakeError::AlreadyDeactivated
@@ -60,7 +62,7 @@ export function buildUnstakeBatchItem(
   return {
     type: 'unstake',
     label: `Unstake ${label}`,
-    description: `${formatBalance(account.balance)} XNT - ${shortAddress(account.address)}`,
+    description: `${formatBalance(account.balance)} ${nativeSymbol} - ${shortAddress(account.address)}`,
     instructions: [createDeactivateStakeInstruction(new PublicKey(account.address), vaultAddress)],
     vaultIndex,
   };
@@ -70,7 +72,8 @@ export function buildWithdrawBatchItem(
   account: StakeAccountInfo,
   vaultAddress: PublicKey,
   vaultIndex: number,
-  label: string
+  label: string,
+  nativeSymbol: NativeSymbol
 ): NewBatchItem | null {
   // Only fully inactive accounts can be withdrawn in a batch. A 'deactivating' account
   // still holds effective (locked) stake, so any withdraw would exceed its withdrawable
@@ -91,7 +94,7 @@ export function buildWithdrawBatchItem(
   return {
     type: 'withdraw',
     label: `Withdraw & Close ${label}`,
-    description: `${formatBalance(account.balance)} XNT - ${shortAddress(account.address)}`,
+    description: `${formatBalance(account.balance)} ${nativeSymbol} - ${shortAddress(account.address)}`,
     instructions: [
       createWithdrawStakeInstruction(
         new PublicKey(account.address),
@@ -108,12 +111,13 @@ export function buildMergeBatchItem(
   source: StakeAccountInfo,
   vaultAddress: PublicKey,
   vaultIndex: number,
-  destinationLabel: string
+  destinationLabel: string,
+  nativeSymbol: NativeSymbol
 ): NewBatchItem {
   return {
     type: 'merge',
     label: `Merge into ${destinationLabel}`,
-    description: `${formatBalance(source.balance)} XNT from ${shortAddress(source.address)}`,
+    description: `${formatBalance(source.balance)} ${nativeSymbol} from ${shortAddress(source.address)}`,
     instructions: [
       createMergeStakeInstruction(
         new PublicKey(destination.address),
@@ -133,6 +137,7 @@ export function buildBulkMergeBatchItems(
   selectedAccounts: StakeAccountInfo[],
   vaultAddress: PublicKey,
   vaultIndex: number,
+  nativeSymbol: NativeSymbol,
   validatorMetadata?: Map<string, { name?: string }>
 ): NewBatchItem[] {
   const groups = new Map<string, StakeAccountInfo[]>();
@@ -155,7 +160,9 @@ export function buildBulkMergeBatchItems(
       const source = sorted[i];
       const compatible = getCompatibleMergeAccounts(destination, [source]);
       if (compatible.length === 0) continue;
-      items.push(buildMergeBatchItem(destination, source, vaultAddress, vaultIndex, destLabel));
+      items.push(
+        buildMergeBatchItem(destination, source, vaultAddress, vaultIndex, destLabel, nativeSymbol)
+      );
     }
   }
 
@@ -168,11 +175,12 @@ export function buildBulkMergeBatchItems(
 export async function buildDelegateBatchItem(
   validatorVoteAddress: string,
   validatorName: string | undefined,
-  amountXNT: number,
+  amount: number,
   vaultAddress: PublicKey,
-  vaultIndex: number
+  vaultIndex: number,
+  nativeSymbol: NativeSymbol
 ): Promise<NewBatchItem> {
-  const lamports = Math.floor(amountXNT * LAMPORTS_PER_SOL);
+  const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
   const seed = `stake-${Date.now()}`.substring(0, 32);
 
   const { instructions: createInstructions, stakeAccount } =
@@ -189,7 +197,7 @@ export async function buildDelegateBatchItem(
   return {
     type: 'delegate',
     label: `Stake to ${label}`,
-    description: `${formatBalance(amountXNT)} XNT`,
+    description: `${formatBalance(amount)} ${nativeSymbol}`,
     instructions: [...createInstructions, delegateIx],
     vaultIndex,
   };
