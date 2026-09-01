@@ -18,10 +18,21 @@ export type NetworkConfig = {
   /** Ticker for the chain's native token — what balances and fees are denominated in. */
   nativeSymbol: NativeSymbol;
   /**
+   * The chain's genesis hash. Authoritative: it comes from the connection
+   * itself rather than from a URL, so it survives any provider or override.
+   * Prefer `networkFromGenesisHash` over `markers` wherever an async lookup
+   * is possible.
+   */
+  genesisHash: string;
+  /**
    * Substrings that identify this network inside a hostname or an RPC URL.
    * Matched against whole URLs, so they cover our own domains as well as
    * third-party providers (QuickNode, Helius, …) whose host names carry the
    * cluster in them.
+   *
+   * A heuristic, and only a fallback for endpoints whose genesis hash we do
+   * not recognise. Hostnames lie: `mainnet.helius-rpc.com` serves Solana but
+   * matches the X1 Mainnet marker `mainnet`.
    */
   markers: string[];
 };
@@ -34,6 +45,7 @@ export const NETWORKS: NetworkConfig[] = [
     url: 'https://multisig.mainnet.x1.xyz',
     rpcUrl: 'https://rpc.mainnet.x1.xyz',
     nativeSymbol: 'XNT',
+    genesisHash: '4SvBP3omtvcCVWdxq1zBY5cDp4wndjsThb6nEMn6iMdN',
     markers: ['mainnet.x1.xyz', 'rpc.x1.xyz', 'multisig.x1.xyz', 'mainnet'],
   },
   {
@@ -42,6 +54,7 @@ export const NETWORKS: NetworkConfig[] = [
     url: 'https://multisig.testnet.x1.xyz',
     rpcUrl: 'https://rpc.testnet.x1.xyz',
     nativeSymbol: 'XNT',
+    genesisHash: 'C7ucgdDEhxLTpXHhWSZxavSVmaNTUJWwT5iTdeaviDho',
     markers: ['testnet'],
   },
   {
@@ -50,6 +63,7 @@ export const NETWORKS: NetworkConfig[] = [
     url: 'https://multisig.solana-mainnet.x1.xyz',
     rpcUrl: 'https://api.mainnet-beta.solana.com',
     nativeSymbol: 'SOL',
+    genesisHash: '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d',
     markers: ['solana-mainnet', 'solana_mainnet', 'mainnet-beta', 'solana.com'],
   },
 ];
@@ -108,4 +122,31 @@ export const getCurrentNetwork = (currentRpcUrl: string): NetworkConfig => {
 export const getNativeSymbol = (rpcUrl?: string | null): NativeSymbol => {
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   return (matchNetwork(rpcUrl) ?? matchNetwork(hostname) ?? DEFAULT_NETWORK).nativeSymbol;
+};
+
+/**
+ * Resolve a genesis hash to a network, or null when it is unrecognised.
+ *
+ * This is the authoritative answer: a genesis hash identifies a chain and
+ * cannot be spoofed by a URL. Callers fall back to `getCurrentNetwork` on
+ * null, which covers local validators and any chain not in NETWORKS.
+ */
+export const networkFromGenesisHash = (hash: string | null | undefined): NetworkConfig | null => {
+  if (!hash) return null;
+  return NETWORKS.find((network) => network.genesisHash === hash) ?? null;
+};
+
+/**
+ * True when an error means "this account does not exist on this cluster".
+ *
+ * @sqds/multisig throws `Unable to find <Type> account at <address>` when
+ * getAccountInfo returns null. An address that belongs to another chain
+ * produces exactly this, so callers skip it quietly. Match on the message
+ * rather than catching everything: transport and RPC failures must keep
+ * surfacing.
+ */
+export const isAccountNotFoundError = (error: unknown): boolean => {
+  const message =
+    typeof error === 'string' ? error : error instanceof Error ? error.message : undefined;
+  return message !== undefined && /^Unable to find \w+ account at /.test(message);
 };
