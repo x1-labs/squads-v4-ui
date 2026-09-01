@@ -78,7 +78,11 @@ export async function waitForConfirmation(
     // Window closed with something still unconfirmed. Return what we have and let
     // the caller decide — the transaction may yet land, so the message it shows
     // should not promise that nothing happened.
-    console.log('Timeout reached, returning latest statuses:', latestStatuses);
+    console.warn(
+      `[waitForConfirmation] Gave up after ${Date.now() - startTime}ms and ${poll} polls;` +
+        ' a null status means the cluster never saw the signature.',
+      { signatures, statuses: latestStatuses, rpc: connection.rpcEndpoint }
+    );
     return latestStatuses;
   } catch (error) {
     console.error('Error checking transaction status:', error);

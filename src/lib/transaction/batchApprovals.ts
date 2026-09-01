@@ -1,7 +1,9 @@
 import * as multisig from '@sqds/multisig';
-import { Connection, PublicKey, Transaction } from '@solana/web3.js';
-import { WalletContextState } from '@solana/wallet-adapter-react';
-import { waitForConfirmation } from '~/lib/transactionConfirmation';
+import { PublicKey } from '@solana/web3.js';
+import type { Connection, TransactionInstruction } from '@solana/web3.js';
+import type { WalletContextState } from '@solana/wallet-adapter-react';
+import { signSendAndConfirm } from '~/lib/transaction/signSendAndConfirm';
+import type { SendStep } from '~/lib/transaction/signSendAndConfirm';
 
 export interface ApprovalItem {
   transactionIndex: number;
@@ -11,28 +13,35 @@ export interface ApprovalItem {
 /**
  * Batch approve multiple proposals in a single transaction.
  * Each proposal gets proposalCreate (if needed) + proposalApprove instructions.
+ *
+ * Sends through the shared pipeline, so it gets the same priority fee, sized
+ * compute budget, fresh blockhash and rebroadcast-until-expiry as a single
+ * approval. Throws `TransactionFailedError` / `TransactionExpiredError` with a
+ * message that says whether anything landed.
  */
 export async function submitBatchApprovals(
   items: ApprovalItem[],
   connection: Connection,
   multisigPda: string,
   programId: PublicKey,
-  wallet: WalletContextState
+  wallet: WalletContextState,
+  onStep?: (step: SendStep) => void
 ): Promise<string> {
   if (!wallet.publicKey || !wallet.signTransaction) {
     throw new Error('Wallet must be connected');
   }
 
-  const transaction = new Transaction();
-  transaction.feePayer = wallet.publicKey;
+  const multisigPubkey = new PublicKey(multisigPda);
+  const instructions: TransactionInstruction[] = [];
+  const proposalPdas: PublicKey[] = [];
 
   for (const item of items) {
     const transactionIndexBN = BigInt(item.transactionIndex);
 
     if (item.proposalStatus === 'None') {
-      transaction.add(
+      instructions.push(
         multisig.instructions.proposalCreate({
-          multisigPda: new PublicKey(multisigPda),
+          multisigPda: multisigPubkey,
           creator: wallet.publicKey,
           isDraft: false,
           transactionIndex: transactionIndexBN,
@@ -43,9 +52,9 @@ export async function submitBatchApprovals(
     }
 
     if (item.proposalStatus === 'Draft') {
-      transaction.add(
+      instructions.push(
         multisig.instructions.proposalActivate({
-          multisigPda: new PublicKey(multisigPda),
+          multisigPda: multisigPubkey,
           member: wallet.publicKey,
           transactionIndex: transactionIndexBN,
           programId,
@@ -53,43 +62,28 @@ export async function submitBatchApprovals(
       );
     }
 
-    transaction.add(
+    instructions.push(
       multisig.instructions.proposalApprove({
-        multisigPda: new PublicKey(multisigPda),
+        multisigPda: multisigPubkey,
         member: wallet.publicKey,
         transactionIndex: transactionIndexBN,
         programId,
       })
     );
+
+    proposalPdas.push(
+      multisig.getProposalPda({
+        multisigPda: multisigPubkey,
+        transactionIndex: transactionIndexBN,
+        programId,
+      })[0]
+    );
   }
 
-  const { blockhash } = await connection.getLatestBlockhash();
-  transaction.recentBlockhash = blockhash;
-
-  // Check size before signing
-  try {
-    const serialized = transaction.serialize({ verifySignatures: false });
-    if (serialized.length > 1232) {
-      throw new Error(
-        `Transaction too large (${serialized.length} bytes). Select fewer proposals.`
-      );
-    }
-  } catch (e: any) {
-    if (e.message?.includes('too large')) throw e;
-    throw new Error('Transaction too large. Select fewer proposals.');
-  }
-
-  const signedTransaction = await wallet.signTransaction(transaction);
-
-  const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-    skipPreflight: false,
-    maxRetries: 3,
+  return signSendAndConfirm(connection, wallet, instructions, {
+    writableAccounts: [multisigPubkey, ...proposalPdas],
+    label: `BatchApprovals(${items.length})`,
+    tooLargeHint: 'Select fewer proposals.',
+    onStep,
   });
-
-  const results = await waitForConfirmation(connection, [signature], 30000);
-  if (!results[0] || results[0].err) {
-    throw new Error(`Transaction failed or unable to confirm. Signature: ${signature}`);
-  }
-
-  return signature;
 }

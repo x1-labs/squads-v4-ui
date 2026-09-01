@@ -1,14 +1,12 @@
 import * as multisig from '@sqds/multisig';
-import {
+import { PublicKey } from '@solana/web3.js';
+import type {
   AddressLookupTableAccount,
   Connection,
-  PublicKey,
   TransactionInstruction,
-  TransactionMessage,
-  VersionedTransaction,
 } from '@solana/web3.js';
-import { WalletContextState } from '@solana/wallet-adapter-react';
-import { waitForConfirmation } from '~/lib/transactionConfirmation';
+import type { WalletContextState } from '@solana/wallet-adapter-react';
+import { signSendAndConfirmV0 } from '~/lib/transaction/signSendAndConfirm';
 
 export interface ExecuteItem {
   transactionIndex: number;
@@ -16,6 +14,10 @@ export interface ExecuteItem {
 
 /**
  * Batch execute multiple approved proposals in a single transaction.
+ *
+ * Sends through the shared pipeline: priority fee, compute budget sized by
+ * simulation (a vault execute CPIs into arbitrary programs, so the runtime
+ * default is a poor guess either way), fresh blockhash, rebroadcast until expiry.
  */
 export async function submitBatchExecutes(
   items: ExecuteItem[],
@@ -36,6 +38,7 @@ export async function submitBatchExecutes(
 
   const instructions: TransactionInstruction[] = [];
   const allLookupTables: AddressLookupTableAccount[] = [];
+  const writableAccounts: PublicKey[] = [multisigPubkey];
 
   for (const item of items) {
     const transactionIndexBN = BigInt(item.transactionIndex);
@@ -44,6 +47,12 @@ export async function submitBatchExecutes(
       index: transactionIndexBN,
       programId,
     });
+    const [proposalPda] = multisig.getProposalPda({
+      multisigPda: multisigPubkey,
+      transactionIndex: transactionIndexBN,
+      programId,
+    });
+    writableAccounts.push(transactionPda, proposalPda);
 
     // Determine transaction type
     let txType: 'vault' | 'config' | 'unknown' = 'unknown';
@@ -98,41 +107,17 @@ export async function submitBatchExecutes(
     new Map(allLookupTables.map((t) => [t.key.toBase58(), t])).values()
   );
 
-  const { blockhash } = await connection.getLatestBlockhash();
+  const progressText = {
+    preparing: 'Simulating and pricing transaction...',
+    signing: 'Requesting wallet signature...',
+    confirming: 'Confirming...',
+  };
 
-  const transaction = new VersionedTransaction(
-    new TransactionMessage({
-      instructions,
-      payerKey: member,
-      recentBlockhash: blockhash,
-    }).compileToV0Message(uniqueLookupTables)
-  );
-
-  // Check size before signing
-  const serialized = transaction.serialize();
-  if (serialized.length > 1232) {
-    throw new Error(
-      `Transaction too large (${serialized.length} bytes). Select fewer transactions.`
-    );
-  }
-
-  onProgress?.('Requesting wallet signature...');
-
-  const signedTransaction = await wallet.signTransaction(transaction);
-
-  onProgress?.('Sending transaction...');
-
-  const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-    skipPreflight: false,
-    maxRetries: 3,
+  return signSendAndConfirmV0(connection, wallet, instructions, {
+    lookupTables: uniqueLookupTables,
+    writableAccounts,
+    label: `BatchExecutes(${instructions.length})`,
+    tooLargeHint: 'Select fewer transactions.',
+    onStep: (step) => onProgress?.(progressText[step]),
   });
-
-  onProgress?.('Confirming...');
-
-  const results = await waitForConfirmation(connection, [signature], 30000);
-  if (!results[0] || results[0].err) {
-    throw new Error(`Transaction failed or unable to confirm. Signature: ${signature}`);
-  }
-
-  return signature;
 }

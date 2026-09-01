@@ -36,6 +36,23 @@ const CU_BUDGET_INSTRUCTION_OVERHEAD = 600;
 const CU_FALLBACK = 200_000;
 
 /**
+ * What the runtime grants a transaction that requests no limit: 200k CU per
+ * non-budget instruction, capped at 1.4M. A batch that ran fine without a
+ * budget instruction was running on this, so it is the right fallback when a
+ * measurement is unavailable — a flat 200k would cut a five-instruction batch
+ * to a fifth of what it had.
+ */
+const CU_RUNTIME_DEFAULT_PER_INSTRUCTION = 200_000;
+const CU_RUNTIME_MAX = 1_400_000;
+
+export function runtimeDefaultComputeUnits(instructionCount: number): number {
+  return Math.min(
+    CU_RUNTIME_DEFAULT_PER_INSTRUCTION * Math.max(1, instructionCount),
+    CU_RUNTIME_MAX
+  );
+}
+
+/**
  * Bid the 75th percentile of what recently landed against these accounts.
  *
  * `getRecentPrioritizationFees` reports, per slot, the lowest priority fee among
@@ -95,26 +112,4 @@ export function computeBudgetInstructions(params: {
     ComputeBudgetProgram.setComputeUnitLimit({ units: params.units }),
     ComputeBudgetProgram.setComputeUnitPrice({ microLamports: params.microLamports }),
   ];
-}
-
-/**
- * Compute budget instructions to prepend to a transaction, priced from the
- * live fee market for `writableAccounts`.
- *
- * Pass `unitsConsumed` from a prior `simulateTransaction` to size the limit to
- * the real cost. These instructions change the transaction after that
- * simulation, which is safe because they are deterministic and the send path
- * keeps preflight enabled — the RPC re-simulates the final form before accepting.
- */
-export async function buildComputeBudgetInstructions(
-  connection: Connection,
-  writableAccounts: PublicKey[],
-  unitsConsumed?: number | null
-): Promise<TransactionInstruction[]> {
-  const microLamports = await getPriorityFeeMicroLamports(connection, writableAccounts);
-  const units = sizeComputeUnitLimit(unitsConsumed);
-
-  console.log('[priorityFee] Compute budget:', { microLamports, units, unitsConsumed });
-
-  return computeBudgetInstructions({ units, microLamports });
 }

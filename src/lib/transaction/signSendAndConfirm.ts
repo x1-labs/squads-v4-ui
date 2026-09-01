@@ -1,36 +1,88 @@
-import { Transaction } from '@solana/web3.js';
-import type { Connection, PublicKey, TransactionInstruction } from '@solana/web3.js';
-import { buildComputeBudgetInstructions } from './priorityFee';
+import {
+  PACKET_DATA_SIZE,
+  PublicKey,
+  Transaction,
+  TransactionMessage,
+  VersionedTransaction,
+} from '@solana/web3.js';
+import type {
+  AddressLookupTableAccount,
+  Connection,
+  SimulatedTransactionResponse,
+  TransactionInstruction,
+} from '@solana/web3.js';
+import {
+  computeBudgetInstructions,
+  getPriorityFeeMicroLamports,
+  runtimeDefaultComputeUnits,
+  sizeComputeUnitLimit,
+} from './priorityFee';
 import { getSendableBlockhash, sendAndConfirm } from './sendAndConfirm';
 
 /** The slice of a wallet-adapter wallet this needs: the sign-only flow, never `sendTransaction`. */
 export type SigningWallet = {
   publicKey: PublicKey | null;
-  signTransaction?: (transaction: Transaction) => Promise<Transaction>;
+  signTransaction?: <T extends Transaction | VersionedTransaction>(transaction: T) => Promise<T>;
 };
+
+/** Where the pipeline is, for callers that show progress. */
+export type SendStep = 'preparing' | 'signing' | 'confirming';
 
 export type SignSendAndConfirmOptions = {
   /** Accounts the transaction writes to — what the priority fee is priced against. */
   writableAccounts: PublicKey[];
-  /** `unitsConsumed` from the caller's simulation, used to size the compute limit. */
+  /**
+   * `unitsConsumed` from the caller's own simulation, used to size the compute
+   * limit. Leave undefined and the pipeline simulates to measure it, failing
+   * before the wallet prompt if the transaction cannot succeed.
+   */
   unitsConsumed?: number | null;
   /** Prefix for console output, e.g. 'ApproveButton'. */
   label: string;
-  /** Called once the wallet has signed, so the caller can flip its toast to "confirming". */
-  onSigned?: () => void;
+  /** Progress callback: 'signing' right before the wallet prompt, 'confirming' once signed. */
+  onStep?: (step: SendStep) => void;
+  /** Appended to the error when the transaction exceeds the packet size, e.g. 'Select fewer proposals.' */
+  tooLargeHint?: string;
 };
 
+export type SignSendAndConfirmV0Options = SignSendAndConfirmOptions & {
+  lookupTables?: AddressLookupTableAccount[];
+};
+
+/** Thrown when the pre-sign simulation says the transaction would fail on chain. */
+export class SimulationFailedError extends Error {
+  constructor(
+    public readonly err: unknown,
+    public readonly logs: string[]
+  ) {
+    super(describeSimulation(err, logs));
+    this.name = 'SimulationFailedError';
+  }
+}
+
+function describeSimulation(err: unknown, logs: string[]): string {
+  const anchor = logs
+    .map((log) => /Error Code: (\w+)\. Error Number: \d+\. Error Message: (.+?)\.?$/.exec(log))
+    .find(Boolean);
+  if (anchor) return `${anchor[2]} (${anchor[1]})`;
+  const lastLog = [...logs].reverse().find((log) => /error|failed/i.test(log));
+  return `Transaction simulation failed: ${lastLog ?? JSON.stringify(err)}`;
+}
+
 /**
- * The send pipeline shared by every proposal action: price and size a compute
- * budget, put it in front of `instructions`, fetch a fresh blockhash, have the
- * wallet sign, then broadcast and rebroadcast until the signature confirms or
- * the blockhash expires.
+ * The send pipeline shared by every proposal action and batch:
  *
- * Callers simulate first and pass what that measured; this rebuilds the
- * transaction rather than mutating theirs so the simulation object stays
- * untouched. Resolves with the signature. Throws `TransactionFailedError` /
- * `TransactionExpiredError` from `sendAndConfirm`, or the wallet's own error if
- * the user declines to sign.
+ *   1. price a priority fee from the fee market for `writableAccounts`;
+ *   2. simulate to measure compute, unless the caller already did;
+ *   3. fetch a fresh blockhash, build the final transaction with the budget
+ *      instructions in front, and check it fits in a packet;
+ *   4. have the wallet sign; then
+ *   5. broadcast and rebroadcast until the signature confirms or the blockhash expires.
+ *
+ * Resolves with the signature. Throws `SimulationFailedError` before the wallet
+ * prompt, `TransactionFailedError` / `TransactionExpiredError` /
+ * `TransactionStatusUnknownError` from `sendAndConfirm`, or the wallet's own
+ * error if the user declines to sign.
  */
 export async function signSendAndConfirm(
   connection: Connection,
@@ -38,51 +90,167 @@ export async function signSendAndConfirm(
   instructions: TransactionInstruction[],
   options: SignSendAndConfirmOptions
 ): Promise<string> {
+  return pipeline(connection, wallet, instructions, options, {
+    build: (payer, budget, blockhash) => {
+      const transaction = new Transaction();
+      transaction.feePayer = payer;
+      transaction.recentBlockhash = blockhash;
+      transaction.add(...budget, ...instructions);
+      return transaction;
+    },
+    // web3.js copies the transaction and stamps its own blockhash on the copy,
+    // so the probe's placeholder blockhash never reaches the RPC.
+    simulate: async (probe) => (await connection.simulateTransaction(probe)).value,
+    size: (transaction) => {
+      // Both message encoders write into a packet-sized buffer and throw on
+      // overrun, so an oversize transaction has no measurable size.
+      try {
+        const message = transaction.compileMessage();
+        return 1 + 64 * message.header.numRequiredSignatures + message.serialize().length;
+      } catch {
+        return null;
+      }
+    },
+  });
+}
+
+/** `signSendAndConfirm` for a v0 transaction, which is what lookup tables require. */
+export async function signSendAndConfirmV0(
+  connection: Connection,
+  wallet: SigningWallet,
+  instructions: TransactionInstruction[],
+  options: SignSendAndConfirmV0Options
+): Promise<string> {
+  return pipeline(connection, wallet, instructions, options, {
+    build: (payer, budget, blockhash) =>
+      new VersionedTransaction(
+        new TransactionMessage({
+          payerKey: payer,
+          recentBlockhash: blockhash,
+          instructions: [...budget, ...instructions],
+        }).compileToV0Message(options.lookupTables)
+      ),
+    simulate: async (probe) =>
+      (
+        await connection.simulateTransaction(probe, {
+          sigVerify: false,
+          replaceRecentBlockhash: true,
+        })
+      ).value,
+    size: ({ message }) => {
+      try {
+        return 1 + 64 * message.header.numRequiredSignatures + message.serialize().length;
+      } catch {
+        return null;
+      }
+    },
+  });
+}
+
+/** How each transaction format is built, simulated and measured; the pipeline is otherwise identical. */
+type Shape<T extends Transaction | VersionedTransaction> = {
+  build: (payer: PublicKey, budget: TransactionInstruction[], blockhash: string) => T;
+  simulate: (probe: T) => Promise<SimulatedTransactionResponse>;
+  /** Wire size in bytes, or null if it cannot even be encoded (i.e. oversize). */
+  size: (transaction: T) => number | null;
+};
+
+/** Any well-formed blockhash will do for a probe that simulation replaces anyway. */
+const PLACEHOLDER_BLOCKHASH = PublicKey.default.toBase58();
+
+async function pipeline<T extends Transaction | VersionedTransaction>(
+  connection: Connection,
+  wallet: SigningWallet,
+  instructions: TransactionInstruction[],
+  options: SignSendAndConfirmOptions,
+  shape: Shape<T>
+): Promise<string> {
   const tag = `[${options.label}]`;
 
   if (!wallet.publicKey) throw new Error('Wallet not connected');
   if (!wallet.signTransaction) throw new Error('Wallet does not support transaction signing');
+  const payer = wallet.publicKey;
 
-  // Price the transaction against what recently landed on the accounts it
-  // writes to, and size the compute limit to what simulation just measured.
-  const computeBudgetInstructions = await buildComputeBudgetInstructions(
-    connection,
-    options.writableAccounts,
-    options.unitsConsumed
-  );
+  options.onStep?.('preparing');
 
-  // Budget instructions first — a compute budget applies to the whole
-  // transaction regardless of position, but keeping them at the front matches
-  // convention and keeps the decoded instruction list readable.
-  const transaction = new Transaction();
-  transaction.feePayer = wallet.publicKey;
-  transaction.add(...computeBudgetInstructions, ...instructions);
+  // Price the transaction against what recently landed on the accounts it writes to.
+  const microLamports = await getPriorityFeeMicroLamports(connection, options.writableAccounts);
+
+  // Size the compute limit to what simulation measured. The probe requests the
+  // runtime's default budget so it is limited exactly the way the unbudgeted
+  // transaction would have been.
+  const defaultUnits = runtimeDefaultComputeUnits(instructions.length);
+  let unitsConsumed = options.unitsConsumed;
+  if (unitsConsumed === undefined) {
+    const probe = shape.build(
+      payer,
+      computeBudgetInstructions({ units: defaultUnits, microLamports }),
+      PLACEHOLDER_BLOCKHASH
+    );
+    try {
+      const simulation = await shape.simulate(probe);
+      if (simulation.err) {
+        console.error(`${tag} Simulation failed:`, simulation.err, simulation.logs);
+        throw new SimulationFailedError(simulation.err, simulation.logs ?? []);
+      }
+      unitsConsumed = simulation.unitsConsumed ?? null;
+    } catch (error) {
+      if (error instanceof SimulationFailedError) throw error;
+      // The lookup broke, not the transaction. Preflight on send still guards
+      // against a transaction that cannot succeed.
+      console.warn(`${tag} Could not simulate to size compute; using runtime default:`, error);
+      unitsConsumed = null;
+    }
+  }
+  const units = unitsConsumed ? sizeComputeUnitLimit(unitsConsumed) : defaultUnits;
 
   // Fresh blockhash right before signing, so as little of the validity window
   // as possible is spent before the wallet prompts. 'confirmed' avoids handing
   // over one that is already ~31 blocks old.
-  const startFreshBlockhash = Date.now();
   const { blockhash, lastValidBlockHeight } = await getSendableBlockhash(connection);
-  console.log(
-    `${tag} Got fresh blockhash:`,
-    blockhash,
-    'valid through block',
-    lastValidBlockHeight,
-    'in',
-    Date.now() - startFreshBlockhash,
-    'ms'
+
+  // Budget instructions first — a compute budget applies to the whole
+  // transaction regardless of position, but keeping them at the front matches
+  // convention and keeps the decoded instruction list readable.
+  const transaction = shape.build(
+    payer,
+    computeBudgetInstructions({ units, microLamports }),
+    blockhash
   );
-  transaction.recentBlockhash = blockhash;
+
+  // Checked after the budget instructions are in, since they count too. Better
+  // a clear error here than a cryptic one from the wallet.
+  const sizeBytes = shape.size(transaction);
+  if (sizeBytes === null || sizeBytes > PACKET_DATA_SIZE) {
+    const measured =
+      sizeBytes === null
+        ? `over ${PACKET_DATA_SIZE} bytes`
+        : `${sizeBytes} bytes, limit ${PACKET_DATA_SIZE}`;
+    throw new Error(`Transaction too large (${measured}). ${options.tooLargeHint ?? ''}`.trim());
+  }
+
+  // Everything that decides whether this lands, in one line for bug reports.
+  console.log(`${tag} Send plan`, {
+    rpc: connection.rpcEndpoint,
+    instructions: instructions.length,
+    sizeBytes,
+    unitsConsumed,
+    computeUnitLimit: units,
+    priorityFeeMicroLamportsPerCu: microLamports,
+    maxPriorityFeeLamports: Math.ceil((units * microLamports) / 1_000_000),
+    blockhash,
+    lastValidBlockHeight,
+  });
 
   // Sign only, then broadcast via the app's connection. The wallet never sends,
   // so it doesn't need to be pointed at this network's RPC — the app always
   // submits to the configured endpoint. This also avoids the "Plugin Closed"
   // errors some wallets throw on send.
-  console.log(`${tag} Requesting wallet signature`);
+  options.onStep?.('signing');
   const startSign = Date.now();
   const signedTransaction = await wallet.signTransaction(transaction);
-  console.log(`${tag} Signed in`, Date.now() - startSign, 'ms');
-  options.onSigned?.();
+  console.log(`${tag} Signed in ${Date.now() - startSign}ms`);
+  options.onStep?.('confirming');
 
   return sendAndConfirm(connection, signedTransaction, lastValidBlockHeight, {
     label: options.label,

@@ -126,7 +126,11 @@ const CancelButton = ({
         writableAccounts: [proposalPda, new PublicKey(multisigPda)],
         unitsConsumed: simulation.value.unitsConsumed,
         label: 'CancelButton',
-        onSigned: () => toast.loading('Confirming cancellation...', { id: 'transaction' }),
+        onStep: (step) => {
+          if (step === 'signing') toast.loading('Cancel in your wallet...', { id: 'transaction' });
+          if (step === 'confirming')
+            toast.loading('Confirming cancellation...', { id: 'transaction' });
+        },
       });
 
       // Invalidate all relevant queries to refresh data

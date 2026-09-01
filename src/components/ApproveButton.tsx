@@ -138,7 +138,10 @@ const ApproveButton = ({
         writableAccounts: [proposalPda, new PublicKey(multisigPda)],
         unitsConsumed: simulation.value.unitsConsumed,
         label: 'ApproveButton',
-        onSigned: () => toast.loading('Confirming approval...', { id: 'transaction' }),
+        onStep: (step) => {
+          if (step === 'signing') toast.loading('Approve in your wallet...', { id: 'transaction' });
+          if (step === 'confirming') toast.loading('Confirming approval...', { id: 'transaction' });
+        },
       });
 
       // Invalidate all relevant queries to refresh data

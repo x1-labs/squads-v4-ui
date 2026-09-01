@@ -1,7 +1,11 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Connection } from '@solana/web3.js';
-import { getPriorityFeeMicroLamports, sizeComputeUnitLimit } from './priorityFee.ts';
+import {
+  getPriorityFeeMicroLamports,
+  runtimeDefaultComputeUnits,
+  sizeComputeUnitLimit,
+} from './priorityFee.ts';
 
 const feeMarket = (fees: number[]) =>
   ({
@@ -49,5 +53,13 @@ describe('sizeComputeUnitLimit', () => {
   test('never goes below the caller floor', () => {
     assert.equal(sizeComputeUnitLimit(10_000, 400_000), 400_000);
     assert.equal(sizeComputeUnitLimit(500_000, 400_000), 600_600);
+  });
+});
+
+describe('runtimeDefaultComputeUnits', () => {
+  test('matches what the runtime grants an unbudgeted transaction', () => {
+    assert.equal(runtimeDefaultComputeUnits(1), 200_000);
+    assert.equal(runtimeDefaultComputeUnits(5), 1_000_000);
+    assert.equal(runtimeDefaultComputeUnits(10), 1_400_000);
   });
 });

@@ -147,7 +147,11 @@ const RejectButton = ({
         writableAccounts: [proposalPda, new PublicKey(multisigPda)],
         unitsConsumed: simulation.value.unitsConsumed,
         label: 'RejectButton',
-        onSigned: () => toast.loading('Confirming rejection...', { id: 'transaction' }),
+        onStep: (step) => {
+          if (step === 'signing') toast.loading('Reject in your wallet...', { id: 'transaction' });
+          if (step === 'confirming')
+            toast.loading('Confirming rejection...', { id: 'transaction' });
+        },
       });
 
       // Invalidate all relevant queries to refresh data

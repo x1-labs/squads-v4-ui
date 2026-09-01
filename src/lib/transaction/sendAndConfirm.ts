@@ -136,9 +136,36 @@ export async function sendAndConfirm(
 
   const startedAt = Date.now();
   let poll = 0;
+  let rebroadcasts = 0;
   let lastStatus: SignatureStatus | null = null;
+  let lastLoggedStatus = '';
+  let lastBlockHeight: number | null = null;
+
+  const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
+
+  // Everything needed to work out what happened to a signature, logged on every
+  // exit. This is the object to paste into a bug report.
+  const report = () => ({
+    signature,
+    rpc: connection.rpcEndpoint,
+    elapsedMs: Date.now() - startedAt,
+    polls: poll,
+    rebroadcasts,
+    lastValidBlockHeight,
+    lastSeenBlockHeight: lastBlockHeight,
+    lastStatus,
+  });
+
+  const logStatus = (status: SignatureStatus | null) => {
+    const seen = status?.confirmationStatus ?? 'not seen by cluster';
+    if (seen === lastLoggedStatus) return;
+    lastLoggedStatus = seen;
+    console.log(`${tag} Status after ${elapsed()}: ${seen}`);
+  };
 
   const rebroadcast = () => {
+    rebroadcasts += 1;
+    console.log(`${tag} Rebroadcast #${rebroadcasts} after ${elapsed()}, cluster has not seen it`);
     // Preflight is off on resends: the transaction was already validated on the
     // first send, and re-simulating one that is mid-flight wastes a round trip
     // and can spuriously fail.
@@ -148,7 +175,7 @@ export async function sendAndConfirm(
         // "already been processed" here means it landed while we were asking —
         // the next poll will see it. Any other resend error is equally
         // non-fatal, since the status poll is what decides the outcome.
-        console.debug(`${tag} Rebroadcast attempt ${poll} did not stick:`, error?.message);
+        console.log(`${tag} Rebroadcast #${rebroadcasts} did not stick:`, error?.message);
       });
   };
 
@@ -168,7 +195,7 @@ export async function sendAndConfirm(
     poll += 1;
 
     if (Date.now() - startedAt > MAX_WAIT_MS) {
-      console.error(`${tag} Gave up after ${MAX_WAIT_MS}ms; last status:`, lastStatus);
+      console.error(`${tag} RPC unresponsive for ${MAX_WAIT_MS}ms, outcome unknown:`, report());
       throw new TransactionStatusUnknownError(signature);
     }
 
@@ -176,13 +203,17 @@ export async function sendAndConfirm(
     try {
       status = await checkStatus();
     } catch (error) {
-      if (error instanceof TransactionFailedError) throw error;
+      if (error instanceof TransactionFailedError) {
+        console.error(`${tag} Failed on chain:`, error.err, report());
+        throw error;
+      }
       console.warn(`${tag} Status check ${poll} failed, will retry:`, error);
       continue;
     }
+    logStatus(status);
 
     if (landed(status)) {
-      console.log(`${tag} Confirmed in ${Date.now() - startedAt}ms`, status);
+      console.log(`${tag} Confirmed after ${elapsed()}`, report());
       return signature;
     }
 
@@ -200,6 +231,11 @@ export async function sendAndConfirm(
       console.warn(`${tag} Block height check failed, will retry:`, error);
       continue;
     }
+    lastBlockHeight = blockHeight;
+    console.log(
+      `${tag} Block height ${blockHeight} of ${lastValidBlockHeight}, ` +
+        `${Math.max(0, lastValidBlockHeight - blockHeight)} blocks of validity left`
+    );
     if (blockHeight <= lastValidBlockHeight) continue;
 
     // The blockhash is dead, so this exact transaction can never be included in
@@ -209,24 +245,22 @@ export async function sendAndConfirm(
     for (let grace = 0; grace < EXPIRY_GRACE_POLLS; grace++) {
       await sleep(POLL_INTERVAL_MS);
       try {
-        if (landed(await checkStatus())) {
-          console.log(`${tag} Confirmed after expiry on grace poll ${grace + 1}`, lastStatus);
+        const status = await checkStatus();
+        logStatus(status);
+        if (landed(status)) {
+          console.log(`${tag} Confirmed on grace poll ${grace + 1} after expiry`, report());
           return signature;
         }
       } catch (error) {
-        if (error instanceof TransactionFailedError) throw error;
+        if (error instanceof TransactionFailedError) {
+          console.error(`${tag} Failed on chain:`, error.err, report());
+          throw error;
+        }
         console.warn(`${tag} Grace status check ${grace + 1} failed:`, error);
       }
     }
 
-    console.warn(
-      `${tag} Expired at block height`,
-      blockHeight,
-      '>',
-      lastValidBlockHeight,
-      'last status:',
-      lastStatus
-    );
+    console.error(`${tag} Blockhash expired before the transaction landed:`, report());
     throw new TransactionExpiredError(signature, lastStatus);
   }
 }
