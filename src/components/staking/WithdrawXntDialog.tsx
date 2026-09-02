@@ -23,6 +23,7 @@ import { useStakePools } from '@/hooks/useStakePools';
 import { useMultisig } from '@/hooks/useServices';
 import { useQueryClient } from '@tanstack/react-query';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
+import { toastSteps } from '@/lib/transaction/toastSteps';
 import { stakePoolInfo, getStakePoolAccount, StakePoolInstruction } from '@x1-labs/spl-stake-pool';
 import * as splToken from '@solana/spl-token';
 import { useAccess } from '@/hooks/useAccess';
@@ -179,10 +180,10 @@ export function WithdrawXntDialog() {
         [multisigTransactionIx, proposalIx, approveIx],
         {
           label: 'WithdrawXntDialog',
-          onStep: (step) => {
-            if (step === 'confirming')
-              toast.loading('Confirming unstake transaction...', { id: 'unstake-transaction' });
-          },
+          onStep: toastSteps(
+            { confirming: 'Confirming unstake transaction...' },
+            'unstake-transaction'
+          ),
         }
       );
 

@@ -23,6 +23,7 @@ import { useStakePools } from '@/hooks/useStakePools';
 import { useBalance, useMultisig } from '@/hooks/useServices';
 import { useQueryClient } from '@tanstack/react-query';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
+import { toastSteps } from '@/lib/transaction/toastSteps';
 import { stakePoolInfo, getStakePoolAccount, StakePoolInstruction } from '@x1-labs/spl-stake-pool';
 import * as splToken from '@solana/spl-token';
 import { useAccess } from '@/hooks/useAccess';
@@ -206,10 +207,10 @@ export function DepositXntDialog() {
         [multisigTransactionIx, proposalIx, approveIx],
         {
           label: 'DepositXntDialog',
-          onStep: (step) => {
-            if (step === 'confirming')
-              toast.loading('Confirming stake transaction...', { id: 'stake-transaction' });
-          },
+          onStep: toastSteps(
+            { confirming: 'Confirming stake transaction...' },
+            'stake-transaction'
+          ),
         }
       );
 

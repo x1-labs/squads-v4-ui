@@ -25,6 +25,7 @@ import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '@/hooks/useAccess';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
+import { toastSteps } from '@/lib/transaction/toastSteps';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import {
   createWithdrawStakeInstruction,
@@ -263,9 +264,7 @@ export function WithdrawStakeDialog({
     // until confirmed or expired. Throws with a message that says whether it landed.
     await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
       label: 'WithdrawStakeDialog',
-      onStep: (step) => {
-        if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
-      },
+      onStep: toastSteps(),
     });
 
     setSelectedAccount('');

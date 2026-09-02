@@ -3,9 +3,9 @@ import * as multisig from '@sqds/multisig';
 import { Connection, PublicKey, TransactionMessage, VersionedMessage } from '@solana/web3.js';
 import { decodeAndDeserialize } from './decodeAndDeserialize';
 import { WalletContextState } from '@solana/wallet-adapter-react';
-import { toast } from 'sonner';
 import { loadLookupTables } from './getAccountsForSimulation';
 import { signSendAndConfirmV0 } from '~/lib/transaction/signSendAndConfirm';
+import { toastSteps } from '~/lib/transaction/toastSteps';
 
 export const importTransaction = async (
   tx: string,
@@ -68,9 +68,7 @@ export const importTransaction = async (
     // until confirmed or expired. Throws with a message that says whether it landed.
     await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
       label: 'importTransaction',
-      onStep: (step) => {
-        if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
-      },
+      onStep: toastSteps(),
     });
   } catch (error: any) {
     console.error(error);

@@ -22,6 +22,7 @@ import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
+import { toastSteps } from '@/lib/transaction/toastSteps';
 
 interface WithdrawRewardsDialogProps {
   validator: ValidatorInfo;
@@ -110,9 +111,7 @@ export function WithdrawRewardsDialog({ validator }: WithdrawRewardsDialogProps)
       // until confirmed or expired. Throws with a message that says whether it landed.
       await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
         label: 'WithdrawRewards',
-        onStep: (step) => {
-          if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
-        },
+        onStep: toastSteps(),
       });
 
       toast.success('Transaction created successfully', { id: 'transaction' });

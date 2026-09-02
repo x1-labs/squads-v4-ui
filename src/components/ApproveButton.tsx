@@ -1,4 +1,5 @@
-import { PublicKey, Transaction } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
+import type { TransactionInstruction } from '@solana/web3.js';
 import { Button } from './ui/button';
 import * as multisig from '@sqds/multisig';
 import { useWallet } from '@solana/wallet-adapter-react';
@@ -6,7 +7,8 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
-import { signSendAndConfirm } from '../lib/transaction/signSendAndConfirm';
+import { describeSendError, signSendAndConfirm } from '../lib/transaction/signSendAndConfirm';
+import { toastSteps } from '../lib/transaction/toastSteps';
 
 type ApproveButtonProps = {
   multisigPda: string;
@@ -47,9 +49,7 @@ const ApproveButton = ({
     try {
       console.log('[ApproveButton] Building transaction');
 
-      // Build transaction WITHOUT blockhash first for simulation
-      const transaction = new Transaction();
-      transaction.feePayer = wallet.publicKey;
+      const instructions: TransactionInstruction[] = [];
 
       if (proposalStatus === 'None') {
         const createProposalInstruction = multisig.instructions.proposalCreate({
@@ -60,7 +60,7 @@ const ApproveButton = ({
           rentPayer: wallet.publicKey,
           programId: actualProgramId,
         });
-        transaction.add(createProposalInstruction);
+        instructions.push(createProposalInstruction);
       }
       if (proposalStatus == 'Draft') {
         const activateProposalInstruction = multisig.instructions.proposalActivate({
@@ -69,7 +69,7 @@ const ApproveButton = ({
           transactionIndex: bigIntTransactionIndex,
           programId: actualProgramId,
         });
-        transaction.add(activateProposalInstruction);
+        instructions.push(activateProposalInstruction);
       }
       const approveProposalInstruction = multisig.instructions.proposalApprove({
         multisigPda: new PublicKey(multisigPda),
@@ -77,53 +77,7 @@ const ApproveButton = ({
         transactionIndex: bigIntTransactionIndex,
         programId: actualProgramId,
       });
-      transaction.add(approveProposalInstruction);
-
-      // Get blockhash for simulation only
-      console.log('[ApproveButton] Fetching blockhash for simulation');
-      const { blockhash: simBlockhash } = await connection.getLatestBlockhash('confirmed');
-      console.log('[ApproveButton] Got simulation blockhash:', simBlockhash);
-      transaction.recentBlockhash = simBlockhash;
-
-      // First simulate to catch errors early
-      console.log('[ApproveButton] Simulating transaction');
-      const simulation = await connection.simulateTransaction(transaction);
-      console.log('[ApproveButton] Simulation result:', simulation.value);
-
-      if (simulation.value.err) {
-        console.error('Simulation error:', simulation.value.err);
-
-        // Parse error logs for meaningful messages
-        const logs = simulation.value.logs || [];
-        const errorLog = logs.find(
-          (log) =>
-            log.includes('Error') ||
-            log.includes('failed') ||
-            log.includes('NotAuthorized') ||
-            log.includes('AnchorError')
-        );
-
-        if (errorLog) {
-          // Extract error details from Anchor errors
-          const anchorErrorMatch = errorLog.match(
-            /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.+?)(?:\.|$)/
-          );
-          if (anchorErrorMatch) {
-            throw new Error(`${anchorErrorMatch[3]} (Code: ${anchorErrorMatch[1]})`);
-          }
-
-          // Check for authorization errors
-          if (errorLog.includes('NotAuthorized') || errorLog.includes('Not authorized')) {
-            throw new Error(
-              'Not authorized to perform this action. You may not be a member of this multisig.'
-            );
-          }
-
-          throw new Error(errorLog);
-        }
-
-        throw new Error(`Transaction simulation failed: ${JSON.stringify(simulation.value.err)}`);
-      }
+      instructions.push(approveProposalInstruction);
 
       const [proposalPda] = multisig.getProposalPda({
         multisigPda: new PublicKey(multisigPda),
@@ -131,17 +85,16 @@ const ApproveButton = ({
         programId: actualProgramId,
       });
 
-      // Attaches a priced compute budget, signs, then rebroadcasts until the
-      // signature confirms or the blockhash expires. Throws
-      // TransactionFailedError / TransactionExpiredError.
-      signature = await signSendAndConfirm(connection, wallet, transaction.instructions, {
+      // Simulates (failing before the wallet prompt with the program's error),
+      // attaches a priced compute budget, signs, then rebroadcasts until the
+      // signature confirms or the blockhash expires.
+      signature = await signSendAndConfirm(connection, wallet, instructions, {
         writableAccounts: [proposalPda, new PublicKey(multisigPda)],
-        unitsConsumed: simulation.value.unitsConsumed,
         label: 'ApproveButton',
-        onStep: (step) => {
-          if (step === 'signing') toast.loading('Approve in your wallet...', { id: 'transaction' });
-          if (step === 'confirming') toast.loading('Confirming approval...', { id: 'transaction' });
-        },
+        onStep: toastSteps({
+          signing: 'Approve in your wallet...',
+          confirming: 'Confirming approval...',
+        }),
       });
 
       // Invalidate all relevant queries to refresh data
@@ -160,21 +113,7 @@ const ApproveButton = ({
       console.error('[ApproveButton] Approval error:', error);
       console.error('[ApproveButton] Error stack:', error?.stack);
 
-      // Check for common errors
-      if (error.message?.includes('blockhash not found')) {
-        throw new Error('Transaction expired. Please try again.');
-      }
-
-      if (error.message?.includes('insufficient funds')) {
-        throw new Error('Insufficient funds for transaction fees.');
-      }
-
-      if (error.message?.includes('User rejected')) {
-        throw new Error('Transaction cancelled by user.');
-      }
-
-      // Re-throw with better context
-      throw error;
+      throw new Error(describeSendError(error));
     }
   };
   return (

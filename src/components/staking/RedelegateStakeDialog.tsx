@@ -21,6 +21,7 @@ import { createDelegateStakeInstruction } from '@/lib/staking/validatorStakeUtil
 import { StakeAccountInfo as StakeAccountData } from '@/lib/staking/validatorStakeUtils';
 import { toast } from 'sonner';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
+import { toastSteps } from '@/lib/transaction/toastSteps';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import { RefreshCw } from 'lucide-react';
 import { StakeAccountDisplay } from './StakeAccountDisplay';
@@ -162,10 +163,7 @@ export function RedelegateStakeDialog({
         [multisigTransactionIx, proposalIx, approveIx],
         {
           label: 'RedelegateStakeDialog',
-          onStep: (step) => {
-            if (step === 'signing') toast.loading('Sending transaction...', { id: 'transaction' });
-            if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
-          },
+          onStep: toastSteps(),
         }
       );
 

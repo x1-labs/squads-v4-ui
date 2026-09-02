@@ -26,6 +26,7 @@ import { useValidatorMetadata } from '@/hooks/useValidatorMetadata';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '@/hooks/useAccess';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
+import { toastSteps } from '@/lib/transaction/toastSteps';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import {
   createStakeAccountWithSeedInstructions,
@@ -154,9 +155,7 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
     // until confirmed or expired. Throws with a message that says whether it landed.
     await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
       label: 'DelegateStakeDialog',
-      onStep: (step) => {
-        if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
-      },
+      onStep: toastSteps(),
     });
 
     setAmount('');

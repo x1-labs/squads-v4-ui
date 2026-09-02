@@ -13,6 +13,7 @@ import { useMultisigData } from '@/hooks/useMultisigData';
 import { isMember } from '../lib/utils';
 import invariant from 'invariant';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
+import { toastSteps } from '../lib/transaction/toastSteps';
 import { useQueryClient } from '@tanstack/react-query';
 import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
@@ -96,9 +97,7 @@ const AddMemberInput = ({ multisigPda, transactionIndex, programId }: AddMemberI
     // until confirmed or expired. Throws with a message that says whether it landed.
     await signSendAndConfirmV0(connection, wallet, [addMemberIx, proposalIx, approveIx], {
       label: 'AddMemberInput',
-      onStep: (step) => {
-        if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
-      },
+      onStep: toastSteps(),
     });
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
   };

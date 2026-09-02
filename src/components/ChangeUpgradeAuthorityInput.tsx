@@ -16,6 +16,7 @@ import { isPublickey } from '@/lib/isPublickey';
 import { SimplifiedProgramInfo } from '../hooks/useProgram';
 import { useMultisigData } from '../hooks/useMultisigData';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
+import { toastSteps } from '../lib/transaction/toastSteps';
 import { useQueryClient } from '@tanstack/react-query';
 
 type ChangeUpgradeAuthorityInputProps = {
@@ -117,9 +118,7 @@ const ChangeUpgradeAuthorityInput = ({
     // until confirmed or expired. Throws with a message that says whether it landed.
     await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
       label: 'ChangeUpgradeAuthorityInput',
-      onStep: (step) => {
-        if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
-      },
+      onStep: toastSteps(),
     });
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
   };

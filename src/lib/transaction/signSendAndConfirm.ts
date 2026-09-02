@@ -41,6 +41,10 @@ export type SignSendAndConfirmOptions = {
    * before the wallet prompt if the transaction cannot succeed.
    */
   unitsConsumed?: number | null;
+  /** Bypass the fee market with a price the user chose, in micro-lamports per CU. */
+  priorityFeeMicroLamports?: number;
+  /** Never request fewer compute units than this, whatever simulation measured. */
+  minComputeUnits?: number;
   /** Prefix for console output, e.g. 'ApproveButton'. */
   label: string;
   /** Progress callback: 'signing' right before the wallet prompt, 'confirming' once signed. */
@@ -75,8 +79,32 @@ function describeSimulation(err: unknown, logs: string[]): string {
     .map((log) => /Error Code: (\w+)\. Error Number: \d+\. Error Message: (.+?)\.?$/.exec(log))
     .find(Boolean);
   if (anchor) return `${anchor[2]} (${anchor[1]})`;
+  const text = logs.join('\n');
+  // A vault execute that touches a stake pool fails until the pool's balances
+  // are refreshed for the epoch; it is transient, not a broken proposal.
+  if (text.includes('First update old validator stake account balances')) {
+    return 'Stake pool needs to be updated. Please wait a moment and try again.';
+  }
+  if (/NotAuthorized|Not authorized/.test(text)) {
+    return 'Not authorized to perform this action. You may not be a member of this multisig or lack the required permissions.';
+  }
   const lastLog = [...logs].reverse().find((log) => /error|failed/i.test(log));
   return `Transaction simulation failed: ${lastLog ?? JSON.stringify(err)}`;
+}
+
+/**
+ * User-facing text for anything the pipeline can throw. The pipeline's own
+ * errors already explain themselves; this rewrites the raw ones — the wallet's
+ * rejection and the RPC's terse strings — that would otherwise reach a toast.
+ */
+export function describeSendError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/User rejected|rejected the request/i.test(message)) return 'Transaction cancelled by user.';
+  if (/blockhash not found/i.test(message)) return 'Transaction expired. Please try again.';
+  if (/insufficient funds|insufficient lamports/i.test(message)) {
+    return 'Insufficient funds for transaction fees.';
+  }
+  return message || 'Transaction failed';
 }
 
 /**
@@ -282,11 +310,14 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
 
   options.onStep?.('preparing');
 
-  // Price the transaction against what recently landed on the accounts it writes to.
-  const microLamports = await getPriorityFeeMicroLamports(
-    connection,
-    options.writableAccounts ?? writableAccountsOf(instructions)
-  );
+  // Price the transaction against what recently landed on the accounts it
+  // writes to, unless the user set a price.
+  const microLamports =
+    options.priorityFeeMicroLamports ??
+    (await getPriorityFeeMicroLamports(
+      connection,
+      options.writableAccounts ?? writableAccountsOf(instructions)
+    ));
 
   // Size the compute limit to what simulation measured. The probe requests the
   // runtime's default budget so it is limited exactly the way the unbudgeted
@@ -314,7 +345,10 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
       unitsConsumed = null;
     }
   }
-  const units = unitsConsumed ? sizeComputeUnitLimit(unitsConsumed) : defaultUnits;
+  const minUnits = options.minComputeUnits ?? 0;
+  const units = unitsConsumed
+    ? sizeComputeUnitLimit(unitsConsumed, minUnits)
+    : Math.max(minUnits, defaultUnits);
 
   // Fresh blockhash right before signing, so as little of the validity window
   // as possible is spent before the wallet prompts. 'confirmed' avoids handing

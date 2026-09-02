@@ -18,6 +18,7 @@ import { ValidationRules, useSquadForm } from '@/lib/hooks/useSquadForm';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useMultisigAddress } from '@/hooks/useMultisigAddress';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
+import { toastSteps } from '@/lib/transaction/toastSteps';
 import { Link } from 'react-router-dom';
 
 interface MemberAddresses {
@@ -81,9 +82,7 @@ export default function CreateSquadForm({}: {}) {
     const signature = await signSendAndConfirmV0(connection, wallet, [instruction], {
       label: 'CreateSquad',
       signers: [createKey],
-      onStep: (step) => {
-        if (step === 'confirming') toast.loading('Confirming...', { id: 'create' });
-      },
+      onStep: toastSteps({}, 'create'),
     });
 
     setMultisigAddress.mutate(multisig.toBase58());

@@ -12,6 +12,7 @@ import type { Connection } from '@solana/web3.js';
 import {
   SimulationFailedError,
   WalletSignatureTimeoutError,
+  describeSendError,
   signSendAndConfirm,
   signSendAndConfirmV0,
 } from './signSendAndConfirm.ts';
@@ -164,6 +165,55 @@ describe('signSendAndConfirm', () => {
     assert.equal(calls.sends, 0);
   });
 
+  test('a user-chosen fee replaces the market lookup', async () => {
+    const { connection } = fakeConnection({ fees: [50_000, 50_000] });
+    const { wallet, signed } = fakeWallet();
+    await run(
+      signSendAndConfirm(connection, wallet, [ix()], { ...options, priorityFeeMicroLamports: 7 })
+    );
+    assert.equal(budgetOf(signed[0])[1], 7);
+  });
+
+  test('a minimum compute budget is a floor under the measured size, not a replacement', async () => {
+    const { connection } = fakeConnection();
+    const { wallet, signed } = fakeWallet();
+    await run(
+      signSendAndConfirm(connection, wallet, [ix()], { ...options, minComputeUnits: 400_000 })
+    );
+    assert.equal(budgetOf(signed[0])[0], 400_000, 'raised to the floor');
+    await run(
+      signSendAndConfirm(connection, wallet, [ix()], { ...options, minComputeUnits: 1_000 })
+    );
+    assert.equal(budgetOf(signed[1])[0], 36_600, 'measured size wins over a low floor');
+  });
+
+  test('the floor also applies when simulation could not measure', async () => {
+    const { connection } = fakeConnection({
+      simulation: () => {
+        throw new Error('429 Too Many Requests');
+      },
+    });
+    const { wallet, signed } = fakeWallet();
+    await run(
+      signSendAndConfirm(connection, wallet, [ix()], { ...options, minComputeUnits: 900_000 })
+    );
+    assert.equal(budgetOf(signed[0])[0], 900_000);
+  });
+
+  test('a stake-pool refresh failure is explained as transient', async () => {
+    const { connection } = fakeConnection({
+      simulation: {
+        err: { InstructionError: [0, { Custom: 16 }] },
+        logs: [
+          'Program log: First update old validator stake account balances and then pool stake balance',
+        ],
+      },
+    });
+    const { wallet } = fakeWallet();
+    const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], options));
+    assert.match(error.message, /Stake pool needs to be updated/);
+  });
+
   test('a simulation that cannot run falls back to the runtime default budget', async () => {
     const { connection } = fakeConnection({
       simulation: () => {
@@ -203,6 +253,31 @@ describe('signSendAndConfirm', () => {
       signSendAndConfirm(connection, wallet, [ix()], { ...options, onStep: (s) => steps.push(s) })
     );
     assert.deepEqual(steps, ['preparing', 'signing', 'confirming']);
+  });
+});
+
+describe('describeSendError', () => {
+  test('rewrites the raw wallet and RPC strings a user would otherwise see', () => {
+    assert.equal(
+      describeSendError(new Error('WalletSignTransactionError: User rejected the request.')),
+      'Transaction cancelled by user.'
+    );
+    assert.equal(
+      describeSendError(new Error('failed to send transaction: Blockhash not found')),
+      'Transaction expired. Please try again.'
+    );
+    assert.equal(
+      describeSendError(new Error('Transfer: insufficient lamports 100, need 5000')),
+      'Insufficient funds for transaction fees.'
+    );
+  });
+
+  test('passes the pipeline errors through, since they already explain themselves', () => {
+    const error = new SimulationFailedError({}, [
+      'Program log: AnchorError occurred. Error Code: AlreadyApproved. Error Number: 6006. Error Message: Member already approved the transaction.',
+    ]);
+    assert.equal(describeSendError(error), error.message);
+    assert.equal(describeSendError('plain string'), 'plain string');
   });
 });
 
