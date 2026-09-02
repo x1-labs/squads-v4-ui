@@ -213,6 +213,18 @@ describe('sendAndConfirm', () => {
     assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), SIG);
   });
 
+  test('a failed status query during the grace polls does not cut them short', async () => {
+    // The grace polls are the last chance to notice a transaction that landed
+    // in the final block of its window; a 429 in the middle must not spend one.
+    const rateLimited = () => {
+      throw new Error('429 Too Many Requests');
+    };
+    const statuses: Step<SignatureStatus | null>[] = [null, null, null, null, null];
+    statuses.push(rateLimited, null, confirmed);
+    const { connection } = fakeConnection({ statuses, heights: [5000] });
+    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), SIG);
+  });
+
   test('a transient RPC error while polling is retried, not reported as failure', async () => {
     const rateLimited = () => {
       throw new Error('429 Too Many Requests');

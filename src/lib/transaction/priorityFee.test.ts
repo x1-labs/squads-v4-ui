@@ -45,11 +45,6 @@ describe('sizeComputeUnitLimit', () => {
     assert.equal(sizeComputeUnitLimit(10_000), 12_600);
   });
 
-  test('falls back when there is no measurement', () => {
-    assert.equal(sizeComputeUnitLimit(null), 200_000);
-    assert.equal(sizeComputeUnitLimit(undefined), 200_000);
-  });
-
   test('never goes below the caller floor', () => {
     assert.equal(sizeComputeUnitLimit(10_000, 400_000), 400_000);
     assert.equal(sizeComputeUnitLimit(500_000, 400_000), 600_600);

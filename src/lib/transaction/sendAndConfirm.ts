@@ -98,7 +98,7 @@ export class TransactionStatusUnknownError extends Error {
   }
 }
 
-const landed = (status: SignatureStatus | null): boolean =>
+const landed = (status: SignatureStatus | null | undefined): boolean =>
   status?.confirmationStatus === 'confirmed' || status?.confirmationStatus === 'finalized';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -247,6 +247,28 @@ export async function sendAndConfirm(
     return status;
   };
 
+  /**
+   * One status query, logged. `null` is the cluster saying it has not seen the
+   * signature; `undefined` is the query itself failing, which says nothing
+   * about the transaction and is only ever worth retrying. A transaction that
+   * landed and was rejected on chain throws — the one fatal outcome.
+   */
+  const pollStatus = async (what: string): Promise<SignatureStatus | null | undefined> => {
+    let status: SignatureStatus | null;
+    try {
+      status = await checkStatus();
+    } catch (error) {
+      if (error instanceof TransactionFailedError) {
+        console.error(`${tag} Failed on chain:`, error.err, report());
+        throw error;
+      }
+      console.warn(`${tag} ${what} failed, will retry:`, error);
+      return undefined;
+    }
+    logStatus(status);
+    return status;
+  };
+
   while (true) {
     await sleep(POLL_INTERVAL_MS);
     poll += 1;
@@ -260,18 +282,8 @@ export async function sendAndConfirm(
       throw new TransactionStatusUnknownError(signature);
     }
 
-    let status: SignatureStatus | null;
-    try {
-      status = await checkStatus();
-    } catch (error) {
-      if (error instanceof TransactionFailedError) {
-        console.error(`${tag} Failed on chain:`, error.err, report());
-        throw error;
-      }
-      console.warn(`${tag} Status check ${poll} failed, will retry:`, error);
-      continue;
-    }
-    logStatus(status);
+    const status = await pollStatus(`Status check ${poll}`);
+    if (status === undefined) continue;
 
     if (landed(status)) {
       console.log(`${tag} Confirmed after ${elapsed()}`, report());
@@ -306,19 +318,11 @@ export async function sendAndConfirm(
     // few more polls before calling it.
     for (let grace = 0; grace < EXPIRY_GRACE_POLLS; grace++) {
       await sleep(POLL_INTERVAL_MS);
-      try {
-        const status = await checkStatus();
-        logStatus(status);
-        if (landed(status)) {
-          console.log(`${tag} Confirmed on grace poll ${grace + 1} after expiry`, report());
-          return signature;
-        }
-      } catch (error) {
-        if (error instanceof TransactionFailedError) {
-          console.error(`${tag} Failed on chain:`, error.err, report());
-          throw error;
-        }
-        console.warn(`${tag} Grace status check ${grace + 1} failed:`, error);
+      // No rebroadcast here, and no backstop check: the blockhash is dead, so
+      // these polls only ask whether it already landed.
+      if (landed(await pollStatus(`Grace status check ${grace + 1}`))) {
+        console.log(`${tag} Confirmed on grace poll ${grace + 1} after expiry`, report());
+        return signature;
       }
     }
 

@@ -137,6 +137,49 @@ export const networkFromGenesisHash = (hash: string | null | undefined): Network
 };
 
 /**
+ * Where a previously observed genesis hash is kept between page loads, keyed by
+ * RPC URL. Injected so the detection logic can be tested without a browser.
+ */
+export type GenesisHashCache = {
+  read: (rpcUrl: string) => string | null;
+  write: (rpcUrl: string, hash: string) => void;
+};
+
+/**
+ * Identify the cluster an endpoint actually serves, asking the endpoint itself.
+ *
+ * The genesis hash is queried every time rather than read from the cache, even
+ * though a *chain's* hash never changes: what can change is which chain a given
+ * URL points at. A local validator is reset with a new genesis, a proxy or a
+ * saved Settings URL is repointed at another cluster, `localhost:8899` means
+ * something different next week. A cache that was never revalidated pinned the
+ * wrong identity for that endpoint permanently — wrong program IDs, wrong
+ * explorer links, wrong native symbol, with no way to clear it from the UI.
+ *
+ * The cache is now a fallback for the offline case instead: when the lookup
+ * fails, the last hash seen from this endpoint is a better answer than none,
+ * and the caller keeps rendering with the identity it had. With no cached hash
+ * and no answer, the error propagates — callers treat "unresolved" as a signal
+ * to wait, which is the safe direction.
+ */
+export const detectNetwork = async (
+  connection: { getGenesisHash: () => Promise<string> },
+  rpcUrl: string,
+  cache: GenesisHashCache
+): Promise<NetworkConfig> => {
+  try {
+    const hash = await connection.getGenesisHash();
+    cache.write(rpcUrl, hash);
+    return networkFromGenesisHash(hash) ?? getCurrentNetwork(rpcUrl);
+  } catch (error) {
+    const cached = cache.read(rpcUrl);
+    if (!cached) throw error;
+    console.warn('[network] Genesis hash lookup failed, using the last one seen here:', error);
+    return networkFromGenesisHash(cached) ?? getCurrentNetwork(rpcUrl);
+  }
+};
+
+/**
  * True when an error means "this account does not exist on this cluster".
  *
  * @sqds/multisig throws `Unable to find <Type> account at <address>` when
