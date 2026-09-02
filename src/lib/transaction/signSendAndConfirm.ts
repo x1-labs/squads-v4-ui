@@ -158,6 +158,94 @@ type Shape<T extends Transaction | VersionedTransaction> = {
   size: (transaction: T) => number | null;
 };
 
+/** How often to check on a wallet that has not returned a signature yet. */
+const SIGN_WATCHDOG_INTERVAL_MS = 5_000;
+/** Log a "still waiting" line this often, so a stuck prompt is visible in the console. */
+const SIGN_WATCHDOG_LOG_EVERY = 3;
+/** Give up on the wallet after this long if the RPC will not tell us the block height. */
+const SIGN_MAX_WAIT_MS = 180_000;
+
+/**
+ * The wallet never returned a signature, or returned it after the blockhash it
+ * signed had died. Nothing was sent either way, so retrying is always safe.
+ */
+export class WalletSignatureTimeoutError extends Error {
+  constructor(public readonly waitedMs: number) {
+    super(
+      `The wallet did not return a signature within ${Math.round(waitedMs / 1000)}s, ` +
+        'and the transaction has expired unsigned. Nothing was sent. Check the wallet ' +
+        '(and hardware device, if any) and try again.'
+    );
+    this.name = 'WalletSignatureTimeoutError';
+  }
+}
+
+/**
+ * `wallet.signTransaction`, bounded by the life of the blockhash in the message.
+ *
+ * A wallet prompt that never settles — extension hung, hardware device asleep,
+ * popup dismissed without a rejection event — otherwise leaves the caller
+ * awaiting forever with nothing in the console. So while the wallet has the
+ * transaction, the block height is checked every few seconds; once it passes
+ * `lastValidBlockHeight` the signature can no longer land and the wait is
+ * abandoned with a `WalletSignatureTimeoutError`. A signature that arrives
+ * after that is dropped: sending it would only produce "Blockhash not found".
+ */
+async function signBeforeExpiry<T extends Transaction | VersionedTransaction>(
+  connection: Connection,
+  sign: () => Promise<T>,
+  lastValidBlockHeight: number,
+  tag: string
+): Promise<T> {
+  const startedAt = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abandoned = false;
+
+  const expiry = new Promise<never>((_, reject) => {
+    let ticks = 0;
+    const check = async () => {
+      ticks += 1;
+      const waitedMs = Date.now() - startedAt;
+      let blockHeight: number | null = null;
+      try {
+        blockHeight = await connection.getBlockHeight('confirmed');
+      } catch (error) {
+        console.warn(`${tag} Block height lookup failed while waiting for the wallet:`, error);
+      }
+      if (abandoned) return;
+
+      const expired =
+        blockHeight !== null ? blockHeight > lastValidBlockHeight : waitedMs > SIGN_MAX_WAIT_MS;
+      if (expired) {
+        abandoned = true;
+        console.error(`${tag} Gave up waiting for the wallet after ${waitedMs}ms`, {
+          blockHeight,
+          lastValidBlockHeight,
+        });
+        reject(new WalletSignatureTimeoutError(waitedMs));
+        return;
+      }
+
+      if (ticks % SIGN_WATCHDOG_LOG_EVERY === 0) {
+        const left = blockHeight !== null ? `${lastValidBlockHeight - blockHeight}` : 'unknown';
+        console.warn(
+          `${tag} Still waiting for the wallet after ${Math.round(waitedMs / 1000)}s, ` +
+            `${left} blocks of validity left`
+        );
+      }
+      timer = setTimeout(check, SIGN_WATCHDOG_INTERVAL_MS);
+    };
+    timer = setTimeout(check, SIGN_WATCHDOG_INTERVAL_MS);
+  });
+
+  try {
+    return await Promise.race([sign(), expiry]);
+  } finally {
+    abandoned = true;
+    clearTimeout(timer);
+  }
+}
+
 /** Every account the instructions write to, deduplicated. */
 function writableAccountsOf(instructions: TransactionInstruction[]): PublicKey[] {
   const seen = new Map<string, PublicKey>();
@@ -265,7 +353,12 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
   // errors some wallets throw on send.
   options.onStep?.('signing');
   const startSign = Date.now();
-  const signedTransaction = await wallet.signTransaction(transaction);
+  const signedTransaction = await signBeforeExpiry(
+    connection,
+    () => wallet.signTransaction!(transaction),
+    lastValidBlockHeight,
+    tag
+  );
   console.log(`${tag} Signed in ${Date.now() - startSign}ms`);
   options.onStep?.('confirming');
 

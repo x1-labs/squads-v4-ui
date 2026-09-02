@@ -140,10 +140,19 @@ export async function sendAndConfirm(
 
   // First send keeps preflight on, so a transaction that cannot possibly succeed
   // surfaces its simulation error here rather than after a minute of retrying.
-  const signature = await connection.sendRawTransaction(rawTransaction, {
-    skipPreflight: false,
-    maxRetries: 0,
-  });
+  let signature: string;
+  try {
+    signature = await connection.sendRawTransaction(rawTransaction, {
+      skipPreflight: false,
+      maxRetries: 0,
+    });
+  } catch (error) {
+    console.error(`${tag} The RPC rejected the send, nothing was submitted:`, error, {
+      rpc: describeRpc(connection.rpcEndpoint),
+      lastValidBlockHeight,
+    });
+    throw error;
+  }
   console.log(`${tag} Sent, awaiting confirmation. Signature:`, signature);
 
   const startedAt = Date.now();

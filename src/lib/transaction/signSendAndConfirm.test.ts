@@ -11,6 +11,7 @@ import {
 import type { Connection } from '@solana/web3.js';
 import {
   SimulationFailedError,
+  WalletSignatureTimeoutError,
   signSendAndConfirm,
   signSendAndConfirmV0,
 } from './signSendAndConfirm.ts';
@@ -41,6 +42,7 @@ function fakeConnection({
   simulation = { err: null, logs: [], unitsConsumed: 30_000 } as
     | { err: unknown; logs: string[]; unitsConsumed?: number }
     | (() => never),
+  blockHeight = (() => 100) as () => number,
 } = {}) {
   const calls = { simulations: 0, sends: 0 };
   const connection = {
@@ -61,7 +63,7 @@ function fakeConnection({
       return 'SIGabc';
     },
     getSignatureStatuses: async () => ({ value: [{ err: null, confirmationStatus: 'confirmed' }] }),
-    getBlockHeight: async () => 100,
+    getBlockHeight: async () => blockHeight(),
   };
   return { calls, connection: connection as unknown as Connection };
 }
@@ -223,5 +225,53 @@ describe('signSendAndConfirmV0', () => {
       /^Transaction too large \(over 1232 bytes\)\. Remove some operations/
     );
     assert.equal(signed.length, 0);
+  });
+});
+
+describe('wallet watchdog', () => {
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout', 'Date'] }));
+  afterEach(() => mock.timers.reset());
+
+  test('a wallet that never answers is abandoned once the blockhash dies, and nothing is sent', async () => {
+    // Height passes lastValidBlockHeight (999) after ~40s of waiting.
+    const start = Date.now();
+    const { calls, connection } = fakeConnection({
+      blockHeight: () => (Date.now() - start > 40_000 ? 1_000 : 900),
+    });
+    const wallet: SigningWallet = {
+      publicKey: keypair.publicKey,
+      signTransaction: () => new Promise(() => {}),
+    };
+    const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], { label: 't' }));
+    assert.ok(error instanceof WalletSignatureTimeoutError, String(error));
+    assert.match(error.message, /Nothing was sent/);
+    assert.equal(calls.sends, 0);
+  });
+
+  test('a wallet that answers late, after expiry, is not sent either', async () => {
+    const start = Date.now();
+    const { calls, connection } = fakeConnection({
+      blockHeight: () => (Date.now() - start > 40_000 ? 1_000 : 900),
+    });
+    const { wallet } = fakeWallet();
+    const slowSign = wallet.signTransaction!;
+    wallet.signTransaction = (transaction) =>
+      new Promise((resolve) => setTimeout(() => resolve(slowSign(transaction)), 90_000));
+    const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], { label: 't' }));
+    assert.ok(error instanceof WalletSignatureTimeoutError, String(error));
+    assert.equal(calls.sends, 0);
+  });
+
+  test('a wallet that answers in time is sent normally', async () => {
+    const { calls, connection } = fakeConnection({ blockHeight: () => 900 });
+    const { wallet } = fakeWallet();
+    const quickSign = wallet.signTransaction!;
+    wallet.signTransaction = (transaction) =>
+      new Promise((resolve) => setTimeout(() => resolve(quickSign(transaction)), 14_000));
+    assert.equal(
+      await run(signSendAndConfirm(connection, wallet, [ix()], { label: 't' })),
+      'SIGabc'
+    );
+    assert.equal(calls.sends, 1);
   });
 });
