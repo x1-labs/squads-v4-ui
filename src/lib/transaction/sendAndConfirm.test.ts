@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { SendTransactionError } from '@solana/web3.js';
 import type { Connection, SignatureStatus, Transaction } from '@solana/web3.js';
+import bs58 from 'bs58';
 import {
   sendAndConfirm,
   TransactionExpiredError,
@@ -12,7 +14,12 @@ const confirmed = { err: null, confirmationStatus: 'confirmed' } as SignatureSta
 const finalized = { err: null, confirmationStatus: 'finalized' } as SignatureStatus;
 const processed = { err: null, confirmationStatus: 'processed' } as SignatureStatus;
 
-const signedTx = { serialize: () => Buffer.from('deadbeef', 'hex') } as unknown as Transaction;
+const signatureBytes = Buffer.alloc(64, 7);
+const SIG = bs58.encode(signatureBytes);
+const signedTx = {
+  serialize: () => Buffer.from('deadbeef', 'hex'),
+  signature: signatureBytes,
+} as unknown as Transaction;
 
 type Step<T> = T | (() => T);
 const next = <T>(steps: Step<T>[], i: number): T => {
@@ -20,23 +27,27 @@ const next = <T>(steps: Step<T>[], i: number): T => {
   return typeof step === 'function' ? (step as () => T)() : step;
 };
 
+type SendOptions = { skipPreflight?: boolean; preflightCommitment?: string; maxRetries?: number };
+
 /**
- * A Connection stub. `statuses` and `heights` are consumed one per call and the
- * last entry repeats; a function entry is invoked, so it can throw.
+ * A Connection stub. `sends`, `statuses` and `heights` are consumed one per call
+ * and the last entry repeats; a function entry is invoked, so it can throw.
  */
 function fakeConnection({
+  sends = [SIG] as Step<string>[],
   statuses = [] as Step<SignatureStatus | null>[],
   heights = [] as Step<number>[],
 } = {}) {
   const calls = {
-    sends: [] as { skipPreflight?: boolean; maxRetries?: number }[],
+    sends: [] as SendOptions[],
     statusPolls: 0,
     heightPolls: 0,
   };
   const connection = {
-    sendRawTransaction: async (_raw: Uint8Array, opts: (typeof calls.sends)[number]) => {
+    rpcEndpoint: 'http://rpc.test',
+    sendRawTransaction: async (_raw: Uint8Array, opts: SendOptions) => {
       calls.sends.push(opts);
-      return 'SIGabc';
+      return next(sends, calls.sends.length - 1);
     },
     getSignatureStatuses: async () => ({ value: [next(statuses, calls.statusPolls++) ?? null] }),
     getBlockHeight: async () => next(heights, calls.heightPolls++) ?? 0,
@@ -75,14 +86,64 @@ describe('sendAndConfirm', () => {
   test('resolves at confirmed, without waiting for finalized', async () => {
     const { calls, connection } = fakeConnection({ statuses: [null, confirmed], heights: [100] });
     const sig = await run(sendAndConfirm(connection, signedTx, 999));
-    assert.equal(sig, 'SIGabc');
+    assert.equal(sig, SIG);
     assert.equal(calls.sends[0].skipPreflight, false, 'first send keeps preflight');
+    assert.equal(calls.sends[0].preflightCommitment, 'processed');
     assert.equal(calls.sends[0].maxRetries, 0, 'first send disables RPC retries');
+  });
+
+  test('the signature comes from the signed bytes, not from what the RPC echoes back', async () => {
+    const { connection } = fakeConnection({ sends: ['whatever'], statuses: [confirmed] });
+    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), SIG);
+  });
+
+  test('a send the RPC rejected outright is fatal, and nothing is polled', async () => {
+    const rejected = () => {
+      throw new SendTransactionError({
+        action: 'simulate',
+        signature: '',
+        transactionMessage: 'Blockhash not found',
+      });
+    };
+    const { calls, connection } = fakeConnection({ sends: [rejected], statuses: [confirmed] });
+    const error = await rejects(sendAndConfirm(connection, signedTx, 999));
+    assert.ok(error instanceof SendTransactionError);
+    assert.equal(calls.statusPolls, 0);
+    assert.equal(calls.sends.length, 1);
+  });
+
+  test('a send whose answer was lost in transit is tracked, not reported as unsent', async () => {
+    // The RPC may have forwarded it before the connection dropped. Polling finds
+    // it landed; throwing here would have had the user sign a duplicate.
+    const dropped = () => {
+      throw new Error('502 Bad Gateway');
+    };
+    const { calls, connection } = fakeConnection({
+      sends: [dropped, SIG],
+      statuses: [null, confirmed],
+      heights: [100],
+    });
+    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), SIG);
+    assert.ok(calls.statusPolls >= 1);
+  });
+
+  test('a lost send that the cluster never saw is pushed again by the rebroadcast', async () => {
+    const dropped = () => {
+      throw new Error('fetch failed');
+    };
+    const { calls, connection } = fakeConnection({
+      sends: [dropped, SIG],
+      statuses: [null, null, null, confirmed],
+      heights: [100],
+    });
+    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), SIG);
+    assert.ok(calls.sends.length >= 2, 'the transport failure was followed by a resend');
+    assert.equal(calls.sends[1].skipPreflight, true);
   });
 
   test('finalized also counts as landed', async () => {
     const { calls, connection } = fakeConnection({ statuses: [finalized], heights: [100] });
-    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), 'SIGabc');
+    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), SIG);
     assert.equal(calls.statusPolls, 1);
   });
 
@@ -128,7 +189,7 @@ describe('sendAndConfirm', () => {
     const statuses: Step<SignatureStatus | null>[] = Array(12).fill(null);
     statuses.push(confirmed);
     const { connection } = fakeConnection({ statuses, heights: [900, 950, 998] });
-    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), 'SIGabc');
+    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), SIG);
   });
 
   test('an on-chain error is fatal and is not rebroadcast', async () => {
@@ -149,7 +210,7 @@ describe('sendAndConfirm', () => {
       statuses: [null, null, null, null, null, null, null, confirmed],
       heights: [5000],
     });
-    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), 'SIGabc');
+    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), SIG);
   });
 
   test('a transient RPC error while polling is retried, not reported as failure', async () => {
@@ -160,7 +221,7 @@ describe('sendAndConfirm', () => {
       statuses: [null, rateLimited, rateLimited, confirmed],
       heights: [rateLimited, 100],
     });
-    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), 'SIGabc');
+    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), SIG);
     assert.equal(calls.statusPolls, 4);
   });
 
@@ -172,5 +233,23 @@ describe('sendAndConfirm', () => {
     const error = await rejects(sendAndConfirm(connection, signedTx, 999));
     assert.ok(error instanceof TransactionStatusUnknownError);
     assert.match(error.message, /Check the explorer/);
+  });
+
+  test('the silence backstop counts from the last answer, so a slow landing is not cut off', async () => {
+    // The RPC answers every poll; the transaction just takes a while. Height
+    // says the blockhash is still alive throughout.
+    const statuses: Step<SignatureStatus | null>[] = Array(150).fill(null);
+    statuses.push(confirmed);
+    const { connection } = fakeConnection({ statuses, heights: [900] });
+    assert.equal(await run(sendAndConfirm(connection, signedTx, 999)), SIG);
+  });
+
+  test('an RPC that answers status but never height is still capped', async () => {
+    const dead = () => {
+      throw new Error('fetch failed');
+    };
+    const { connection } = fakeConnection({ statuses: [null], heights: [dead] });
+    const error = await rejects(sendAndConfirm(connection, signedTx, 999));
+    assert.ok(error instanceof TransactionStatusUnknownError);
   });
 });

@@ -16,6 +16,7 @@ import {
   signSendAndConfirmV0,
 } from './signSendAndConfirm.ts';
 import type { SendStep, SigningWallet } from './signSendAndConfirm.ts';
+import bs58 from 'bs58';
 
 const keypair = Keypair.generate();
 const program = Keypair.generate().publicKey;
@@ -91,6 +92,14 @@ const rejects = async (promise: Promise<unknown>): Promise<Error> => {
   throw new Error('expected rejection');
 };
 
+/** The signature the pipeline should report: the wallet's own, off the signed bytes. */
+const signatureOf = (transaction: Transaction | VersionedTransaction): string =>
+  bs58.encode(
+    transaction instanceof VersionedTransaction
+      ? transaction.signatures[0]
+      : (transaction.signature as Buffer)
+  );
+
 /** [limit, price] from the first two instructions of what the wallet was handed. */
 function budgetOf(transaction: Transaction | VersionedTransaction): [number, number] {
   if (transaction instanceof Transaction) {
@@ -121,9 +130,9 @@ describe('signSendAndConfirm', () => {
     const { connection, calls } = fakeConnection();
     const { wallet, signed } = fakeWallet();
     const signature = await run(signSendAndConfirm(connection, wallet, [ix()], options));
-    assert.equal(signature, 'SIGabc');
     assert.equal(calls.simulations, 1);
     assert.equal(signed.length, 1);
+    assert.equal(signature, signatureOf(signed[0]));
     assert.deepEqual(budgetOf(signed[0]), [36_600, 5_000]);
     assert.equal((signed[0] as Transaction).instructions.length, 3);
   });
@@ -205,8 +214,8 @@ describe('signSendAndConfirmV0', () => {
     const { connection } = fakeConnection();
     const { wallet, signed } = fakeWallet();
     const signature = await run(signSendAndConfirmV0(connection, wallet, [ix(), ix()], options));
-    assert.equal(signature, 'SIGabc');
     assert.ok(signed[0] instanceof VersionedTransaction);
+    assert.equal(signature, signatureOf(signed[0]));
     assert.deepEqual(budgetOf(signed[0]), [36_600, 5_000]);
     assert.equal((signed[0] as VersionedTransaction).message.compiledInstructions.length, 4);
   });
@@ -264,14 +273,12 @@ describe('wallet watchdog', () => {
 
   test('a wallet that answers in time is sent normally', async () => {
     const { calls, connection } = fakeConnection({ blockHeight: () => 900 });
-    const { wallet } = fakeWallet();
+    const { wallet, signed } = fakeWallet();
     const quickSign = wallet.signTransaction!;
     wallet.signTransaction = (transaction) =>
       new Promise((resolve) => setTimeout(() => resolve(quickSign(transaction)), 14_000));
-    assert.equal(
-      await run(signSendAndConfirm(connection, wallet, [ix()], { label: 't' })),
-      'SIGabc'
-    );
+    const signature = await run(signSendAndConfirm(connection, wallet, [ix()], { label: 't' }));
+    assert.equal(signature, signatureOf(signed[0]));
     assert.equal(calls.sends, 1);
   });
 });

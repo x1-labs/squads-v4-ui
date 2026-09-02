@@ -1,9 +1,6 @@
-import type {
-  Connection,
-  SignatureStatus,
-  Transaction,
-  VersionedTransaction,
-} from '@solana/web3.js';
+import { SendTransactionError, VersionedTransaction } from '@solana/web3.js';
+import type { Connection, SignatureStatus, Transaction } from '@solana/web3.js';
+import bs58 from 'bs58';
 
 /** How often to ask the RPC where the signature stands. */
 const POLL_INTERVAL_MS = 1_000;
@@ -23,11 +20,20 @@ const BLOCK_HEIGHT_CHECK_EVERY = 5;
 const EXPIRY_GRACE_POLLS = 3;
 
 /**
- * Hard wall-clock backstop. Expiry is normally decided by block height, but if
- * the RPC keeps failing every status and height query we would otherwise loop
- * forever. Blockhashes live ~60s; twice that means it is dead by any measure.
+ * Backstop on RPC silence. Expiry is normally decided by block height, but if
+ * the RPC fails every status and height query we would otherwise loop forever.
+ * Measured from the last query that got an answer, not from the send, so a
+ * slow-but-working RPC is never cut off mid-flight. Blockhashes live ~60s;
+ * twice that with no word from the RPC means the outcome cannot be known here.
  */
-const MAX_WAIT_MS = 120_000;
+const MAX_RPC_SILENCE_MS = 120_000;
+
+/**
+ * Absolute cap, whatever the RPC says. Reached only if status queries answer
+ * but the height query never does (or never advances), which would otherwise
+ * keep the poll alive indefinitely.
+ */
+const MAX_TOTAL_WAIT_MS = 300_000;
 
 export type SendAndConfirmOptions = {
   /** Prefix for this call site's console output, e.g. 'ApproveButton'. */
@@ -138,24 +144,53 @@ export async function sendAndConfirm(
   const tag = `[${options.label ?? 'sendAndConfirm'}]`;
   const rawTransaction = signedTransaction.serialize();
 
+  // The signature is the first one on the transaction, and is known before the
+  // send. Computing it here rather than trusting the send's return value means
+  // a send whose answer never arrives can still be tracked.
+  const signature = bs58.encode(
+    signedTransaction instanceof VersionedTransaction
+      ? signedTransaction.signatures[0]
+      : signedTransaction.signature!
+  );
+
   // First send keeps preflight on, so a transaction that cannot possibly succeed
   // surfaces its simulation error here rather than after a minute of retrying.
-  let signature: string;
+  // Preflight at 'processed': the blockhash was fetched at 'confirmed', and a
+  // pooled RPC may route this call to a node whose 'confirmed' view has not yet
+  // reached that slot, which would reject a perfectly good transaction with
+  // "Blockhash not found".
   try {
-    signature = await connection.sendRawTransaction(rawTransaction, {
+    await connection.sendRawTransaction(rawTransaction, {
       skipPreflight: false,
+      preflightCommitment: 'processed',
       maxRetries: 0,
     });
   } catch (error) {
-    console.error(`${tag} The RPC rejected the send, nothing was submitted:`, error, {
+    if (error instanceof SendTransactionError) {
+      // A JSON-RPC error: the node looked at the transaction and turned it down
+      // (preflight failure, unknown blockhash, ...). It was not forwarded.
+      console.error(`${tag} The RPC rejected the send, nothing was submitted:`, error, {
+        rpc: describeRpc(connection.rpcEndpoint),
+        lastValidBlockHeight,
+      });
+      throw error;
+    }
+    // Transport failure — fetch error, 429, 502, a proxy timeout. The request
+    // may have reached the node and been forwarded before the answer was lost,
+    // so this is not "nothing was submitted": treat it as sent and let the
+    // status poll decide. If the cluster really never saw it, the rebroadcast
+    // below pushes it again; if it did, reporting failure here would send the
+    // user back to sign a duplicate.
+    console.warn(`${tag} The send got no answer; the RPC may still have forwarded it:`, error, {
       rpc: describeRpc(connection.rpcEndpoint),
+      signature,
       lastValidBlockHeight,
     });
-    throw error;
   }
   console.log(`${tag} Sent, awaiting confirmation. Signature:`, signature);
 
   const startedAt = Date.now();
+  let lastAnswerAt = startedAt;
   let poll = 0;
   let rebroadcasts = 0;
   let lastStatus: SignatureStatus | null = null;
@@ -202,6 +237,7 @@ export async function sendAndConfirm(
 
   const checkStatus = async (): Promise<SignatureStatus | null> => {
     const { value } = await connection.getSignatureStatuses([signature]);
+    lastAnswerAt = Date.now();
     const status = value[0];
     if (status?.err) {
       // It landed and the program rejected it. Retrying won't help.
@@ -215,8 +251,12 @@ export async function sendAndConfirm(
     await sleep(POLL_INTERVAL_MS);
     poll += 1;
 
-    if (Date.now() - startedAt > MAX_WAIT_MS) {
-      console.error(`${tag} RPC unresponsive for ${MAX_WAIT_MS}ms, outcome unknown:`, report());
+    if (Date.now() - lastAnswerAt > MAX_RPC_SILENCE_MS) {
+      console.error(`${tag} No RPC answer for ${MAX_RPC_SILENCE_MS}ms, outcome unknown:`, report());
+      throw new TransactionStatusUnknownError(signature);
+    }
+    if (Date.now() - startedAt > MAX_TOTAL_WAIT_MS) {
+      console.error(`${tag} Unresolved after ${MAX_TOTAL_WAIT_MS}ms, outcome unknown:`, report());
       throw new TransactionStatusUnknownError(signature);
     }
 
@@ -252,6 +292,7 @@ export async function sendAndConfirm(
       console.warn(`${tag} Block height check failed, will retry:`, error);
       continue;
     }
+    lastAnswerAt = Date.now();
     lastBlockHeight = blockHeight;
     console.log(
       `${tag} Block height ${blockHeight} of ${lastValidBlockHeight}, ` +
