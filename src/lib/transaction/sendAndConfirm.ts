@@ -34,6 +34,18 @@ export type SendAndConfirmOptions = {
   label?: string;
 };
 
+/**
+ * The RPC host alone. Provider URLs carry the API key in the path or query
+ * (QuickNode, Helius), and these logs get pasted into bug reports.
+ */
+export function describeRpc(endpoint: string): string {
+  try {
+    return new URL(endpoint).host;
+  } catch {
+    return endpoint;
+  }
+}
+
 export class TransactionExpiredError extends Error {
   constructor(
     public readonly signature: string,
@@ -147,7 +159,7 @@ export async function sendAndConfirm(
   // exit. This is the object to paste into a bug report.
   const report = () => ({
     signature,
-    rpc: connection.rpcEndpoint,
+    rpc: describeRpc(connection.rpcEndpoint),
     elapsedMs: Date.now() - startedAt,
     polls: poll,
     rebroadcasts,

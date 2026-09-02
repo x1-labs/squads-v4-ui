@@ -17,7 +17,7 @@ import {
   runtimeDefaultComputeUnits,
   sizeComputeUnitLimit,
 } from './priorityFee';
-import { getSendableBlockhash, sendAndConfirm } from './sendAndConfirm';
+import { describeRpc, getSendableBlockhash, sendAndConfirm } from './sendAndConfirm';
 
 /** The slice of a wallet-adapter wallet this needs: the sign-only flow, never `sendTransaction`. */
 export type SigningWallet = {
@@ -248,7 +248,7 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
 
   // Everything that decides whether this lands, in one line for bug reports.
   console.log(`${tag} Send plan`, {
-    rpc: connection.rpcEndpoint,
+    rpc: describeRpc(connection.rpcEndpoint),
     instructions: instructions.length,
     sizeBytes,
     unitsConsumed,
