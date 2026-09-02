@@ -9,6 +9,7 @@ import { useMultisig } from '@/hooks/useServices';
 import { useAccess } from '@/hooks/useAccess';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
+import { toastSteps } from '../lib/transaction/toastSteps';
 import { useQueryClient } from '@tanstack/react-query';
 import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
@@ -117,9 +118,7 @@ const EditMemberPermissions = ({
       [changeMemberPermissionsIx, proposalIx, approveIx],
       {
         label: 'EditMemberPermissions',
-        onStep: (step) => {
-          if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
-        },
+        onStep: toastSteps(),
       }
     );
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });

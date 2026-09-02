@@ -10,6 +10,7 @@ import { SimplifiedProgramInfo } from '../hooks/useProgram';
 import { useMultisigData } from '../hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
+import { toastSteps } from '../lib/transaction/toastSteps';
 
 type ExtendProgramInputProps = {
   programInfos: SimplifiedProgramInfo;
@@ -101,9 +102,7 @@ const ExtendProgramInput = ({ programInfos }: ExtendProgramInputProps) => {
       ],
       {
         label: 'ExtendProgramInput',
-        onStep: (step) => {
-          if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
-        },
+        onStep: toastSteps(),
       }
     );
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });

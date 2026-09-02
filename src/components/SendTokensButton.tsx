@@ -25,6 +25,7 @@ import { useMultisigData } from '~/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '../hooks/useAccess';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
+import { toastSteps } from '../lib/transaction/toastSteps';
 import { TransactionFailedError } from '../lib/transaction/sendAndConfirm';
 import { formatError } from '@/lib/utils/errorHandler';
 import { addMemoToInstructions } from '../lib/utils/memoInstruction';
@@ -164,9 +165,7 @@ const SendTokens = ({
         [multisigTransactionIx, proposalIx, approveIx],
         {
           label: 'SendTokensButton',
-          onStep: (step) => {
-            if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
-          },
+          onStep: toastSteps(),
         }
       );
     } catch (error) {

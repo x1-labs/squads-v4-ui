@@ -10,6 +10,7 @@ import { useMultisig } from '../hooks/useServices';
 import invariant from 'invariant';
 import { types as multisigTypes } from '@sqds/multisig';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
+import { toastSteps } from '../lib/transaction/toastSteps';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMultisigData } from '../hooks/useMultisigData';
 
@@ -90,9 +91,7 @@ const ChangeThresholdInput = ({ multisigPda, transactionIndex }: ChangeThreshold
     // until confirmed or expired. Throws with a message that says whether it landed.
     await signSendAndConfirmV0(connection, wallet, [changeThresholdIx, proposalIx, approveIx], {
       label: 'ChangeThresholdInput',
-      onStep: (step) => {
-        if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
-      },
+      onStep: toastSteps(),
     });
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
   };
