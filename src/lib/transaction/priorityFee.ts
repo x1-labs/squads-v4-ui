@@ -32,9 +32,6 @@ const FEE_PERCENTILE = 0.75;
 const CU_MARGIN = 1.2;
 const CU_BUDGET_INSTRUCTION_OVERHEAD = 600;
 
-/** Fallback when simulation didn't report usage. Comfortably above any proposal action. */
-const CU_FALLBACK = 200_000;
-
 /**
  * What the runtime grants a transaction that requests no limit: 200k CU per
  * non-budget instruction, capped at 1.4M. A batch that ran fine without a
@@ -85,14 +82,13 @@ export async function getPriorityFeeMicroLamports(
 
 /**
  * Compute-unit limit to request for work that simulation measured at
- * `unitsConsumed`. Returns the fallback when there is no measurement, and never
- * less than `minUnits` so a caller can let the user raise the floor.
+ * `unitsConsumed`, never less than `minUnits` so a caller can let the user
+ * raise the floor. With no measurement there is no sizing to do:
+ * `runtimeDefaultComputeUnits` is the answer, since that is the budget the
+ * transaction would have run under with no limit instruction at all.
  */
-export function sizeComputeUnitLimit(unitsConsumed?: number | null, minUnits = 0): number {
-  const sized = unitsConsumed
-    ? Math.ceil(unitsConsumed * CU_MARGIN) + CU_BUDGET_INSTRUCTION_OVERHEAD
-    : CU_FALLBACK;
-  return Math.max(minUnits, sized);
+export function sizeComputeUnitLimit(unitsConsumed: number, minUnits = 0): number {
+  return Math.max(minUnits, Math.ceil(unitsConsumed * CU_MARGIN) + CU_BUDGET_INSTRUCTION_OVERHEAD);
 }
 
 /**
