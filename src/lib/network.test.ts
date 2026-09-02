@@ -1,10 +1,12 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  detectNetwork,
   isAccountNotFoundError,
   matchNetwork,
   networkFromGenesisHash,
   NETWORKS,
+  type GenesisHashCache,
 } from './network.ts';
 
 describe('networkFromGenesisHash', () => {
@@ -73,7 +75,10 @@ describe('isAccountNotFoundError', () => {
 
   test('matches the other generated account types', () => {
     for (const kind of ['Batch', 'ConfigTransaction', 'ProgramConfig', 'Proposal']) {
-      assert.equal(isAccountNotFoundError(new Error(`Unable to find ${kind} account at abc`)), true);
+      assert.equal(
+        isAccountNotFoundError(new Error(`Unable to find ${kind} account at abc`)),
+        true
+      );
     }
   });
 
@@ -90,5 +95,76 @@ describe('isAccountNotFoundError', () => {
     assert.equal(isAccountNotFoundError(undefined), false);
     assert.equal(isAccountNotFoundError('Unable to find Multisig account at abc'), true);
     assert.equal(isAccountNotFoundError({ code: 500 }), false);
+  });
+});
+
+describe('detectNetwork', () => {
+  const X1_MAINNET = '4SvBP3omtvcCVWdxq1zBY5cDp4wndjsThb6nEMn6iMdN';
+  const SOLANA_MAINNET = '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
+
+  /** An in-memory stand-in for the hook's localStorage cache. */
+  const memoryCache = (
+    seed: Record<string, string> = {}
+  ): GenesisHashCache & {
+    entries: Record<string, string>;
+  } => {
+    const entries = { ...seed };
+    return {
+      entries,
+      read: (rpcUrl) => entries[rpcUrl] ?? null,
+      write: (rpcUrl, hash) => {
+        entries[rpcUrl] = hash;
+      },
+    };
+  };
+
+  const answers = (hash: string) => ({ getGenesisHash: async () => hash });
+  const unreachable = {
+    getGenesisHash: async (): Promise<string> => {
+      throw new Error('failed to fetch');
+    },
+  };
+
+  test('asks the endpoint and remembers what it said', async () => {
+    const cache = memoryCache();
+    const network = await detectNetwork(answers(X1_MAINNET), 'http://localhost:8899', cache);
+    assert.equal(network.id, 'x1-mainnet');
+    assert.equal(cache.entries['http://localhost:8899'], X1_MAINNET);
+  });
+
+  test('a repointed endpoint is re-identified, not read from the cache', async () => {
+    // The whole point of the revalidation: this URL served X1 last time and
+    // serves Solana now. Trusting the cache here pinned the wrong program IDs
+    // for good, with nothing in the UI to clear it.
+    const cache = memoryCache({ 'http://localhost:8899': X1_MAINNET });
+    const network = await detectNetwork(answers(SOLANA_MAINNET), 'http://localhost:8899', cache);
+    assert.equal(network.id, 'solana-mainnet');
+    assert.equal(cache.entries['http://localhost:8899'], SOLANA_MAINNET);
+  });
+
+  test('falls back to the last hash seen when the endpoint cannot be reached', async () => {
+    const cache = memoryCache({ 'https://rpc.example': SOLANA_MAINNET });
+    const network = await detectNetwork(unreachable, 'https://rpc.example', cache);
+    assert.equal(network.id, 'solana-mainnet');
+  });
+
+  test('an unreachable endpoint never seen before stays unresolved', async () => {
+    // Callers read a rejected query as "not resolved yet" and hold. Guessing
+    // from the URL here would hand them an identity nothing confirmed.
+    await assert.rejects(
+      detectNetwork(unreachable, 'https://rpc.example', memoryCache()),
+      /failed to fetch/
+    );
+  });
+
+  test('an unrecognised hash falls back to matching the URL', async () => {
+    // A local validator generates its own genesis; the URL is all there is.
+    const cache = memoryCache();
+    const network = await detectNetwork(
+      answers('11111111111111111111111111111111'),
+      'https://rpc.testnet.x1.xyz',
+      cache
+    );
+    assert.equal(network.id, 'x1-testnet');
   });
 });
