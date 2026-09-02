@@ -16,7 +16,6 @@ import {
   PublicKey,
   TransactionMessage,
   TransactionInstruction,
-  VersionedTransaction,
 } from '@solana/web3.js';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
@@ -26,7 +25,7 @@ import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useValidatorMetadata } from '@/hooks/useValidatorMetadata';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '@/hooks/useAccess';
-import { waitForConfirmation } from '@/lib/transactionConfirmation';
+import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import {
   createStakeAccountWithSeedInstructions,
@@ -150,35 +149,15 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
     });
 
     // Get FRESH blockhash right before sending
-    const freshBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-    const message = new TransactionMessage({
-      instructions: [multisigTransactionIx, proposalIx, approveIx],
-      payerKey: wallet.publicKey,
-      recentBlockhash: freshBlockhash,
-    }).compileToV0Message();
-
-    const transaction = new VersionedTransaction(message);
-
-    // Sign transaction first, then send manually
-    // This avoids "Plugin Closed" issues with some wallets (especially Backpack)
-    if (!wallet.signTransaction) {
-      throw new Error('Wallet does not support transaction signing');
-    }
-
-    const signedTransaction = await wallet.signTransaction(transaction);
-
-    const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-      skipPreflight: false,
-      maxRetries: 3,
+    // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
+    // until confirmed or expired. Throws with a message that says whether it landed.
+    await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+      label: 'DelegateStakeDialog',
+      onStep: (step) => {
+        if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
+      },
     });
-
-    toast.loading('Confirming...', { id: 'transaction' });
-
-    const sent = await waitForConfirmation(connection, [signature]);
-    if (!sent[0]) {
-      throw `Transaction failed or unable to confirm. Check ${signature}`;
-    }
 
     setAmount('');
     setValidatorAddress('');

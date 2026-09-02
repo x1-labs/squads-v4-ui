@@ -29,8 +29,11 @@ export type SigningWallet = {
 export type SendStep = 'preparing' | 'signing' | 'confirming';
 
 export type SignSendAndConfirmOptions = {
-  /** Accounts the transaction writes to — what the priority fee is priced against. */
-  writableAccounts: PublicKey[];
+  /**
+   * Accounts the priority fee is priced against. Defaults to every account the
+   * instructions mark writable, which is the right answer for nearly everything.
+   */
+  writableAccounts?: PublicKey[];
   /**
    * `unitsConsumed` from the caller's own simulation, used to size the compute
    * limit. Leave undefined and the pipeline simulates to measure it, failing
@@ -155,6 +158,17 @@ type Shape<T extends Transaction | VersionedTransaction> = {
   size: (transaction: T) => number | null;
 };
 
+/** Every account the instructions write to, deduplicated. */
+function writableAccountsOf(instructions: TransactionInstruction[]): PublicKey[] {
+  const seen = new Map<string, PublicKey>();
+  for (const instruction of instructions) {
+    for (const meta of instruction.keys) {
+      if (meta.isWritable) seen.set(meta.pubkey.toBase58(), meta.pubkey);
+    }
+  }
+  return [...seen.values()];
+}
+
 /** Any well-formed blockhash will do for a probe that simulation replaces anyway. */
 const PLACEHOLDER_BLOCKHASH = PublicKey.default.toBase58();
 
@@ -174,7 +188,10 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
   options.onStep?.('preparing');
 
   // Price the transaction against what recently landed on the accounts it writes to.
-  const microLamports = await getPriorityFeeMicroLamports(connection, options.writableAccounts);
+  const microLamports = await getPriorityFeeMicroLamports(
+    connection,
+    options.writableAccounts ?? writableAccountsOf(instructions)
+  );
 
   // Size the compute limit to what simulation measured. The probe requests the
   // runtime's default budget so it is limited exactly the way the unbudgeted

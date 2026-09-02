@@ -14,12 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../ui/textarea';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
-import {
-  LAMPORTS_PER_SOL,
-  PublicKey,
-  TransactionMessage,
-  VersionedTransaction,
-} from '@solana/web3.js';
+import { LAMPORTS_PER_SOL, PublicKey, TransactionMessage } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
@@ -27,7 +22,7 @@ import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useStakePools } from '@/hooks/useStakePools';
 import { useBalance, useMultisig } from '@/hooks/useServices';
 import { useQueryClient } from '@tanstack/react-query';
-import { waitForConfirmation } from '@/lib/transactionConfirmation';
+import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { stakePoolInfo, getStakePoolAccount, StakePoolInstruction } from '@x1-labs/spl-stake-pool';
 import * as splToken from '@solana/spl-token';
 import { useAccess } from '@/hooks/useAccess';
@@ -203,31 +198,20 @@ export function DepositXntDialog() {
       });
 
       // Create and send transaction
-      const message = new TransactionMessage({
-        instructions: [multisigTransactionIx, proposalIx, approveIx],
-        payerKey: wallet.publicKey,
-        recentBlockhash: blockhash,
-      }).compileToV0Message();
-
-      const transaction = new VersionedTransaction(message);
-
-      // Sign transaction first, then send manually to avoid "Plugin Closed" errors
-      if (!wallet.signTransaction) {
-        throw new Error('Wallet does not support transaction signing');
-      }
-
-      const signedTransaction = await wallet.signTransaction(transaction);
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: false,
-        maxRetries: 3,
-      });
-
-      toast.loading('Confirming stake transaction...', { id: 'stake-transaction' });
-
-      const confirmations = await waitForConfirmation(connection, [signature]);
-      if (!confirmations[0]) {
-        throw new Error(`Transaction failed or unable to confirm. Check ${signature}`);
-      }
+      // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
+      // until confirmed or expired. Throws with a message that says whether it landed.
+      await signSendAndConfirmV0(
+        connection,
+        wallet,
+        [multisigTransactionIx, proposalIx, approveIx],
+        {
+          label: 'DepositXntDialog',
+          onStep: (step) => {
+            if (step === 'confirming')
+              toast.loading('Confirming stake transaction...', { id: 'stake-transaction' });
+          },
+        }
+      );
 
       toast.success(
         `Successfully proposed staking ${parsedAmount} ${nativeSymbol} to ${selectedPoolInfo.name}`,
