@@ -1,10 +1,5 @@
 import React, { useState } from 'react';
-import {
-  PublicKey,
-  TransactionMessage,
-  TransactionInstruction,
-  VersionedTransaction,
-} from '@solana/web3.js';
+import { PublicKey, TransactionMessage, TransactionInstruction } from '@solana/web3.js';
 import {
   Dialog,
   DialogContent,
@@ -25,7 +20,7 @@ import * as multisig from '@sqds/multisig';
 import { createDelegateStakeInstruction } from '@/lib/staking/validatorStakeUtils';
 import { StakeAccountInfo as StakeAccountData } from '@/lib/staking/validatorStakeUtils';
 import { toast } from 'sonner';
-import { waitForConfirmation } from '@/lib/transactionConfirmation';
+import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import { RefreshCw } from 'lucide-react';
 import { StakeAccountDisplay } from './StakeAccountDisplay';
@@ -159,33 +154,20 @@ export function RedelegateStakeDialog({
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
 
-      const message = new TransactionMessage({
-        instructions: [multisigTransactionIx, proposalIx, approveIx],
-        payerKey: wallet.publicKey,
-        recentBlockhash: blockhash,
-      }).compileToV0Message();
-
-      const transaction = new VersionedTransaction(message);
-
-      // Sign transaction first, then send manually to avoid "Plugin Closed" errors
-      if (!wallet.signTransaction) {
-        throw new Error('Wallet does not support transaction signing');
-      }
-
-      toast.loading('Sending transaction...', { id: 'transaction' });
-      const signedTransaction = await wallet.signTransaction(transaction);
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: false,
-        maxRetries: 3,
-      });
-
-      console.log('Transaction signature', signature);
-      toast.loading('Confirming...', { id: 'transaction' });
-
-      const sent = await waitForConfirmation(connection, [signature]);
-      if (!sent[0]) {
-        throw `Transaction failed or unable to confirm. Check ${signature}`;
-      }
+      // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
+      // until confirmed or expired. Throws with a message that says whether it landed.
+      await signSendAndConfirmV0(
+        connection,
+        wallet,
+        [multisigTransactionIx, proposalIx, approveIx],
+        {
+          label: 'RedelegateStakeDialog',
+          onStep: (step) => {
+            if (step === 'signing') toast.loading('Sending transaction...', { id: 'transaction' });
+            if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
+          },
+        }
+      );
 
       toast.success('Stake re-delegated successfully!', { id: 'transaction' });
       setOpen(false);

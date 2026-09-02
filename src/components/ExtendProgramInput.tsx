@@ -4,27 +4,18 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useState } from 'react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { AlertCircle, Info } from 'lucide-react';
-import {
-  AccountMeta,
-  PublicKey,
-  SystemProgram,
-  TransactionInstruction,
-  TransactionMessage,
-  VersionedTransaction,
-} from '@solana/web3.js';
+import { AccountMeta, PublicKey, SystemProgram, TransactionInstruction } from '@solana/web3.js';
 import { toast } from 'sonner';
 import { SimplifiedProgramInfo } from '../hooks/useProgram';
 import { useMultisigData } from '../hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
-import { waitForConfirmation } from '../lib/transactionConfirmation';
+import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
 
 type ExtendProgramInputProps = {
   programInfos: SimplifiedProgramInfo;
 };
 
-const ExtendProgramInput = ({
-  programInfos,
-}: ExtendProgramInputProps) => {
+const ExtendProgramInput = ({ programInfos }: ExtendProgramInputProps) => {
   const queryClient = useQueryClient();
   const wallet = useWallet();
   const walletModal = useWalletModal();
@@ -37,12 +28,14 @@ const ExtendProgramInput = ({
   const isValidBytes = !isNaN(parsedBytes) && parsedBytes > 0;
 
   const walletIsAuthority = !!(
-    wallet.publicKey && programInfos.authority &&
+    wallet.publicKey &&
+    programInfos.authority &&
     wallet.publicKey.toBase58() === programInfos.authority
   );
 
   const authorityIsVault = !!(
-    multisigVault && programInfos.authority &&
+    multisigVault &&
+    programInfos.authority &&
     multisigVault.toBase58() === programInfos.authority
   );
 
@@ -94,39 +87,25 @@ const ExtendProgramInput = ({
       });
     }
 
-    const blockhash = (await connection.getLatestBlockhash()).blockhash;
-
-    const message = new TransactionMessage({
-      instructions: [
+    // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
+    // until confirmed or expired. Throws with a message that says whether it landed.
+    await signSendAndConfirmV0(
+      connection,
+      wallet,
+      [
         new TransactionInstruction({
           programId: new PublicKey('BPFLoaderUpgradeab1e11111111111111111111111'),
           data: extendData,
           keys,
         }),
       ],
-      payerKey: wallet.publicKey,
-      recentBlockhash: blockhash,
-    }).compileToV0Message();
-
-    const transaction = new VersionedTransaction(message);
-
-    if (!wallet.signTransaction) {
-      throw new Error('Wallet does not support transaction signing');
-    }
-
-    const signedTransaction = await wallet.signTransaction(transaction);
-    const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-      skipPreflight: false,
-      maxRetries: 3,
-    });
-    console.log('Transaction signature', signature);
-    toast.loading('Confirming...', {
-      id: 'transaction',
-    });
-    const sent = await waitForConfirmation(connection, [signature]);
-    if (!sent[0]) {
-      throw `Transaction failed or unable to confirm. Check ${signature}`;
-    }
+      {
+        label: 'ExtendProgramInput',
+        onStep: (step) => {
+          if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
+        },
+      }
+    );
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
   };
 
@@ -138,9 +117,9 @@ const ExtendProgramInput = ({
             <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-yellow-500" />
             <div className="text-sm text-yellow-500">
               This program's upgrade authority is the multisig vault. The BPF Loader does not
-              support ExtendProgram via CPI, so it cannot be executed through the multisig.
-              To extend, temporarily transfer the upgrade authority to a keypair, extend, then
-              transfer it back.
+              support ExtendProgram via CPI, so it cannot be executed through the multisig. To
+              extend, temporarily transfer the upgrade authority to a keypair, extend, then transfer
+              it back.
             </div>
           </div>
         </div>

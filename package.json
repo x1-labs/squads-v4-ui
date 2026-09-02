@@ -3,7 +3,7 @@
   "version": "1.2.3",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "tsc -p tsconfig.test.json && node --experimental-transform-types --import ./test/register.mjs --test \"src/**/*.test.ts\"",
     "dev": "APP_NETWORK=testnet webpack serve --config webpack.dev.js",
     "dev:testnet": "APP_NETWORK=testnet webpack serve --config webpack.dev.js",
     "dev:mainnet": "APP_NETWORK=mainnet webpack serve --config webpack.dev.js",

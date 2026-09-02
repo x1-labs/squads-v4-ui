@@ -14,7 +14,12 @@ export const useMultisigData = () => {
 
   // Ensure we have a valid RPC URL (fallback to mainnet-beta)
   const effectiveRpcUrl = rpcUrl || clusterApiUrl('mainnet-beta');
-  const connection = useMemo(() => new Connection(effectiveRpcUrl), [effectiveRpcUrl]);
+  // 'confirmed' explicitly, rather than letting the RPC apply its 'finalized'
+  // default. Finalized lags roughly 31 blocks (~12s), which showed up two ways:
+  // account reads served stale state right after an action, and — worse —
+  // `getLatestBlockhash()` handed back a blockhash that had already burned a
+  // fifth of its ~150-block validity window before the wallet even prompted.
+  const connection = useMemo(() => new Connection(effectiveRpcUrl, 'confirmed'), [effectiveRpcUrl]);
 
   // Compute programId safely
   const programId = useMemo(

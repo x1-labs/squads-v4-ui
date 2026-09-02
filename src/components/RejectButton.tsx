@@ -7,7 +7,7 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
-import { waitForConfirmation } from '../lib/transactionConfirmation';
+import { signSendAndConfirm } from '../lib/transaction/signSendAndConfirm';
 
 type RejectButtonProps = {
   multisigPda: string;
@@ -44,6 +44,7 @@ const RejectButton = ({
       throw new Error('Wallet not connected');
     }
     let bigIntTransactionIndex = BigInt(transactionIndex);
+    const actualProgramId = programId ? new PublicKey(programId) : multisig.PROGRAM_ID;
 
     if (!isKindValid) {
       toast.error("You can't reject this proposal.");
@@ -65,7 +66,7 @@ const RejectButton = ({
           isDraft: false,
           transactionIndex: bigIntTransactionIndex,
           rentPayer: wallet.publicKey,
-          programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+          programId: actualProgramId,
         });
         transaction.add(createProposalInstruction);
       }
@@ -74,7 +75,7 @@ const RejectButton = ({
           multisigPda: new PublicKey(multisigPda),
           member: wallet.publicKey,
           transactionIndex: bigIntTransactionIndex,
-          programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+          programId: actualProgramId,
         });
         transaction.add(activateProposalInstruction);
       }
@@ -82,7 +83,7 @@ const RejectButton = ({
         multisigPda: new PublicKey(multisigPda),
         member: wallet.publicKey,
         transactionIndex: bigIntTransactionIndex,
-        programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+        programId: actualProgramId,
       });
 
       transaction.add(rejectProposalInstruction);
@@ -133,82 +134,25 @@ const RejectButton = ({
         throw new Error(`Transaction simulation failed: ${JSON.stringify(simulation.value.err)}`);
       }
 
-      // Get FRESH blockhash right before sending (after user sees the simulation success)
-      // This minimizes the time between getting blockhash and wallet approval
-      console.log('[RejectButton] Fetching FRESH blockhash for sending');
-      const startFreshBlockhash = Date.now();
-      const { blockhash: freshBlockhash } = await connection.getLatestBlockhash();
-      console.log(
-        '[RejectButton] Got fresh blockhash:',
-        freshBlockhash,
-        'in',
-        Date.now() - startFreshBlockhash,
-        'ms'
-      );
-      transaction.recentBlockhash = freshBlockhash;
-
-      // If simulation passes, sign with the wallet and broadcast via the app's
-      // connection. Signing only (instead of wallet.sendTransaction) means the
-      // wallet never broadcasts, so it doesn't need to be pointed at this
-      // network's RPC — the app always submits to the configured endpoint. This
-      // also avoids the "Plugin Closed" errors some wallets throw on send.
-      console.log('[RejectButton] Requesting wallet signature');
-      if (!wallet.signTransaction) {
-        throw new Error('Wallet does not support transaction signing');
-      }
-      const startSend = Date.now();
-      const signedTransaction = await wallet.signTransaction(transaction);
-      signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-        skipPreflight: false,
-        maxRetries: 3,
-      });
-      console.log(
-        '[RejectButton] Transaction sent! Signature:',
-        signature,
-        'Time to sign:',
-        Date.now() - startSend,
-        'ms'
-      );
-
-      toast.loading('Confirming rejection...', {
-        id: 'transaction',
+      const [proposalPda] = multisig.getProposalPda({
+        multisigPda: new PublicKey(multisigPda),
+        transactionIndex: bigIntTransactionIndex,
+        programId: actualProgramId,
       });
 
-      console.log('[RejectButton] Waiting for confirmation');
-      const startConfirm = Date.now();
-      const confirmations = await waitForConfirmation(connection, [signature], 30000);
-      console.log(
-        '[RejectButton] Confirmation result:',
-        confirmations,
-        'Time to confirm:',
-        Date.now() - startConfirm,
-        'ms'
-      );
-
-      // Check if transaction failed
-      const status = confirmations[0];
-      if (!status || status.err !== null) {
-        if (!status) {
-          // Try to fetch transaction info for more details
-          const txInfo = await connection.getTransaction(signature, {
-            maxSupportedTransactionVersion: 0,
-          });
-          if (!txInfo) {
-            throw new Error(`Transaction not found on chain. Signature: ${signature}`);
-          }
-          throw new Error(`Transaction not confirmed. Check explorer for signature: ${signature}`);
-        }
-        if (status.err) {
-          const errorStr = JSON.stringify(status.err);
-          if (errorStr.includes('InstructionError')) {
-            throw new Error(
-              `Transaction failed with instruction error. Check explorer for signature: ${signature}`
-            );
-          }
-          throw new Error(`Transaction failed: ${errorStr}`);
-        }
-        throw new Error(`Transaction failed. Check explorer for signature: ${signature}`);
-      }
+      // Attaches a priced compute budget, signs, then rebroadcasts until the
+      // signature confirms or the blockhash expires. Throws
+      // TransactionFailedError / TransactionExpiredError.
+      signature = await signSendAndConfirm(connection, wallet, transaction.instructions, {
+        writableAccounts: [proposalPda, new PublicKey(multisigPda)],
+        unitsConsumed: simulation.value.unitsConsumed,
+        label: 'RejectButton',
+        onStep: (step) => {
+          if (step === 'signing') toast.loading('Reject in your wallet...', { id: 'transaction' });
+          if (step === 'confirming')
+            toast.loading('Confirming rejection...', { id: 'transaction' });
+        },
+      });
 
       // Invalidate all relevant queries to refresh data
       console.log('[RejectButton] Invalidating queries');

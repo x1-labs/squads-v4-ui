@@ -1,17 +1,11 @@
 'use client';
 import * as multisig from '@sqds/multisig';
-import {
-  Connection,
-  PublicKey,
-  TransactionMessage,
-  VersionedMessage,
-  VersionedTransaction,
-} from '@solana/web3.js';
+import { Connection, PublicKey, TransactionMessage, VersionedMessage } from '@solana/web3.js';
 import { decodeAndDeserialize } from './decodeAndDeserialize';
 import { WalletContextState } from '@solana/wallet-adapter-react';
 import { toast } from 'sonner';
 import { loadLookupTables } from './getAccountsForSimulation';
-import { waitForConfirmation } from '~/lib/transactionConfirmation';
+import { signSendAndConfirmV0 } from '~/lib/transaction/signSendAndConfirm';
 
 export const importTransaction = async (
   tx: string,
@@ -70,28 +64,14 @@ export const importTransaction = async (
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
 
-    const blockhash = (await connection.getLatestBlockhash()).blockhash;
-
-    const wrappedMessage = new TransactionMessage({
-      instructions: [multisigTransactionIx, proposalIx, approveIx],
-      payerKey: wallet.publicKey,
-      recentBlockhash: blockhash,
-    }).compileToV0Message();
-
-    const transaction = new VersionedTransaction(wrappedMessage);
-
-    const signature = await wallet.sendTransaction(transaction, connection, {
-      skipPreflight: true,
+    // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
+    // until confirmed or expired. Throws with a message that says whether it landed.
+    await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+      label: 'importTransaction',
+      onStep: (step) => {
+        if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
+      },
     });
-    console.log('Transaction signature', signature);
-    toast.loading('Confirming...', {
-      id: 'transaction',
-    });
-
-    const hasSent = await waitForConfirmation(connection, [signature]);
-    if (!hasSent.every((s) => !!s)) {
-      throw `Unable to confirm transaction`;
-    }
   } catch (error: any) {
     console.error(error);
 

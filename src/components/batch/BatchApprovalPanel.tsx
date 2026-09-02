@@ -106,14 +106,13 @@ export function BatchApprovalPanel() {
         toast.info(`Skipping ${items.length - eligibleItems.length} already-approved proposals`);
       }
 
-      setProgress({ currentStep: 'signing' });
-
       await submitBatchApprovals(
         eligibleItems,
         connection,
         multisigAddress,
         programId,
-        wallet
+        wallet,
+        (step) => setProgress({ currentStep: step })
       );
 
       setProgress({ currentStep: 'done' });

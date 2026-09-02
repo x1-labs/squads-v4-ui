@@ -1,6 +1,5 @@
 import {
   AddressLookupTableAccount,
-  ComputeBudgetProgram,
   PublicKey,
   TransactionInstruction,
   TransactionMessage,
@@ -14,13 +13,18 @@ import { toast } from 'sonner';
 import { Dialog, DialogDescription, DialogHeader } from './ui/dialog';
 import { DialogTrigger } from './ui/dialog';
 import { DialogContent, DialogTitle } from './ui/dialog';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { Input } from './ui/input';
 import { range } from '@/lib/utils';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
-import { waitForConfirmation } from '../lib/transactionConfirmation';
+import { getSendableBlockhash, sendAndConfirm } from '../lib/transaction/sendAndConfirm';
+import {
+  computeBudgetInstructions,
+  getPriorityFeeMicroLamports,
+  sizeComputeUnitLimit,
+} from '../lib/transaction/priorityFee';
 
 type WithALT = {
   instruction: TransactionInstruction;
@@ -45,16 +49,45 @@ const ExecuteButton = ({
   const closeDialog = () => {
     setIsOpen(false);
     setErrorMessage(null);
+    setPriorityFeeEdited(false);
   };
   const wallet = useWallet();
   const walletModal = useWalletModal();
   const [priorityFeeLamports, setPriorityFeeLamports] = useState<number>(5000);
+  // Once the user has typed a fee, the market lookup below must not replace it.
+  const [priorityFeeEdited, setPriorityFeeEdited] = useState(false);
   const [computeUnitBudget, setComputeUnitBudget] = useState<number>(200_000);
 
   const isTransactionReady = proposalStatus === 'Approved';
 
   const { connection } = useMultisigData();
   const queryClient = useQueryClient();
+
+  // Seed the fee field from the live market when the dialog opens, so the value
+  // shown is what this transaction's accounts are actually going for rather than
+  // a hardcoded guess. The user stays free to override it — and a value they
+  // typed while the lookup was still in flight wins over the lookup.
+  useEffect(() => {
+    if (!isOpen || priorityFeeEdited) return;
+    let cancelled = false;
+
+    const [transactionPda] = multisig.getTransactionPda({
+      multisigPda: new PublicKey(multisigPda),
+      index: BigInt(transactionIndex),
+      programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+    });
+    getPriorityFeeMicroLamports(connection, [transactionPda, new PublicKey(multisigPda)]).then(
+      (fee) => {
+        if (!cancelled) setPriorityFeeLamports(fee);
+      }
+    );
+
+    // Also fires when `priorityFeeEdited` flips, which is what discards a
+    // lookup that was still in flight when the user started typing.
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, priorityFeeEdited, connection, multisigPda, transactionIndex, programId]);
 
   const executeTransaction = async () => {
     console.log('[ExecuteButton] Starting execution process', {
@@ -68,6 +101,15 @@ const ExecuteButton = ({
 
     // Clear any previous errors
     setErrorMessage(null);
+
+    // Both fields are free text. web3.js feeds the fee through BigInt(), which
+    // throws on fractions and NaN, and a NaN limit would be sent as garbage.
+    if (!Number.isInteger(priorityFeeLamports) || priorityFeeLamports < 0) {
+      throw new Error('Priority fee must be a whole number of micro-lamports per compute unit.');
+    }
+    if (!Number.isInteger(computeUnitBudget) || computeUnitBudget < 0) {
+      throw new Error('Compute unit budget must be a whole number.');
+    }
 
     if (!wallet.publicKey) {
       walletModal.setVisible(true);
@@ -124,21 +166,14 @@ const ExecuteButton = ({
     };
     const txBuildDataList: TxBuildData[] = [];
 
-    const priorityFeeInstruction = ComputeBudgetProgram.setComputeUnitPrice({
-      microLamports: priorityFeeLamports,
-    });
-
-    const computeUnitInstruction = ComputeBudgetProgram.setComputeUnitLimit({
-      units: computeUnitBudget,
-    });
-
-    const baseInstructions: TransactionInstruction[] = [];
-    if (priorityFeeLamports != 5000) {
-      baseInstructions.push(priorityFeeInstruction);
-    }
-    if (computeUnitBudget != 200_000) {
-      baseInstructions.push(computeUnitInstruction);
-    }
+    // `txBuildDataList` holds only the execute instructions. Compute budget is
+    // attached later, once simulation has measured what the work actually costs.
+    //
+    // The budget instructions used to be gated on `!= 5000` / `!= 200_000`, which
+    // dropped them precisely when the user left the defaults alone: the dialog
+    // displayed a 5000 priority fee and the transaction carried none. They also
+    // have to travel together — the fee is price × limit, so a price without a
+    // limit bids against the implicit 200k-CU-per-instruction default.
 
     console.log('[ExecuteButton] Building transaction data');
 
@@ -152,7 +187,7 @@ const ExecuteButton = ({
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
       txBuildDataList.push({
-        instructions: [...baseInstructions, resp.instruction],
+        instructions: [resp.instruction],
         lookupTableAccounts: resp.lookupTableAccounts,
       });
     } else if (txType == 'config') {
@@ -165,7 +200,7 @@ const ExecuteButton = ({
       });
 
       txBuildDataList.push({
-        instructions: [...baseInstructions, executeIx],
+        instructions: [executeIx],
         lookupTableAccounts: undefined,
       });
     } else if (txType == 'batch' && txData) {
@@ -192,7 +227,7 @@ const ExecuteButton = ({
             });
 
           return {
-            instructions: [priorityFeeInstruction, computeUnitInstruction, transactionExecuteIx],
+            instructions: [transactionExecuteIx],
             lookupTableAccounts,
           };
         })
@@ -207,24 +242,64 @@ const ExecuteButton = ({
     // This is critical because user approval can take 30+ seconds
     console.log('[ExecuteButton] Fetching FRESH blockhash for transaction building');
     const startFreshBlockhash = Date.now();
-    const freshBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    const { blockhash: freshBlockhash, lastValidBlockHeight } =
+      await getSendableBlockhash(connection);
     console.log(
       '[ExecuteButton] Got fresh blockhash:',
       freshBlockhash,
+      'valid through block',
+      lastValidBlockHeight,
       'in',
       Date.now() - startFreshBlockhash,
       'ms'
     );
 
-    // Build transactions with fresh blockhash
-    console.log('[ExecuteButton] Building transactions with fresh blockhash');
-    const transactions = txBuildDataList.map((buildData) => {
-      return new VersionedTransaction(
+    const buildTransaction = (instructions: TransactionInstruction[], data: TxBuildData) =>
+      new VersionedTransaction(
         new TransactionMessage({
-          instructions: buildData.instructions,
+          instructions,
           payerKey: member,
           recentBlockhash: freshBlockhash,
-        }).compileToV0Message(buildData.lookupTableAccounts)
+        }).compileToV0Message(data.lookupTableAccounts)
+      );
+
+    // Measure each execute before attaching a compute budget to it.
+    //
+    // The limit cannot simply be the dialog's value: an execute whose inner
+    // instructions cost more than the field says would be capped below what it
+    // needs and fail with ComputeBudgetExceeded. Simulating first sizes the limit
+    // to the real cost, and the field acts as a floor the user can raise.
+    console.log('[ExecuteButton] Measuring compute usage');
+    const measuredUnits = await Promise.all(
+      txBuildDataList.map(async (buildData) => {
+        try {
+          const probe = await connection.simulateTransaction(
+            buildTransaction(buildData.instructions, buildData),
+            { sigVerify: false, replaceRecentBlockhash: true }
+          );
+          // A failing probe is not fatal here — the post-signing simulation below
+          // produces a far better error message, so fall back and let it speak.
+          return probe.value.err ? null : (probe.value.unitsConsumed ?? null);
+        } catch (error) {
+          console.warn('[ExecuteButton] Compute measurement failed, using the field value:', error);
+          return null;
+        }
+      })
+    );
+
+    // Build transactions with fresh blockhash
+    console.log('[ExecuteButton] Building transactions with fresh blockhash');
+    const transactions = txBuildDataList.map((buildData, i) => {
+      const measured = measuredUnits[i];
+      const units = sizeComputeUnitLimit(measured, computeUnitBudget);
+      console.log(`[ExecuteButton] tx ${i + 1} compute limit:`, units, '(measured', measured, ')');
+
+      return buildTransaction(
+        [
+          ...computeBudgetInstructions({ units, microLamports: priorityFeeLamports }),
+          ...buildData.instructions,
+        ],
+        buildData
       );
     });
 
@@ -237,7 +312,13 @@ const ExecuteButton = ({
     const signedTransactions = await wallet.signAllTransactions(transactions);
     console.log('[ExecuteButton] Got signatures in', Date.now() - startSign, 'ms');
 
-    let signatures = [];
+    // Sent and confirmed strictly in order. A batch's transactions are
+    // order-dependent on chain — each execute's PDA is seeded by the batch's
+    // executed_transaction_index, which the previous execute advances — so
+    // transaction i+1 cannot even simulate until transaction i has landed. They
+    // all share the blockhash fetched above, so a long batch can run out of
+    // window; that is the price of correctness here, and the error says so.
+    const signatures: string[] = [];
 
     for (let i = 0; i < signedTransactions.length; i++) {
       const signedTx = signedTransactions[i];
@@ -315,24 +396,6 @@ const ExecuteButton = ({
           throw new Error(`Transaction simulation failed: ${JSON.stringify(simulation.value.err)}`);
         }
 
-        // If simulation passes, send the transaction
-        console.log(`[ExecuteButton] Sending transaction ${i + 1} to network`);
-        const startSend = Date.now();
-        const signature = await connection.sendRawTransaction(signedTx.serialize(), {
-          skipPreflight: false,
-          preflightCommitment: 'processed',
-          maxRetries: 3,
-        });
-        console.log(
-          `[ExecuteButton] Transaction ${i + 1} sent! Signature:`,
-          signature,
-          'Time:',
-          Date.now() - startSend,
-          'ms'
-        );
-
-        signatures.push(signature);
-
         if (signedTransactions.length === 1) {
           toast.loading('Confirming transaction...', {
             id: 'transaction',
@@ -342,17 +405,32 @@ const ExecuteButton = ({
             id: 'transaction',
           });
         }
+
+        // If simulation passes, broadcast and rebroadcast until it confirms or
+        // the blockhash expires. Throws TransactionFailedError / TransactionExpiredError.
+        console.log(`[ExecuteButton] Sending transaction ${i + 1} to network`);
+        signatures.push(
+          await sendAndConfirm(connection, signedTx, lastValidBlockHeight, {
+            label: `ExecuteButton tx ${i + 1}`,
+          })
+        );
       } catch (error: any) {
         console.error(`[ExecuteButton] Transaction ${i + 1} error:`, error);
         console.error(`[ExecuteButton] Error stack:`, error?.stack);
 
+        // In a batch, say which one broke and that the earlier ones stand.
+        const position =
+          signedTransactions.length > 1
+            ? `Transaction ${i + 1} of ${signedTransactions.length} failed (${i} already executed): `
+            : '';
+
         // Check for common RPC errors
         if (error.message?.includes('blockhash not found')) {
-          throw new Error('Transaction expired. Please try again.');
+          throw new Error(`${position}Transaction expired. Please try again.`);
         }
 
         if (error.message?.includes('insufficient funds')) {
-          throw new Error('Insufficient funds for transaction fees.');
+          throw new Error(`${position}Insufficient funds for transaction fees.`);
         }
 
         if (error.logs) {
@@ -370,7 +448,7 @@ const ExecuteButton = ({
               )
             ) {
               throw new Error(
-                'Stake pool needs to be updated. Please wait a moment and try again.'
+                `${position}Stake pool needs to be updated. Please wait a moment and try again.`
               );
             }
 
@@ -378,64 +456,19 @@ const ExecuteButton = ({
               /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.+?)(?:\.|$)/
             );
             if (anchorErrorMatch) {
-              throw new Error(`${anchorErrorMatch[3]} (Code: ${anchorErrorMatch[1]})`);
+              throw new Error(`${position}${anchorErrorMatch[3]} (Code: ${anchorErrorMatch[1]})`);
             }
-            throw new Error(errorLog);
+            throw new Error(`${position}${errorLog}`);
           }
         }
 
         // Re-throw with more context
-        throw error;
+        throw position ? new Error(`${position}${error.message ?? error}`) : error;
       }
     }
 
     if (signatures.length === 0) {
       throw new Error('No transactions were sent successfully');
-    }
-
-    console.log(
-      '[ExecuteButton] Waiting for confirmations for',
-      signatures.length,
-      'transaction(s)'
-    );
-    const startConfirm = Date.now();
-    const confirmations = await waitForConfirmation(connection, signatures);
-    console.log(
-      '[ExecuteButton] Confirmation results:',
-      confirmations,
-      'Time:',
-      Date.now() - startConfirm,
-      'ms'
-    );
-
-    // Check if any transactions failed
-    const failedTxs = confirmations.filter((status) => {
-      // A transaction failed if it has an error or if status is null
-      return !status || status.err !== null;
-    });
-
-    if (failedTxs.length > 0) {
-      // Parse the error from failed transactions
-      const errorMessages = failedTxs.map((status, idx) => {
-        if (!status) {
-          return `Transaction ${idx + 1} not found or expired`;
-        }
-        if (status.err) {
-          // Try to parse the error
-          if (typeof status.err === 'object' && status.err !== null) {
-            const errorStr = JSON.stringify(status.err);
-            // Check for common error types
-            if (errorStr.includes('InstructionError')) {
-              return `Transaction ${idx + 1} failed with instruction error`;
-            }
-            return `Transaction ${idx + 1} failed: ${errorStr}`;
-          }
-          return `Transaction ${idx + 1} failed with error`;
-        }
-        return `Transaction ${idx + 1} failed`;
-      });
-
-      throw new Error(errorMessages.join('; '));
     }
 
     // All transactions succeeded
@@ -491,16 +524,25 @@ const ExecuteButton = ({
           </div>
         )}
 
-        <h3>Priority Fee in lamports</h3>
+        <h3>Priority Fee (micro-lamports per compute unit)</h3>
         <Input
+          type="number"
+          min={0}
+          step={1}
           placeholder="Priority Fee"
-          onChange={(e) => setPriorityFeeLamports(Number(e.target.value))}
+          onChange={(e) => {
+            setPriorityFeeEdited(true);
+            setPriorityFeeLamports(Number(e.target.value));
+          }}
           value={priorityFeeLamports}
         />
 
-        <h3>Compute Unit Budget</h3>
+        <h3>Minimum Compute Unit Budget</h3>
         <Input
-          placeholder="Priority Fee"
+          type="number"
+          min={0}
+          step={1}
+          placeholder="Compute Unit Budget"
           onChange={(e) => setComputeUnitBudget(Number(e.target.value))}
           value={computeUnitBudget}
         />

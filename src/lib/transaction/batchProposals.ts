@@ -1,13 +1,8 @@
 import * as multisig from '@sqds/multisig';
-import {
-  Connection,
-  PublicKey,
-  TransactionInstruction,
-  TransactionMessage,
-  VersionedTransaction,
-} from '@solana/web3.js';
-import { WalletContextState } from '@solana/wallet-adapter-react';
-import { waitForConfirmation } from '~/lib/transactionConfirmation';
+import { PublicKey, TransactionMessage } from '@solana/web3.js';
+import type { Connection, TransactionInstruction } from '@solana/web3.js';
+import type { WalletContextState } from '@solana/wallet-adapter-react';
+import { signSendAndConfirmV0 } from '~/lib/transaction/signSendAndConfirm';
 import { addMemoToInstructions } from '~/lib/utils/memoInstruction';
 import {
   simulateVaultInstructions,
@@ -127,46 +122,26 @@ export async function submitBatchProposal(
     programId,
   });
 
-  const freshBlockhash = (await connection.getLatestBlockhash()).blockhash;
-
-  const message = new TransactionMessage({
-    instructions: [vaultTransactionIx, proposalIx, approveIx],
-    payerKey: wallet.publicKey,
-    recentBlockhash: freshBlockhash,
-  }).compileToV0Message();
-
-  const transaction = new VersionedTransaction(message);
-
-  let serialized: Uint8Array;
-  try {
-    serialized = transaction.serialize();
-  } catch (e) {
-    throw new Error('Transaction too large. Remove some operations and try again.');
-  }
-
-  if (serialized.length > 1232) {
-    throw new Error(
-      `Transaction too large (${serialized.length} bytes, limit 1232). Remove some operations and try again.`
-    );
-  }
-
-  // Sign
-  onProgress({ currentStep: 'signing' });
-  const signedTransaction = await wallet.signTransaction(transaction);
-
-  // Send
-  onProgress({ currentStep: 'sending' });
-  const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-    skipPreflight: false,
-    maxRetries: 3,
+  const [transactionPda] = multisig.getTransactionPda({
+    multisigPda: new PublicKey(multisigPda),
+    index: transactionIndex,
+    programId,
+  });
+  const [proposalPda] = multisig.getProposalPda({
+    multisigPda: new PublicKey(multisigPda),
+    transactionIndex,
+    programId,
   });
 
-  // Confirm
-  onProgress({ currentStep: 'confirming' });
-  const results = await waitForConfirmation(connection, [signature], 30000);
-  if (!results[0] || results[0].err) {
-    throw new Error(`Transaction failed or unable to confirm. Signature: ${signature}`);
-  }
+  // Priority fee, compute budget, fresh blockhash, sign, rebroadcast until it
+  // confirms or the blockhash expires. Sizes the packet after the budget
+  // instructions are in, so its "too large" is the real number.
+  await signSendAndConfirmV0(connection, wallet, [vaultTransactionIx, proposalIx, approveIx], {
+    writableAccounts: [new PublicKey(multisigPda), transactionPda, proposalPda],
+    label: `BatchProposal(${allInstructions.length} ops)`,
+    tooLargeHint: 'Remove some operations and try again.',
+    onStep: (step) => onProgress({ currentStep: step }),
+  });
 
   onProgress({ currentStep: 'done' });
 }

@@ -19,19 +19,14 @@ import {
 import { useState } from 'react';
 import * as multisig from '@sqds/multisig';
 import { useWallet } from '@solana/wallet-adapter-react';
-import {
-  PublicKey,
-  TransactionMessage,
-  TransactionInstruction,
-  VersionedTransaction,
-} from '@solana/web3.js';
+import { PublicKey, TransactionMessage, TransactionInstruction } from '@solana/web3.js';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAccess } from '@/hooks/useAccess';
-import { waitForConfirmation } from '@/lib/transactionConfirmation';
+import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import {
   createMergeStakeInstruction,
@@ -161,32 +156,14 @@ export function MergeStakeDialog({
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
 
-    const message = new TransactionMessage({
-      instructions: [multisigTransactionIx, proposalIx, approveIx],
-      payerKey: wallet.publicKey,
-      recentBlockhash: blockhash,
-    }).compileToV0Message();
-
-    const transaction = new VersionedTransaction(message);
-
-    // Sign transaction first, then send manually to avoid "Plugin Closed" errors
-    if (!wallet.signTransaction) {
-      throw new Error('Wallet does not support transaction signing');
-    }
-
-    const signedTransaction = await wallet.signTransaction(transaction);
-    const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-      skipPreflight: false,
-      maxRetries: 3,
+    // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
+    // until confirmed or expired. Throws with a message that says whether it landed.
+    await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+      label: 'MergeStakeDialog',
+      onStep: (step) => {
+        if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
+      },
     });
-
-    console.log('Transaction signature', signature);
-    toast.loading('Confirming...', { id: 'transaction' });
-
-    const sent = await waitForConfirmation(connection, [signature]);
-    if (!sent[0]) {
-      throw `Transaction failed or unable to confirm. Check ${signature}`;
-    }
 
     setSelectedSourceAccount('');
     setMemo('');
