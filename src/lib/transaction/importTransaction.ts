@@ -64,8 +64,6 @@ export const importTransaction = async (
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
 
-    const blockhash = (await connection.getLatestBlockhash()).blockhash;
-
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
     await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {

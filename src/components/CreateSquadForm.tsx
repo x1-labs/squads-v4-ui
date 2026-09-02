@@ -17,6 +17,7 @@ import { isPublickey } from '@/lib/isPublickey';
 import { ValidationRules, useSquadForm } from '@/lib/hooks/useSquadForm';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useMultisigAddress } from '@/hooks/useMultisigAddress';
+import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { Link } from 'react-router-dom';
 
 interface MemberAddresses {
@@ -33,7 +34,8 @@ interface CreateSquadFormData {
 }
 
 export default function CreateSquadForm({}: {}) {
-  const { publicKey, connected, signTransaction } = useWallet();
+  const wallet = useWallet();
+  const { publicKey, connected } = wallet;
 
   const { connection, programId } = useMultisigData();
   const { setMultisigAddress } = useMultisigAddress();
@@ -58,11 +60,11 @@ export default function CreateSquadForm({}: {}) {
 
   async function submitHandler() {
     if (!connected) throw new Error('Please connect your wallet.');
-    if (!signTransaction) throw new Error('Wallet does not support transaction signing');
+    if (!wallet.signTransaction) throw new Error('Wallet does not support transaction signing');
 
     const createKey = Keypair.generate();
 
-    const { transaction, multisig } = await createMultisig(
+    const { instruction, multisig } = await createMultisig(
       connection,
       publicKey!,
       formState.values.members.memberData,
@@ -73,30 +75,16 @@ export default function CreateSquadForm({}: {}) {
       programId.toBase58()
     );
 
-    // Sign with createKey first, then wallet, to avoid "Plugin Closed" errors
-    transaction.partialSign(createKey);
-    const signedTransaction = await signTransaction(transaction);
-    const signature = await connection.sendRawTransaction(signedTransaction.serialize(), {
-      skipPreflight: false,
-      maxRetries: 3,
+    // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
+    // until confirmed or expired. Throws with a message that says whether it landed.
+    // The create key signs first, then the wallet, to avoid "Plugin Closed" errors.
+    const signature = await signSendAndConfirmV0(connection, wallet, [instruction], {
+      label: 'CreateSquad',
+      signers: [createKey],
+      onStep: (step) => {
+        if (step === 'confirming') toast.loading('Confirming...', { id: 'create' });
+      },
     });
-    console.log('Transaction signature', signature);
-    toast.loading('Confirming...', {
-      id: 'create',
-    });
-
-    let sent = false;
-    const maxAttempts = 10;
-    const delayMs = 1000;
-    for (let attempt = 0; attempt <= maxAttempts && !sent; attempt++) {
-      const status = await connection.getSignatureStatus(signature);
-      if (status?.value?.confirmationStatus === 'finalized') {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-        sent = true;
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-    }
 
     setMultisigAddress.mutate(multisig.toBase58());
 

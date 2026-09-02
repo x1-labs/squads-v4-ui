@@ -87,8 +87,6 @@ const ExtendProgramInput = ({ programInfos }: ExtendProgramInputProps) => {
       });
     }
 
-    const blockhash = (await connection.getLatestBlockhash()).blockhash;
-
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
     await signSendAndConfirmV0(

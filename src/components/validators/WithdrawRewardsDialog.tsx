@@ -17,10 +17,11 @@ import { createWithdrawInstruction } from '@/lib/validators/validatorInstruction
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useMultisig } from '@/hooks/useServices';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { PublicKey, LAMPORTS_PER_SOL, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
+import { PublicKey, LAMPORTS_PER_SOL, TransactionMessage } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 
 interface WithdrawRewardsDialogProps {
   validator: ValidatorInfo;
@@ -105,24 +106,25 @@ export function WithdrawRewardsDialog({ validator }: WithdrawRewardsDialogProps)
         programId: multisigProgramId,
       });
 
-      const message = new TransactionMessage({
-        payerKey: wallet.publicKey,
-        recentBlockhash: blockhash,
-        instructions: [multisigTransactionIx, proposalIx, approveIx],
-      }).compileToV0Message();
+      // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
+      // until confirmed or expired. Throws with a message that says whether it landed.
+      await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+        label: 'WithdrawRewards',
+        onStep: (step) => {
+          if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
+        },
+      });
 
-      const tx = new VersionedTransaction(message);
-      const signedTx = await wallet.signTransaction(tx);
-      const sig = await connection.sendTransaction(signedTx);
-      await connection.confirmTransaction(sig);
-
-      toast.success('Transaction created successfully');
+      toast.success('Transaction created successfully', { id: 'transaction' });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['squad'] });
       setOpen(false);
     } catch (error) {
       console.error('Error creating transaction:', error);
-      toast.error('Failed to create transaction');
+      // The pipeline's errors say whether anything landed; surface them as-is.
+      toast.error(error instanceof Error ? error.message : 'Failed to create transaction', {
+        id: 'transaction',
+      });
     } finally {
       setLoading(false);
     }

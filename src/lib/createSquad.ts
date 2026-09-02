@@ -49,12 +49,7 @@ export async function createMultisig(
       programId: programId ? new web3.PublicKey(programId) : multisig.PROGRAM_ID,
     });
 
-    const tx = new web3.Transaction().add(ix);
-
-    tx.feePayer = user;
-    tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-
-    return { transaction: tx, multisig: multisigPda };
+    return { instruction: ix, multisig: multisigPda };
   } catch (err) {
     throw err;
   }

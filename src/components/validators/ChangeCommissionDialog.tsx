@@ -17,10 +17,11 @@ import { createUpdateCommissionInstruction } from '@/lib/validators/validatorIns
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useMultisig } from '@/hooks/useServices';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { PublicKey, TransactionMessage, VersionedTransaction } from '@solana/web3.js';
+import { PublicKey, TransactionMessage } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 
 interface ChangeCommissionDialogProps {
   validator: ValidatorInfo;
@@ -118,18 +119,16 @@ export function ChangeCommissionDialog({ validator }: ChangeCommissionDialogProp
         programId: multisigProgramId,
       });
 
-      const message = new TransactionMessage({
-        payerKey: wallet.publicKey,
-        recentBlockhash: blockhash,
-        instructions: [multisigTransactionIx, proposalIx, approveIx],
-      }).compileToV0Message();
+      // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
+      // until confirmed or expired. Throws with a message that says whether it landed.
+      await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+        label: 'ChangeCommission',
+        onStep: (step) => {
+          if (step === 'confirming') toast.loading('Confirming...', { id: 'transaction' });
+        },
+      });
 
-      const tx = new VersionedTransaction(message);
-      const signedTx = await wallet.signTransaction(tx);
-      const sig = await connection.sendTransaction(signedTx);
-      await connection.confirmTransaction(sig);
-
-      toast.success('Transaction created successfully');
+      toast.success('Transaction created successfully', { id: 'transaction' });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['squad'] });
       setOpen(false);
@@ -143,7 +142,7 @@ export function ChangeCommissionDialog({ validator }: ChangeCommissionDialogProp
       });
       
       const errorMessage = error?.message || 'Failed to create transaction';
-      toast.error(errorMessage);
+      toast.error(errorMessage, { id: 'transaction' });
     } finally {
       setLoading(false);
     }

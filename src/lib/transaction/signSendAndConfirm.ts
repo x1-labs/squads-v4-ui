@@ -8,6 +8,7 @@ import {
 import type {
   AddressLookupTableAccount,
   Connection,
+  Signer,
   SimulatedTransactionResponse,
   TransactionInstruction,
 } from '@solana/web3.js';
@@ -46,6 +47,12 @@ export type SignSendAndConfirmOptions = {
   onStep?: (step: SendStep) => void;
   /** Appended to the error when the transaction exceeds the packet size, e.g. 'Select fewer proposals.' */
   tooLargeHint?: string;
+  /**
+   * Keypairs that must sign besides the wallet, e.g. a freshly generated
+   * account's key. They sign first; the wallet then adds its own signature to
+   * the partially signed transaction.
+   */
+  signers?: Signer[];
 };
 
 export type SignSendAndConfirmV0Options = SignSendAndConfirmOptions & {
@@ -346,6 +353,13 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
     blockhash,
     lastValidBlockHeight,
   });
+
+  // Local keypairs sign before the wallet, so the wallet is handed a transaction
+  // that needs only its own signature.
+  if (options.signers?.length) {
+    if (transaction instanceof VersionedTransaction) transaction.sign(options.signers);
+    else transaction.partialSign(...options.signers);
+  }
 
   // Sign only, then broadcast via the app's connection. The wallet never sends,
   // so it doesn't need to be pointed at this network's RPC — the app always

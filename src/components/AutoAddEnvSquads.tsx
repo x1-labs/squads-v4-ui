@@ -25,7 +25,6 @@ export function AutoAddEnvSquads() {
     // absent from one cluster may exist on another.
     const checkKey = `${publicKey.toBase58()}:${network.id}`;
     if (hasCheckedRef.current === checkKey) return;
-    hasCheckedRef.current = checkKey;
 
     const checkAndAddEnvSquads = async () => {
       try {
@@ -72,10 +71,17 @@ export function AutoAddEnvSquads() {
       }
     };
 
-    // Small delay to ensure wallet is fully connected
-    const timer = setTimeout(checkAndAddEnvSquads, 500);
+    // Small delay to ensure wallet is fully connected. The key is recorded only
+    // once the check actually starts: a re-render inside the delay cancels the
+    // timer, and marking it done up front would have left the check never run.
+    const timer = setTimeout(() => {
+      hasCheckedRef.current = checkKey;
+      void checkAndAddEnvSquads();
+    }, 500);
     return () => clearTimeout(timer);
-  }, [publicKey, connection, network, addSquad]); // Omit squads to prevent loops
+    // `mutate` is the stable handle; the mutation object itself changes every
+    // render. `squads` is omitted to prevent loops.
+  }, [publicKey, connection, network, addSquad.mutate]);
 
   return null;
 }
