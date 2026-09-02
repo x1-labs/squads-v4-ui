@@ -89,8 +89,14 @@ export default function TransactionTable({
   }
 
   const handleRowClick = (transactionPda: string, e: React.MouseEvent) => {
-    // Don't navigate if clicking on a button
     const target = e.target as HTMLElement;
+    // Dialogs opened from the action buttons portal out of the row's DOM, but
+    // React still bubbles their clicks here. Navigating would unmount the row
+    // and the dialog with it, so only clicks inside the row itself count.
+    if (!e.currentTarget.contains(target)) {
+      return;
+    }
+    // Don't navigate if clicking on a button
     if (target.closest('button')) {
       return;
     }
