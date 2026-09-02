@@ -1,10 +1,5 @@
-import {
-  AddressLookupTableAccount,
-  PublicKey,
-  TransactionInstruction,
-  TransactionMessage,
-  VersionedTransaction,
-} from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
+import type { AddressLookupTableAccount, TransactionInstruction } from '@solana/web3.js';
 import { Button } from './ui/button';
 import * as multisig from '@sqds/multisig';
 import { useWallet } from '@solana/wallet-adapter-react';
@@ -19,16 +14,14 @@ import { Input } from './ui/input';
 import { range } from '@/lib/utils';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
-import { getSendableBlockhash, sendAndConfirm } from '../lib/transaction/sendAndConfirm';
-import {
-  computeBudgetInstructions,
-  getPriorityFeeMicroLamports,
-  sizeComputeUnitLimit,
-} from '../lib/transaction/priorityFee';
+import { getPriorityFeeMicroLamports } from '../lib/transaction/priorityFee';
+import { describeSendError, signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
+import { toastSteps } from '../lib/transaction/toastSteps';
 
-type WithALT = {
-  instruction: TransactionInstruction;
-  lookupTableAccounts: AddressLookupTableAccount[];
+/** One execute to send: the instruction plus the lookup tables it needs to fit. */
+type Execute = {
+  instructions: TransactionInstruction[];
+  lookupTableAccounts?: AddressLookupTableAccount[];
 };
 
 type ExecuteButtonProps = {
@@ -116,9 +109,6 @@ const ExecuteButton = ({
       throw new Error('Wallet not connected');
     }
     const member = wallet.publicKey;
-    if (!wallet.signAllTransactions) {
-      throw new Error('Wallet does not support signing multiple transactions');
-    }
     let bigIntTransactionIndex = BigInt(transactionIndex);
 
     if (!isTransactionReady) {
@@ -159,21 +149,9 @@ const ExecuteButton = ({
       }
     }
 
-    // Store transaction building data so we can rebuild with fresh blockhash
-    type TxBuildData = {
-      instructions: TransactionInstruction[];
-      lookupTableAccounts?: AddressLookupTableAccount[];
-    };
-    const txBuildDataList: TxBuildData[] = [];
-
-    // `txBuildDataList` holds only the execute instructions. Compute budget is
-    // attached later, once simulation has measured what the work actually costs.
-    //
-    // The budget instructions used to be gated on `!= 5000` / `!= 200_000`, which
-    // dropped them precisely when the user left the defaults alone: the dialog
-    // displayed a 5000 priority fee and the transaction carried none. They also
-    // have to travel together — the fee is price × limit, so a price without a
-    // limit bids against the implicit 200k-CU-per-instruction default.
+    // Only the execute instructions. The pipeline attaches the compute budget
+    // once simulation has measured what the work actually costs.
+    const executes: Execute[] = [];
 
     console.log('[ExecuteButton] Building transaction data');
 
@@ -186,7 +164,7 @@ const ExecuteButton = ({
         transactionIndex: bigIntTransactionIndex,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
-      txBuildDataList.push({
+      executes.push({
         instructions: [resp.instruction],
         lookupTableAccounts: resp.lookupTableAccounts,
       });
@@ -199,10 +177,7 @@ const ExecuteButton = ({
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
 
-      txBuildDataList.push({
-        instructions: [executeIx],
-        lookupTableAccounts: undefined,
-      });
+      executes.push({ instructions: [executeIx] });
     } else if (txType == 'batch' && txData) {
       const executedBatchIndex = txData.executedTransactionIndex;
       const batchSize = txData.size;
@@ -213,7 +188,7 @@ const ExecuteButton = ({
         );
       }
 
-      const batchBuildData = await Promise.all(
+      const batchExecutes = await Promise.all(
         range(executedBatchIndex + 1, batchSize).map(async (batchIndex) => {
           const { instruction: transactionExecuteIx, lookupTableAccounts } =
             await multisig.instructions.batchExecuteTransaction({
@@ -226,244 +201,49 @@ const ExecuteButton = ({
               programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
             });
 
-          return {
-            instructions: [transactionExecuteIx],
-            lookupTableAccounts,
-          };
+          return { instructions: [transactionExecuteIx], lookupTableAccounts };
         })
       );
 
-      txBuildDataList.push(...batchBuildData);
+      executes.push(...batchExecutes);
     }
 
-    console.log('[ExecuteButton] Built', txBuildDataList.length, 'transaction(s) data');
+    console.log('[ExecuteButton] Built', executes.length, 'transaction(s) data');
 
-    // Get FRESH blockhash right before building and signing transactions
-    // This is critical because user approval can take 30+ seconds
-    console.log('[ExecuteButton] Fetching FRESH blockhash for transaction building');
-    const startFreshBlockhash = Date.now();
-    const { blockhash: freshBlockhash, lastValidBlockHeight } =
-      await getSendableBlockhash(connection);
-    console.log(
-      '[ExecuteButton] Got fresh blockhash:',
-      freshBlockhash,
-      'valid through block',
-      lastValidBlockHeight,
-      'in',
-      Date.now() - startFreshBlockhash,
-      'ms'
-    );
-
-    const buildTransaction = (instructions: TransactionInstruction[], data: TxBuildData) =>
-      new VersionedTransaction(
-        new TransactionMessage({
-          instructions,
-          payerKey: member,
-          recentBlockhash: freshBlockhash,
-        }).compileToV0Message(data.lookupTableAccounts)
-      );
-
-    // Measure each execute before attaching a compute budget to it.
-    //
-    // The limit cannot simply be the dialog's value: an execute whose inner
-    // instructions cost more than the field says would be capped below what it
-    // needs and fail with ComputeBudgetExceeded. Simulating first sizes the limit
-    // to the real cost, and the field acts as a floor the user can raise.
-    console.log('[ExecuteButton] Measuring compute usage');
-    const measuredUnits = await Promise.all(
-      txBuildDataList.map(async (buildData) => {
-        try {
-          const probe = await connection.simulateTransaction(
-            buildTransaction(buildData.instructions, buildData),
-            { sigVerify: false, replaceRecentBlockhash: true }
-          );
-          // A failing probe is not fatal here — the post-signing simulation below
-          // produces a far better error message, so fall back and let it speak.
-          return probe.value.err ? null : (probe.value.unitsConsumed ?? null);
-        } catch (error) {
-          console.warn('[ExecuteButton] Compute measurement failed, using the field value:', error);
-          return null;
-        }
-      })
-    );
-
-    // Build transactions with fresh blockhash
-    console.log('[ExecuteButton] Building transactions with fresh blockhash');
-    const transactions = txBuildDataList.map((buildData, i) => {
-      const measured = measuredUnits[i];
-      const units = sizeComputeUnitLimit(measured, computeUnitBudget);
-      console.log(`[ExecuteButton] tx ${i + 1} compute limit:`, units, '(measured', measured, ')');
-
-      return buildTransaction(
-        [
-          ...computeBudgetInstructions({ units, microLamports: priorityFeeLamports }),
-          ...buildData.instructions,
-        ],
-        buildData
-      );
-    });
-
-    console.log(
-      '[ExecuteButton] Requesting wallet signatures for',
-      transactions.length,
-      'transaction(s)'
-    );
-    const startSign = Date.now();
-    const signedTransactions = await wallet.signAllTransactions(transactions);
-    console.log('[ExecuteButton] Got signatures in', Date.now() - startSign, 'ms');
-
-    // Sent and confirmed strictly in order. A batch's transactions are
-    // order-dependent on chain — each execute's PDA is seeded by the batch's
-    // executed_transaction_index, which the previous execute advances — so
-    // transaction i+1 cannot even simulate until transaction i has landed. They
-    // all share the blockhash fetched above, so a long batch can run out of
-    // window; that is the price of correctness here, and the error says so.
+    // Each execute runs the full pipeline on its own: simulate to size compute
+    // (the dialog's value is a floor the user can raise), fresh blockhash, sign,
+    // rebroadcast until confirmed. Strictly in order — a batch's executes are
+    // order-dependent on chain, each one's PDA seeded by the index the previous
+    // one advanced, so transaction i+1 cannot even simulate until i has landed.
+    // That is also why a batch costs one wallet prompt per execute rather than a
+    // single signAllTransactions: signing them all up front on one blockhash
+    // meant sizing i+1 blind and racing the window with every confirm.
     const signatures: string[] = [];
 
-    for (let i = 0; i < signedTransactions.length; i++) {
-      const signedTx = signedTransactions[i];
-      console.log(
-        `[ExecuteButton] Processing transaction ${i + 1} of ${signedTransactions.length}`
-      );
+    for (let i = 0; i < executes.length; i++) {
+      const position = executes.length > 1 ? ` ${i + 1} of ${executes.length}` : '';
       try {
-        // First simulate the transaction to catch errors early
-        console.log(`[ExecuteButton] Simulating transaction ${i + 1}`);
-        const simulation = await connection.simulateTransaction(signedTx, {
-          commitment: 'processed',
-        });
-        console.log(`[ExecuteButton] Simulation result for tx ${i + 1}:`, simulation.value);
-
-        if (simulation.value.err) {
-          console.error('Simulation error:', simulation.value.err);
-          console.error('Full simulation logs:', simulation.value.logs);
-
-          // Parse the error logs for meaningful messages
-          const logs = simulation.value.logs || [];
-
-          // Check for signature verification failure
-          if (JSON.stringify(simulation.value.err).includes('SignatureVerificationFailed')) {
-            console.error('Signature verification failed. Transaction details:', {
-              transaction: signedTx,
-              signers: signedTx.signatures,
-              message: signedTx.message,
-            });
-            throw new Error(
-              'Transaction signature verification failed. This usually means a required signer is missing or the transaction needs to be reconstructed.'
-            );
-          }
-
-          const errorLog = logs.find(
-            (log) =>
-              log.includes('Error') ||
-              log.includes('failed') ||
-              log.includes('NotAuthorized') ||
-              log.includes('AnchorError')
-          );
-
-          if (errorLog) {
-            // Check for stake pool specific error
-            if (
-              errorLog.includes(
-                'First update old validator stake account balances and then pool stake balance'
-              )
-            ) {
-              throw new Error(
-                'Stake pool needs to be updated. Please wait a moment and try again.'
-              );
-            }
-
-            // Extract error details from Anchor errors
-            const anchorErrorMatch = errorLog.match(
-              /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.+?)(?:\.|$)/
-            );
-            if (anchorErrorMatch) {
-              throw new Error(`${anchorErrorMatch[3]} (Code: ${anchorErrorMatch[1]})`);
-            }
-
-            // Extract other error patterns
-            const notAuthorizedMatch = errorLog.match(
-              /NotAuthorized|Not authorized to perform this action/
-            );
-            if (notAuthorizedMatch) {
-              throw new Error(
-                'Not authorized to perform this action. You may not be a member of this multisig or lack the required permissions.'
-              );
-            }
-
-            throw new Error(errorLog);
-          }
-
-          throw new Error(`Transaction simulation failed: ${JSON.stringify(simulation.value.err)}`);
-        }
-
-        if (signedTransactions.length === 1) {
-          toast.loading('Confirming transaction...', {
-            id: 'transaction',
-          });
-        } else {
-          toast.loading(`Confirming transaction ${i + 1} of ${signedTransactions.length}...`, {
-            id: 'transaction',
-          });
-        }
-
-        // If simulation passes, broadcast and rebroadcast until it confirms or
-        // the blockhash expires. Throws TransactionFailedError / TransactionExpiredError.
-        console.log(`[ExecuteButton] Sending transaction ${i + 1} to network`);
         signatures.push(
-          await sendAndConfirm(connection, signedTx, lastValidBlockHeight, {
-            label: `ExecuteButton tx ${i + 1}`,
+          await signSendAndConfirmV0(connection, wallet, executes[i].instructions, {
+            lookupTables: executes[i].lookupTableAccounts,
+            label: executes.length > 1 ? `ExecuteButton tx ${i + 1}` : 'ExecuteButton',
+            priorityFeeMicroLamports: priorityFeeLamports,
+            minComputeUnits: computeUnitBudget,
+            onStep: toastSteps({
+              preparing: `Simulating transaction${position}...`,
+              signing: `Approve transaction${position} in your wallet...`,
+              confirming: `Confirming transaction${position}...`,
+            }),
           })
         );
-      } catch (error: any) {
+      } catch (error) {
         console.error(`[ExecuteButton] Transaction ${i + 1} error:`, error);
-        console.error(`[ExecuteButton] Error stack:`, error?.stack);
-
         // In a batch, say which one broke and that the earlier ones stand.
-        const position =
-          signedTransactions.length > 1
-            ? `Transaction ${i + 1} of ${signedTransactions.length} failed (${i} already executed): `
+        const prefix =
+          executes.length > 1
+            ? `Transaction ${i + 1} of ${executes.length} failed (${i} already executed): `
             : '';
-
-        // Check for common RPC errors
-        if (error.message?.includes('blockhash not found')) {
-          throw new Error(`${position}Transaction expired. Please try again.`);
-        }
-
-        if (error.message?.includes('insufficient funds')) {
-          throw new Error(`${position}Insufficient funds for transaction fees.`);
-        }
-
-        if (error.logs) {
-          // Parse logs for error messages
-          const errorLog = error.logs.find(
-            (log: string) =>
-              log.includes('Error') || log.includes('failed') || log.includes('NotAuthorized')
-          );
-
-          if (errorLog) {
-            // Check for stake pool specific error
-            if (
-              errorLog.includes(
-                'First update old validator stake account balances and then pool stake balance'
-              )
-            ) {
-              throw new Error(
-                `${position}Stake pool needs to be updated. Please wait a moment and try again.`
-              );
-            }
-
-            const anchorErrorMatch = errorLog.match(
-              /Error Code: (\w+)\. Error Number: (\d+)\. Error Message: (.+?)(?:\.|$)/
-            );
-            if (anchorErrorMatch) {
-              throw new Error(`${position}${anchorErrorMatch[3]} (Code: ${anchorErrorMatch[1]})`);
-            }
-            throw new Error(`${position}${errorLog}`);
-          }
-        }
-
-        // Re-throw with more context
-        throw position ? new Error(`${position}${error.message ?? error}`) : error;
+        throw new Error(`${prefix}${describeSendError(error)}`);
       }
     }
 
