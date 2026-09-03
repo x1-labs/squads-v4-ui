@@ -46,7 +46,10 @@ export const NETWORKS: NetworkConfig[] = [
     rpcUrl: 'https://rpc.mainnet.x1.xyz',
     nativeSymbol: 'XNT',
     genesisHash: '4SvBP3omtvcCVWdxq1zBY5cDp4wndjsThb6nEMn6iMdN',
-    markers: ['mainnet.x1.xyz', 'rpc.x1.xyz', 'multisig.x1.xyz', 'mainnet'],
+    // No bare 'mainnet': it claimed every provider URL with the word in it
+    // (`mainnet.helius-rpc.com` serves Solana) and bought nothing, since an
+    // X1 Mainnet host that matches nothing lands here anyway as DEFAULT_NETWORK.
+    markers: ['mainnet.x1.xyz', 'rpc.x1.xyz', 'multisig.x1.xyz'],
   },
   {
     id: 'x1-testnet',
@@ -71,9 +74,11 @@ export const NETWORKS: NetworkConfig[] = [
 export const DEFAULT_NETWORK = NETWORKS[0];
 
 /**
- * Match order, most specific first. `solana-mainnet` contains `mainnet`, and
- * `rpc.testnet.x1.xyz` contains `x1.xyz`, so a naive pass over NETWORKS in
- * display order would hand Solana and testnet URLs to X1 Mainnet.
+ * Match order, most specific first. Markers are substrings, so a naive pass in
+ * display order would let a broad one shadow a narrow one — `solana-mainnet`
+ * contains `mainnet`, `rpc.testnet.x1.xyz` contains `x1.xyz`. X1 Mainnet is
+ * last because it is also the default, so anything it would have caught
+ * loosely still ends up there.
  */
 const MATCH_ORDER = ['solana-mainnet', 'x1-testnet', 'x1-mainnet'];
 

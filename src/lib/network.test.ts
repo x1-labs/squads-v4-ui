@@ -2,6 +2,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   detectNetwork,
+  getNativeSymbol,
   isAccountNotFoundError,
   matchNetwork,
   networkFromGenesisHash,
@@ -49,14 +50,101 @@ describe('networkFromGenesisHash', () => {
   });
 });
 
+describe('matchNetwork', () => {
+  test('identifies X1 by its own hosts', () => {
+    for (const value of [
+      'https://rpc.mainnet.x1.xyz',
+      'https://multisig.mainnet.x1.xyz',
+      'multisig.x1.xyz',
+    ]) {
+      assert.equal(matchNetwork(value)?.id, 'x1-mainnet', value);
+    }
+    assert.equal(matchNetwork('https://rpc.testnet.x1.xyz')?.id, 'x1-testnet');
+  });
+
+  test('does not claim a Solana provider that happens to say "mainnet"', () => {
+    // The bug this guards: X1 Mainnet used to carry a bare 'mainnet' marker,
+    // so any endpoint with the word in it resolved to X1 and every amount on
+    // the Solana deployment was labelled XNT. Helius is the one that bit.
+    for (const url of [
+      'https://mainnet.helius-rpc.com/?api-key=redacted',
+      'https://api.mainnet-beta.solana.com',
+      'https://example.solana-mainnet.quiknode.pro/redacted/',
+      'https://solana-mainnet.g.alchemy.com/v2/redacted',
+      'https://mainnet.rpcpool.com',
+    ]) {
+      assert.notEqual(matchNetwork(url)?.id, 'x1-mainnet', url);
+    }
+  });
+
+  test('reads the Solana providers it can', () => {
+    for (const url of [
+      'https://api.mainnet-beta.solana.com',
+      'https://example.solana-mainnet.quiknode.pro/redacted/',
+      'https://solana-mainnet.g.alchemy.com/v2/redacted',
+    ]) {
+      assert.equal(matchNetwork(url)?.id, 'solana-mainnet', url);
+    }
+  });
+
+  test('an unlabelled endpoint matches nothing, rather than guessing', () => {
+    // Callers decide what to do with null: `getNativeSymbol` falls back to the
+    // hostname it is served from, which is the one thing that is not a guess.
+    for (const url of ['http://localhost:8899', 'https://10.0.0.4:8899', 'https://rpc.example']) {
+      assert.equal(matchNetwork(url), null, url);
+    }
+  });
+});
+
+describe('getNativeSymbol', () => {
+  /** `getNativeSymbol` reads `window.location.hostname`; node has neither. */
+  const onHost = (hostname: string, check: () => void) => {
+    const previous = (globalThis as { window?: unknown }).window;
+    (globalThis as { window?: unknown }).window = { location: { hostname } };
+    try {
+      check();
+    } finally {
+      if (previous === undefined) delete (globalThis as { window?: unknown }).window;
+      else (globalThis as { window?: unknown }).window = previous;
+    }
+  };
+
+  test('the Solana deployment says SOL, whichever provider it is pointed at', () => {
+    // The reported bug: a Settings override to Helius on the Solana deployment
+    // labelled every amount XNT, because the RPC URL falsely matched X1.
+    onHost('multisig.solana-mainnet.x1.xyz', () => {
+      for (const rpcUrl of [
+        'https://mainnet.helius-rpc.com/?api-key=redacted',
+        'https://example.solana-mainnet.quiknode.pro/redacted/',
+        'https://api.mainnet-beta.solana.com',
+        'http://localhost:8899',
+      ]) {
+        assert.equal(getNativeSymbol(rpcUrl), 'SOL', rpcUrl);
+      }
+    });
+  });
+
+  test('the X1 deployment says XNT', () => {
+    onHost('multisig.mainnet.x1.xyz', () => {
+      assert.equal(getNativeSymbol('https://rpc.mainnet.x1.xyz'), 'XNT');
+      assert.equal(getNativeSymbol('http://localhost:8899'), 'XNT');
+    });
+  });
+
+  test('the RPC still wins over the host it is served from', () => {
+    // An operator pointing the X1 deployment at Solana is displaying Solana
+    // lamports, and the label has to follow the lamports.
+    onHost('multisig.mainnet.x1.xyz', () => {
+      assert.equal(getNativeSymbol('https://api.mainnet-beta.solana.com'), 'SOL');
+    });
+  });
+});
+
 describe('genesis hash beats URL matching', () => {
-  test('a Helius endpoint that matchNetwork gets wrong', () => {
-    // Regression guard. `mainnet.helius-rpc.com` serves Solana, but contains
-    // the substring 'mainnet', which is an X1 Mainnet marker. URL matching
-    // therefore reports X1 and labels balances XNT. The genesis hash does not
-    // have this failure mode.
-    const url = 'https://mainnet.helius-rpc.com/?api-key=redacted';
-    assert.equal(matchNetwork(url)?.id, 'x1-mainnet');
+  test('identifies a provider whose URL says nothing about the chain', () => {
+    // Markers can only work on URLs that name their cluster. A private relay
+    // or a bare IP names nothing, and the hash is the only real answer.
+    assert.equal(matchNetwork('https://rpc.example/redacted'), null);
 
     const byHash = networkFromGenesisHash('5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d');
     assert.equal(byHash?.id, 'solana-mainnet');
