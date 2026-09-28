@@ -76,7 +76,9 @@ export async function getStakePoolsForDisplay(
   connection: Connection,
   vaultAddress?: PublicKey
 ): Promise<StakePoolInfo[]> {
-  const pools = [...TESTNET_STAKE_POOLS];
+  // Copy each pool, not just the array: userBalance is written below, and sharing
+  // the module-level objects let one vault's balance show up under another's.
+  const pools = TESTNET_STAKE_POOLS.map((pool) => ({ ...pool }));
 
   // Fetch metadata and balances for each pool
   for (const pool of pools) {
