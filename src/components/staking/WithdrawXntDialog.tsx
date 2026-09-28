@@ -14,21 +14,53 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../ui/textarea';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
-import { LAMPORTS_PER_SOL, PublicKey, TransactionMessage } from '@solana/web3.js';
+import { PublicKey, TransactionMessage } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useStakePools } from '@/hooks/useStakePools';
 import { useMultisig } from '@/hooks/useServices';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { toastSteps } from '@/lib/transaction/toastSteps';
-import { stakePoolInfo, getStakePoolAccount, StakePoolInstruction } from '@x1-labs/spl-stake-pool';
-import * as splToken from '@solana/spl-token';
 import { useAccess } from '@/hooks/useAccess';
 import { createMemoInstruction } from '@/lib/utils/memoInstruction';
 import { useStakePoolProgramId } from '@/hooks/useSettings';
+import { simulateVaultInstructions } from '@/lib/transaction/simulateVaultInstructions';
+import { fetchWithdrawSolContext, type WithdrawSolContext } from '@/lib/staking/withdrawSolContext';
+import {
+  createWithdrawSolInstruction,
+  describeWithdrawSolSimulationError,
+} from '@/lib/staking/withdrawSolInstruction';
+import {
+  formatTokenAmount,
+  parseTokenAmount,
+  quoteWithdrawSol,
+} from '@/lib/staking/withdrawSolMath';
+
+const LAMPORT_DECIMALS = 9;
+
+/** Thousands separators and at most 4 decimals, for display only. */
+const displayAmount = (raw: bigint, decimals: number) =>
+  Number(formatTokenAmount(raw, decimals)).toLocaleString(undefined, {
+    maximumFractionDigits: 4,
+    minimumFractionDigits: 0,
+  });
+
+/** Why `amount` can't be unstaked right now, or null if it can. */
+function amountProblem(ctx: WithdrawSolContext, amount: bigint): string | null {
+  if (amount > ctx.balance) {
+    return 'Exceeds staked balance';
+  }
+  if (amount > ctx.maxPoolTokens) {
+    return `The pool's reserve can only pay out ${displayAmount(ctx.maxPoolTokens, ctx.decimals)} pool tokens right now`;
+  }
+  if (quoteWithdrawSol(ctx.pool, amount, ctx.feeWaived).lamports === 0n) {
+    return 'Amount is too small to withdraw';
+  }
+  return null;
+}
 
 export function WithdrawXntDialog() {
   const [isOpen, setIsOpen] = useState(false);
@@ -56,61 +88,86 @@ export function WithdrawXntDialog() {
   const stakedPools = stakePools?.filter((p) => p.userBalance && p.userBalance > 0) || [];
   const selectedPoolInfo = stakedPools.find((p) => p.address === selectedPool);
 
-  const parsedAmount = parseFloat(amount);
-  const isAmountValid = !isNaN(parsedAmount) && parsedAmount > 0;
-  const maxAmount = selectedPoolInfo?.userBalance || 0;
+  const vaultAddress = multisigAddress
+    ? multisig.getVaultPda({
+        index: vaultIndex,
+        multisigPda: new PublicKey(multisigAddress),
+        programId: multisigProgramId ? new PublicKey(multisigProgramId) : multisig.PROGRAM_ID,
+      })[0]
+    : null;
+
+  // Live pool, reserve and vault balance. The reserve moves with every holder's
+  // deposits and withdrawals, so this is re-read on open and again at submit.
+  const { data: withdrawContext, error: withdrawContextError } = useQuery({
+    queryKey: ['stakePoolWithdrawContext', selectedPool, vaultAddress?.toBase58()],
+    queryFn: () => fetchWithdrawSolContext(connection, new PublicKey(selectedPool), vaultAddress!),
+    enabled: isOpen && !!selectedPool && !!vaultAddress,
+    staleTime: 0,
+    refetchInterval: 30000,
+  });
+
+  const rawAmount = withdrawContext ? parseTokenAmount(amount, withdrawContext.decimals) : null;
+  const isAmountValid = rawAmount !== null && rawAmount > 0n;
+  const problem =
+    withdrawContext && isAmountValid ? amountProblem(withdrawContext, rawAmount) : null;
+  const quote =
+    withdrawContext && isAmountValid && !problem
+      ? quoteWithdrawSol(withdrawContext.pool, rawAmount, withdrawContext.feeWaived)
+      : null;
+  const reserveLimited =
+    !!withdrawContext && withdrawContext.maxPoolTokens < withdrawContext.balance;
 
   const handleWithdraw = async () => {
-    if (!wallet.publicKey || !multisigAddress || !selectedPoolInfo || !multisigInfo) {
+    if (
+      !wallet.publicKey ||
+      !multisigAddress ||
+      !vaultAddress ||
+      !selectedPoolInfo ||
+      !multisigInfo
+    ) {
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const vaultAddress = multisig.getVaultPda({
-        index: vaultIndex,
-        multisigPda: new PublicKey(multisigAddress),
-        programId: multisigProgramId ? new PublicKey(multisigProgramId) : multisig.PROGRAM_ID,
-      })[0];
-
       const stakePoolAddress = new PublicKey(selectedPoolInfo.address);
-      const poolTokenAmount = Math.floor(parsedAmount * 1e9); // Pool tokens in smallest units
 
-      // Get the stake pool account data
-      const stakePoolAccount = await getStakePoolAccount(connection as any, stakePoolAddress);
-      const stakePool = stakePoolAccount.account.data;
-
-      // Find the vault's token account for pool tokens
-      const tokenAccounts = await connection.getTokenAccountsByOwner(vaultAddress, {
-        mint: stakePool.poolMint,
-      });
-
-      if (tokenAccounts.value.length === 0) {
-        throw new Error('No pool token account found for vault');
+      // Re-read right before building: the reserve may have moved since the form rendered.
+      const ctx = await fetchWithdrawSolContext(connection, stakePoolAddress, vaultAddress);
+      const poolTokens = parseTokenAmount(amount, ctx.decimals);
+      if (poolTokens === null || poolTokens <= 0n) {
+        throw new Error('Enter a valid amount');
+      }
+      const amountError = amountProblem(ctx, poolTokens);
+      if (amountError) {
+        throw new Error(amountError);
+      }
+      if (ctx.solWithdrawAuthority && !ctx.solWithdrawAuthority.equals(vaultAddress)) {
+        throw new Error(
+          `This pool only allows ${nativeSymbol} withdrawals signed by ${ctx.solWithdrawAuthority.toBase58()}`
+        );
       }
 
-      const poolTokenAccount = tokenAccounts.value[0].pubkey;
-
-      // Get the withdraw authority PDA
       const [withdrawAuthority] = PublicKey.findProgramAddressSync(
         [stakePoolAddress.toBuffer(), Buffer.from('withdraw')],
         new PublicKey(stakePoolProgramId)
       );
 
-      // Create the withdraw instruction for the native token
+      // Burns the pool tokens and pays the vault from the pool's reserve, atomically.
       const withdrawInstructions = [
-        StakePoolInstruction.withdrawSol({
+        createWithdrawSolInstruction({
           programId: new PublicKey(stakePoolProgramId),
           stakePool: stakePoolAddress,
-          sourcePoolAccount: poolTokenAccount,
+          sourcePoolAccount: ctx.sourcePoolAccount,
           withdrawAuthority,
-          reserveStake: stakePool.reserveStake,
+          reserveStake: ctx.reserveStake,
           destinationSystemAccount: vaultAddress, // Vault receives the native token
           sourceTransferAuthority: vaultAddress, // Vault owns the pool tokens
-          solWithdrawAuthority: undefined,
-          managerFeeAccount: stakePool.managerFeeAccount,
-          poolMint: stakePool.poolMint,
-          poolTokens: poolTokenAmount,
+          solWithdrawAuthority: ctx.solWithdrawAuthority ?? undefined,
+          managerFeeAccount: ctx.managerFeeAccount,
+          poolMint: ctx.poolMint,
+          poolTokens,
+          tokenProgramId: ctx.tokenProgramId,
         }),
       ];
 
@@ -120,6 +177,24 @@ export function WithdrawXntDialog() {
       const memoInstruction = createMemoInstruction(memo, vaultAddress);
       if (memoInstruction) {
         withdrawInstructions.push(memoInstruction);
+      }
+
+      // Simulate against live state before proposing, so an amount the reserve
+      // can't cover fails here instead of after the members have approved it.
+      // If the simulation can't run (RPC hiccup), warn and proceed.
+      const simulation = await simulateVaultInstructions(
+        connection,
+        wallet.publicKey,
+        withdrawInstructions
+      );
+      if (!simulation.ok) {
+        if (simulation.simulated) {
+          throw new Error(describeWithdrawSolSimulationError(simulation));
+        }
+        console.warn(
+          'Pre-proposal simulation could not run; proceeding without it:',
+          simulation.error
+        );
       }
 
       // Create the transaction message for the vault
@@ -188,7 +263,7 @@ export function WithdrawXntDialog() {
       );
 
       toast.success(
-        `Successfully proposed unstaking ${parsedAmount} pool tokens from ${selectedPoolInfo.name}`,
+        `Successfully proposed unstaking ${displayAmount(poolTokens, ctx.decimals)} pool tokens from ${selectedPoolInfo.name}`,
         {
           id: 'unstake-transaction',
         }
@@ -203,6 +278,7 @@ export function WithdrawXntDialog() {
       // Invalidate queries to refresh data
       await queryClient.invalidateQueries({ queryKey: ['transactions'] });
       await queryClient.invalidateQueries({ queryKey: ['stakePools'] });
+      await queryClient.invalidateQueries({ queryKey: ['stakePoolWithdrawContext'] });
     } catch (error) {
       console.error('Error creating unstake transaction:', error);
       toast.error(
@@ -284,12 +360,26 @@ export function WithdrawXntDialog() {
             <div className="space-y-2">
               <Label>Staked Balance</Label>
               <div className="text-2xl font-bold">
-                {selectedPoolInfo.userBalance?.toLocaleString(undefined, {
-                  maximumFractionDigits: 4,
-                  minimumFractionDigits: 0,
-                })}{' '}
+                {withdrawContext
+                  ? displayAmount(withdrawContext.balance, withdrawContext.decimals)
+                  : selectedPoolInfo.userBalance?.toLocaleString(undefined, {
+                      maximumFractionDigits: 4,
+                      minimumFractionDigits: 0,
+                    })}{' '}
                 Pool Tokens
               </div>
+              {reserveLimited && (
+                <p className="text-sm text-muted-foreground">
+                  Available to unstake now:{' '}
+                  {displayAmount(withdrawContext.maxPoolTokens, withdrawContext.decimals)} (limited
+                  by the pool's reserve)
+                </p>
+              )}
+              {withdrawContextError && (
+                <p className="text-sm text-destructive">
+                  Could not load pool state: {(withdrawContextError as Error).message}
+                </p>
+              )}
             </div>
           )}
 
@@ -301,8 +391,13 @@ export function WithdrawXntDialog() {
                 variant="ghost"
                 size="sm"
                 className="h-6 px-2 text-xs"
-                onClick={() => setAmount(maxAmount.toString())}
-                disabled={!selectedPoolInfo}
+                onClick={() =>
+                  withdrawContext &&
+                  setAmount(
+                    formatTokenAmount(withdrawContext.maxPoolTokens, withdrawContext.decimals)
+                  )
+                }
+                disabled={!withdrawContext || withdrawContext.maxPoolTokens === 0n}
               >
                 Max
               </Button>
@@ -313,14 +408,18 @@ export function WithdrawXntDialog() {
               placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              max={maxAmount}
-              step="0.01"
+              step="any"
             />
-            {amount && !isAmountValid && (
+            {withdrawContext && amount && !isAmountValid && (
               <p className="text-sm text-destructive">Please enter a valid amount</p>
             )}
-            {isAmountValid && parsedAmount > maxAmount && (
-              <p className="text-sm text-destructive">Exceeds staked balance</p>
+            {problem && <p className="text-sm text-destructive">{problem}</p>}
+            {quote && (
+              <p className="text-sm text-muted-foreground">
+                You receive ≈ {displayAmount(quote.lamports, LAMPORT_DECIMALS)} {nativeSymbol}
+                {quote.feePoolTokens > 0n &&
+                  ` after a ${displayAmount(quote.feePoolTokens, withdrawContext!.decimals)} pool token withdrawal fee`}
+              </p>
             )}
           </div>
 
@@ -338,14 +437,16 @@ export function WithdrawXntDialog() {
 
           <div className="rounded-lg bg-orange-50 p-3 dark:bg-orange-950">
             <p className="text-sm text-orange-800 dark:text-orange-200">
-              Note: Unstaking may have a cooldown period depending on the pool configuration.
+              {nativeSymbol} is paid from the pool's reserve when the proposal executes, in the same
+              step that burns the pool tokens. If other withdrawals drain the reserve before then,
+              execution fails and nothing is burned.
             </p>
           </div>
 
           <Button
             className="w-full"
             onClick={handleWithdraw}
-            disabled={!selectedPool || !isAmountValid || parsedAmount > maxAmount || isSubmitting}
+            disabled={!withdrawContext || !isAmountValid || !!problem || isSubmitting}
           >
             {isSubmitting ? 'Creating Proposal...' : 'Propose Unstake Transaction'}
           </Button>
