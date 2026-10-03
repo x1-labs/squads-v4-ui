@@ -53,6 +53,93 @@ export function fetchVestingTreasury(
   );
 }
 
+/**
+ * A read that may fail. Summaries must distinguish "could not read" from a
+ * real value, so failures surface as unverified checks instead of passing.
+ */
+export type ReadResult<T> = { ok: true; value: T } | { ok: false };
+
+const BALANCE_TTL_MS = 30_000;
+const balanceCache = new Map<string, { fetchedAt: number; value: Promise<ReadResult<bigint>> }>();
+const rentCache = new Map<string, Promise<ReadResult<bigint>>>();
+const existsCache = new Map<string, { fetchedAt: number; value: Promise<ReadResult<boolean>> }>();
+
+/**
+ * Lamport balance of an account, briefly cached so a batch of grant proposals
+ * reads the vault once. Never rejects; failures are not cached.
+ */
+export function fetchLamports(
+  connection: Connection,
+  address: string | PublicKey
+): Promise<ReadResult<bigint>> {
+  const key = `${connection.rpcEndpoint}:${typeof address === 'string' ? address : address.toBase58()}`;
+  const cached = balanceCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt < BALANCE_TTL_MS) return cached.value;
+
+  const value: Promise<ReadResult<bigint>> = connection
+    .getBalance(typeof address === 'string' ? new PublicKey(address) : address)
+    .then((lamports) => ({ ok: true as const, value: BigInt(lamports) }))
+    .catch((error) => {
+      console.warn('Failed to read vesting vault balance:', error);
+      balanceCache.delete(key);
+      return { ok: false as const };
+    });
+  balanceCache.set(key, { fetchedAt: Date.now(), value });
+  return value;
+}
+
+/**
+ * Rent-exempt minimum for an account of `size` bytes, fetched once per RPC
+ * endpoint and size. Never rejects; failures are not cached.
+ */
+export function fetchRentExemption(
+  connection: Connection,
+  size: number
+): Promise<ReadResult<bigint>> {
+  const key = `${connection.rpcEndpoint}:${size}`;
+  const cached = rentCache.get(key);
+  if (cached) return cached;
+
+  const value: Promise<ReadResult<bigint>> = connection
+    .getMinimumBalanceForRentExemption(size)
+    .then((lamports) => ({ ok: true as const, value: BigInt(lamports) }))
+    .catch((error) => {
+      console.warn('Failed to read rent-exempt minimum:', error);
+      rentCache.delete(key);
+      return { ok: false as const };
+    });
+  rentCache.set(key, value);
+  return value;
+}
+
+/**
+ * Whether an account exists at all. Unlike the decoding fetcher, this tells a
+ * missing account apart from a failed read, which matters for `init` checks.
+ * Never rejects; failures are not cached.
+ */
+export function fetchAccountExists(
+  connection: Connection,
+  address: string | PublicKey
+): Promise<ReadResult<boolean>> {
+  const key = `${connection.rpcEndpoint}:${typeof address === 'string' ? address : address.toBase58()}`;
+  const cached = existsCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt < BALANCE_TTL_MS) return cached.value;
+
+  const value: Promise<ReadResult<boolean>> = connection
+    .getAccountInfo(typeof address === 'string' ? new PublicKey(address) : address)
+    .then((info) => ({ ok: true as const, value: info !== null }))
+    .catch((error) => {
+      console.warn('Failed to check vesting account existence:', error);
+      existsCache.delete(key);
+      return { ok: false as const };
+    });
+  existsCache.set(key, { fetchedAt: Date.now(), value });
+  return value;
+}
+
+/** Account sizes (8-byte discriminator + `LEN`) from `programs/vesting/src/state.rs`. */
+export const GRANT_ACCOUNT_SIZE = 8 + 114;
+
 /** A `Grant` by address — instructions that act on a grant carry it as an account. */
 export function fetchVestingGrant(
   connection: Connection,

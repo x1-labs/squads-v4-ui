@@ -2,33 +2,70 @@ import React from 'react';
 import { InstructionSummaryProps } from '@/lib/instructions/types';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 import { useNativeSymbol } from '@/hooks/useNativeSymbol';
-import { describeSchedule, scheduleName, toBigInt } from '@/lib/vesting/values';
+import { getLiquidVaultPda, getTreasuryPda } from '@/lib/vesting/pdas';
+import {
+  VESTING_ERRORS,
+  checkAccountFree,
+  checkAdminGuards,
+  checkCoverage,
+  checkTreasuryAccount,
+  checkVaultAccount,
+  emptyPreflight,
+} from '@/lib/vesting/preflight';
+import { describeSchedule, scheduleName } from '@/lib/vesting/values';
 import {
   DetailBlock,
   Field,
   NativeAmountField,
+  PreflightBlock,
   SummaryShell,
   accountByName,
-  readPubkey,
+  preflightHeadline,
+  readPubkeyArg,
 } from './shared';
-import { useVaultBalance, useVestingTreasury, useZeroDataRent } from './hooks';
+import {
+  treasuryFacts,
+  useAccountExists,
+  useVaultBalance,
+  useVestingTreasury,
+  useZeroDataRent,
+} from './hooks';
 
 /** `initialize_treasury` — one-time creation of the treasury and its schedule. */
 export const VestingInitializeTreasurySummary: React.FC<InstructionSummaryProps> = ({
   instruction,
+  connection,
 }) => {
+  const treasuryPda = getTreasuryPda(instruction.programId).toBase58();
+  // `init` fails if the treasury already exists; a failed read stays unverified.
+  const { exists, loading } = useAccountExists(connection, treasuryPda);
   const schedule = scheduleName(instruction.args?.principal_schedule);
   const admin = accountByName(instruction, 'admin', 1);
   const vault = accountByName(instruction, 'liquid_vault', 2);
+
+  const preflight = emptyPreflight();
+  checkTreasuryAccount(
+    preflight,
+    accountByName(instruction, 'treasury', 0),
+    getTreasuryPda(instruction.programId).toBase58()
+  );
+  checkAccountFree(preflight, exists, 'This deployment’s treasury');
+  checkVaultAccount(preflight, null, vault, getLiquidVaultPda(instruction.programId).toBase58());
+  const headline = preflightHeadline(preflight, loading, {
+    subtitle:
+      'Creates the treasury, fixes its principal schedule for good, and makes the signer admin',
+    tone: 'purple',
+  });
 
   return (
     <SummaryShell
       icon="🏦"
       title="Initialize Vesting Treasury"
-      subtitle="Creates the treasury, fixes its principal schedule for good, and makes the signer admin"
-      tone="purple"
+      subtitle={headline.subtitle}
+      tone={headline.tone}
     >
       <DetailBlock>
+        <PreflightBlock preflight={preflight} loading={loading} />
         <Field
           label="Principal schedule"
           value={schedule ?? 'Unknown'}
@@ -41,30 +78,41 @@ export const VestingInitializeTreasurySummary: React.FC<InstructionSummaryProps>
   );
 };
 
-/** `pause(paused)` — freezes or resumes claims and grant changes. */
+/** `pause(paused)` — freezes or resumes claims and grant changes. Works while paused. */
 export const VestingPauseSummary: React.FC<InstructionSummaryProps> = ({
   instruction,
   connection,
 }) => {
-  const { treasury } = useVestingTreasury(instruction, connection);
+  const { treasury, loading } = useVestingTreasury(instruction, connection);
   const pausing = instruction.args?.paused === true;
   const admin = accountByName(instruction, 'admin', 1);
+
+  const preflight = emptyPreflight();
+  checkTreasuryAccount(
+    preflight,
+    accountByName(instruction, 'treasury', 0),
+    getTreasuryPda(instruction.programId).toBase58()
+  );
+  checkAdminGuards(preflight, treasuryFacts(treasury), admin, false);
   const isNoop = Boolean(treasury && treasury.paused === pausing);
+  const headline = preflightHeadline(preflight, loading, {
+    subtitle: isNoop
+      ? `Already ${pausing ? 'paused' : 'unpaused'} — this proposal changes nothing`
+      : pausing
+        ? 'Stops all claims and every grant change until unpaused'
+        : 'Reopens claims and grant changes',
+    tone: isNoop ? 'gray' : pausing ? 'red' : 'green',
+  });
 
   return (
     <SummaryShell
       icon={pausing ? '⏸️' : '▶️'}
       title={pausing ? 'Pause Vesting' : 'Unpause Vesting'}
-      subtitle={
-        isNoop
-          ? `Already ${pausing ? 'paused' : 'unpaused'} — this proposal changes nothing`
-          : pausing
-            ? 'Stops all claims and every grant change until unpaused'
-            : 'Reopens claims and grant changes'
-      }
-      tone={isNoop ? 'gray' : pausing ? 'red' : 'green'}
+      subtitle={headline.subtitle}
+      tone={headline.tone}
     >
       <DetailBlock>
+        <PreflightBlock preflight={preflight} loading={loading} />
         {treasury && (
           <Field
             label="Current state"
@@ -74,7 +122,7 @@ export const VestingPauseSummary: React.FC<InstructionSummaryProps> = ({
         )}
         <div className="text-xs text-muted-foreground">
           While paused, beneficiaries cannot claim and the admin cannot create, cancel or reassign
-          grants. Only pause and admin transfer still work.
+          grants or activate claims. Pause and admin transfer still work.
         </div>
         {admin && <AddressWithButtons address={admin} label="Admin" />}
       </DetailBlock>
@@ -82,29 +130,40 @@ export const VestingPauseSummary: React.FC<InstructionSummaryProps> = ({
   );
 };
 
-/** `transfer_admin(new_admin)` — immediate, single-step admin handover. */
+/** `transfer_admin(new_admin)` — immediate, single-step admin handover. Works while paused. */
 export const VestingTransferAdminSummary: React.FC<InstructionSummaryProps> = ({
   instruction,
   connection,
 }) => {
-  const { treasury } = useVestingTreasury(instruction, connection);
-  const newAdmin = readPubkey(instruction.args?.new_admin);
+  const { treasury, loading } = useVestingTreasury(instruction, connection);
+  const newAdmin = readPubkeyArg(instruction.args?.new_admin);
   const signer = accountByName(instruction, 'admin', 1);
   const currentAdmin = treasury?.admin?.toBase58();
+
+  const preflight = emptyPreflight();
+  checkTreasuryAccount(
+    preflight,
+    accountByName(instruction, 'treasury', 0),
+    getTreasuryPda(instruction.programId).toBase58()
+  );
+  checkAdminGuards(preflight, treasuryFacts(treasury), signer, false);
   const isNoop = Boolean(newAdmin && currentAdmin && newAdmin === currentAdmin);
+  const headline = preflightHeadline(preflight, loading, {
+    subtitle: isNoop
+      ? 'Already the admin — this proposal changes nothing'
+      : 'Immediately hands full admin control of the vesting treasury to a new key',
+    tone: isNoop ? 'gray' : 'red',
+  });
 
   return (
     <SummaryShell
       icon="🔑"
       title="Transfer Vesting Admin"
-      subtitle={
-        isNoop
-          ? 'Already the admin — this proposal changes nothing'
-          : 'Immediately hands full admin control of the vesting treasury to a new key'
-      }
-      tone={isNoop ? 'gray' : 'red'}
+      subtitle={headline.subtitle}
+      tone={headline.tone}
     >
       <DetailBlock>
+        <PreflightBlock preflight={preflight} loading={loading} />
         {currentAdmin && (
           <Field
             label="Current admin"
@@ -129,43 +188,66 @@ export const VestingActivateClaimsSummary: React.FC<InstructionSummaryProps> = (
   connection,
 }) => {
   const nativeSymbol = useNativeSymbol();
-  const { treasury } = useVestingTreasury(instruction, connection);
-  const vault = accountByName(instruction, 'liquid_vault', 2) ?? treasury?.liquid_vault?.toBase58();
-  const { balance } = useVaultBalance(connection, vault);
-  const rent = useZeroDataRent(connection);
+  const { treasury, loading: treasuryLoading } = useVestingTreasury(instruction, connection);
+  const facts = treasuryFacts(treasury);
+  const signer = accountByName(instruction, 'admin', 1);
+  const vault = accountByName(instruction, 'liquid_vault', 2) ?? facts?.liquidVault;
+  const { balance, loading: balanceLoading } = useVaultBalance(connection, vault);
+  const { rent, loading: rentLoading } = useZeroDataRent(connection);
+  const loading = treasuryLoading || balanceLoading || rentLoading;
 
-  const outstanding = treasury ? toBigInt(treasury.total_outstanding) : null;
-  const required = outstanding !== null && rent !== null ? outstanding + rent : null;
-  const covered = required !== null && balance !== null ? balance >= required : null;
-  const alreadyActive = treasury?.claims_active === true;
+  const required =
+    facts?.outstanding !== null && facts?.outstanding !== undefined && rent !== null
+      ? facts.outstanding + rent
+      : null;
+
+  const preflight = emptyPreflight();
+  checkTreasuryAccount(
+    preflight,
+    accountByName(instruction, 'treasury', 0),
+    getTreasuryPda(instruction.programId).toBase58()
+  );
+  checkAdminGuards(preflight, facts, signer, true);
+  if (facts?.claimsActive) {
+    preflight.rejections.push({
+      error: 'InvalidState',
+      code: VESTING_ERRORS.InvalidState,
+      reason: 'Claims are already active',
+    });
+  }
+  checkVaultAccount(
+    preflight,
+    facts,
+    accountByName(instruction, 'liquid_vault', 2),
+    getLiquidVaultPda(instruction.programId).toBase58()
+  );
+  checkCoverage(preflight, balance, required, 'everything owed plus rent');
+  const headline = preflightHeadline(preflight, loading, {
+    subtitle: 'Opens claiming for every grant. This is one-way: claims cannot be turned off again',
+    tone: 'green',
+  });
 
   return (
     <SummaryShell
       icon="🔓"
       title="Activate Claims"
-      subtitle={
-        alreadyActive
-          ? 'Claims are already active — this proposal will fail'
-          : covered === false
-            ? 'The vault does not yet cover everything owed — this proposal will fail'
-            : 'Opens claiming for every grant. This is one-way: claims cannot be turned off again'
-      }
-      tone={alreadyActive || covered === false ? 'gray' : 'green'}
+      subtitle={headline.subtitle}
+      tone={headline.tone}
     >
       <DetailBlock>
+        <PreflightBlock preflight={preflight} loading={loading} />
         <NativeAmountField
           label="Owed (total outstanding)"
-          lamports={outstanding}
+          lamports={facts?.outstanding}
           symbol={nativeSymbol}
         />
         <NativeAmountField
           label="Vault balance"
           lamports={balance}
           symbol={nativeSymbol}
-          tone={covered === false ? 'red' : covered ? 'green' : undefined}
           hint={
             required !== null
-              ? `Must be at least owed + rent (${required.toLocaleString('en-US')} lamports)`
+              ? `Must be at least owed + rent (${required.toLocaleString()} lamports)`
               : undefined
           }
         />

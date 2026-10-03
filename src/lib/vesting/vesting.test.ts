@@ -11,13 +11,22 @@ import {
   getTreasuryPda,
   grantIdSeed,
 } from './pdas.ts';
+import { addCalendarMonths, checkGrantSchedule, formatTimestamp, scheduleName } from './values.ts';
 import {
-  addCalendarMonths,
-  checkGrantSchedule,
-  formatExactNative,
-  formatTimestamp,
-  scheduleName,
-} from './values.ts';
+  ANCHOR_ERRORS,
+  U64_MAX,
+  VESTING_ERRORS,
+  checkAccountFree,
+  checkAdminGuards,
+  checkTreasuryAccount,
+  checkU64,
+  checkCoverage,
+  checkGrantUntouched,
+  checkVaultAccount,
+  emptyPreflight,
+  willFail,
+  type TreasuryFacts,
+} from './preflight.ts';
 import { detectIdlFormat, isAnchorCompatible } from '../idls/idlFormats.ts';
 
 const idl = JSON.parse(readFileSync(new URL('../idls/vesting.json', import.meta.url), 'utf8'));
@@ -116,17 +125,204 @@ describe('vesting schedule rules', () => {
   });
 
   test('accepts valid grants and flags ones create_grant would reject', () => {
-    assert.deepEqual(checkGrantSchedule('Monthly', START, CLIFF, END), { valid: true });
-    assert.equal(checkGrantSchedule('Monthly', START, CLIFF + 1, END).valid, false);
-    assert.equal(checkGrantSchedule('Monthly', START, CLIFF, END - 1).valid, false);
-    assert.deepEqual(checkGrantSchedule('Linear', START, START + 10, START + 20), { valid: true });
-    assert.equal(checkGrantSchedule('Linear', START, START - 1, START + 20).valid, false);
-    assert.equal(checkGrantSchedule('Linear', START, START, START).valid, false);
+    const b = BigInt;
+    assert.deepEqual(checkGrantSchedule('Monthly', b(START), b(CLIFF), b(END)), {
+      status: 'valid',
+    });
+    assert.equal(checkGrantSchedule('Monthly', b(START), b(CLIFF + 1), b(END)).status, 'invalid');
+    assert.equal(checkGrantSchedule('Monthly', b(START), b(CLIFF), b(END - 1)).status, 'invalid');
+    assert.deepEqual(checkGrantSchedule('Linear', b(START), b(START + 10), b(START + 20)), {
+      status: 'valid',
+    });
+    assert.equal(
+      checkGrantSchedule('Linear', b(START), b(START - 1), b(START + 20)).status,
+      'invalid'
+    );
+    assert.equal(checkGrantSchedule('Linear', b(START), b(START), b(START)).status, 'invalid');
   });
 
-  test('formats exact native amounts and UTC timestamps', () => {
-    assert.equal(formatExactNative(BigInt('1234567890123'), 'XNT'), '1,234.567890123 XNT');
-    assert.equal(formatExactNative(new BN(5_000_000_000), 'XNT'), '5 XNT');
+  test('never claims a schedule passes when it cannot check it', () => {
+    const huge = BigInt('9000000000000000');
+    // Ordering is still exact for any i64.
+    assert.equal(
+      checkGrantSchedule('Monthly', huge, huge - BigInt(1), huge + BigInt(1)).status,
+      'invalid'
+    );
+    // The calendar rule cannot be evaluated outside the Date range.
+    assert.equal(
+      checkGrantSchedule('Monthly', huge, huge + BigInt(1), huge + BigInt(2)).status,
+      'unverified'
+    );
+    // Unknown treasury schedule is unverified, not valid.
+    assert.equal(
+      checkGrantSchedule(null, BigInt(START), BigInt(CLIFF), BigInt(END)).status,
+      'unverified'
+    );
+  });
+
+  test('calendar math handles years 0–99 and unrepresentable results', () => {
+    // 0050-01-31 00:00 UTC + 1 month clamps to 0050-02-28, not to a 1950 date.
+    const start = new Date(0);
+    start.setUTCFullYear(50, 0, 31);
+    const expected = new Date(0);
+    expected.setUTCFullYear(50, 1, 28);
+    assert.equal(addCalendarMonths(start.getTime() / 1000, 1), expected.getTime() / 1000);
+    // Start near the end of the Date range: +48 months cannot be represented.
+    const nearMax = BigInt(8_639_990_000_000);
+    assert.equal(
+      checkGrantSchedule('Monthly', nearMax, nearMax + BigInt(1), nearMax + BigInt(2)).status,
+      'unverified'
+    );
+  });
+
+  test('labels far-future years, which usually mean milliseconds', () => {
+    assert.match(formatTimestamp(new BN('1759781608000')), /milliseconds instead of seconds/);
+    assert.doesNotMatch(formatTimestamp(new BN(START)), /milliseconds/);
+  });
+
+  test('formats UTC timestamps and never throws on out-of-range i64s', () => {
     assert.equal(formatTimestamp(new BN(START)), '2025-10-06 20:13 UTC');
+    assert.equal(formatTimestamp(new BN('9000000000000000')), '9000000000000000 (out of range)');
+    assert.equal(
+      formatTimestamp(new BN('-9223372036854775808')),
+      '-9223372036854775808 (out of range)'
+    );
+    assert.equal(formatTimestamp(undefined), '—');
+  });
+});
+
+describe('vesting preflight', () => {
+  const admin = Keypair.generate().publicKey.toBase58();
+  const vault = getLiquidVaultPda(VESTING_PROGRAM_IDS.mainnetMonthly).toBase58();
+  const treasury = (overrides: Partial<TreasuryFacts> = {}): TreasuryFacts => ({
+    admin,
+    paused: false,
+    claimsActive: false,
+    liquidVault: vault,
+    outstanding: BigInt(100),
+    ...overrides,
+  });
+
+  test('error codes match the IDL', () => {
+    const fromIdl = Object.fromEntries(idl.errors.map((e: any) => [e.name, e.code]));
+    assert.deepEqual({ ...VESTING_ERRORS }, fromIdl);
+  });
+
+  test('rejects a signer that is not the treasury admin with the has_one constraint error', () => {
+    const result = emptyPreflight();
+    checkAdminGuards(result, treasury(), Keypair.generate().publicKey.toBase58(), false);
+    assert.deepEqual(
+      result.rejections.map((r) => r.code),
+      [ANCHOR_ERRORS.ConstraintHasOne]
+    );
+  });
+
+  test('rejects a treasury account that is not the treasury PDA', () => {
+    const pda = getTreasuryPda(VESTING_PROGRAM_IDS.mainnetMonthly).toBase58();
+    const wrong = emptyPreflight();
+    checkTreasuryAccount(wrong, Keypair.generate().publicKey.toBase58(), pda);
+    assert.deepEqual(
+      wrong.rejections.map((r) => r.code),
+      [ANCHOR_ERRORS.ConstraintSeeds]
+    );
+    const right = emptyPreflight();
+    checkTreasuryAccount(right, pda, pda);
+    assert.equal(willFail(right), false);
+  });
+
+  test('init checks reject existing accounts and leave failed reads unverified', () => {
+    const taken = emptyPreflight();
+    checkAccountFree(taken, true, 'Grant #1');
+    assert.deepEqual(
+      taken.rejections.map((r) => r.error),
+      ['AccountAlreadyInUse']
+    );
+    const unknown = emptyPreflight();
+    checkAccountFree(unknown, null, 'Grant #1');
+    assert.equal(willFail(unknown), false);
+    assert.equal(unknown.unverified.length, 1);
+    const free = emptyPreflight();
+    checkAccountFree(free, false, 'Grant #1');
+    assert.equal(willFail(free) || free.unverified.length > 0, false);
+  });
+
+  test('flags u64 overflow the program would raise as MathOverflow', () => {
+    const over = emptyPreflight();
+    checkU64(over, U64_MAX + BigInt(1), 'Principal plus yield');
+    assert.deepEqual(
+      over.rejections.map((r) => r.code),
+      [VESTING_ERRORS.MathOverflow]
+    );
+    const max = emptyPreflight();
+    checkU64(max, U64_MAX, 'Principal plus yield');
+    assert.equal(willFail(max), false);
+  });
+
+  test('rejects pause-gated instructions while paused, but not pause/transfer_admin', () => {
+    const gated = emptyPreflight();
+    checkAdminGuards(gated, treasury({ paused: true }), admin, true);
+    assert.deepEqual(
+      gated.rejections.map((r) => r.error),
+      ['Paused']
+    );
+
+    const ungated = emptyPreflight();
+    checkAdminGuards(ungated, treasury({ paused: true }), admin, false);
+    assert.equal(willFail(ungated), false);
+  });
+
+  test('reports unreadable state as unverified, never as passing', () => {
+    const result = emptyPreflight();
+    checkAdminGuards(result, null, admin, true);
+    checkCoverage(result, null, BigInt(1), 'everything owed');
+    checkGrantUntouched(result, null);
+    assert.equal(willFail(result), false);
+    assert.equal(result.unverified.length, 3);
+  });
+
+  test('checks vault coverage', () => {
+    const short = emptyPreflight();
+    checkCoverage(short, BigInt(99), BigInt(100), 'everything owed');
+    assert.deepEqual(
+      short.rejections.map((r) => r.error),
+      ['InsufficientVaultBalance']
+    );
+
+    const covered = emptyPreflight();
+    checkCoverage(covered, BigInt(100), BigInt(100), 'everything owed');
+    assert.equal(willFail(covered), false);
+  });
+
+  test('cancel/replace need an Active grant with no claims', () => {
+    const canceled = emptyPreflight();
+    checkGrantUntouched(canceled, { status: 'Canceled', hasClaims: false });
+    assert.deepEqual(
+      canceled.rejections.map((r) => r.error),
+      ['InvalidState']
+    );
+
+    const claimed = emptyPreflight();
+    checkGrantUntouched(claimed, { status: 'Active', hasClaims: true });
+    assert.deepEqual(
+      claimed.rejections.map((r) => r.error),
+      ['AlreadyHasActivity']
+    );
+
+    const ok = emptyPreflight();
+    checkGrantUntouched(ok, { status: 'Active', hasClaims: false });
+    assert.equal(willFail(ok), false);
+  });
+
+  test('rejects a vault account that is not the treasury vault PDA', () => {
+    const wrong = emptyPreflight();
+    checkVaultAccount(wrong, treasury(), Keypair.generate().publicKey.toBase58(), vault);
+    assert.deepEqual(
+      wrong.rejections.map((r) => r.error),
+      ['ConstraintAddress']
+    );
+
+    const right = emptyPreflight();
+    checkVaultAccount(right, treasury(), vault, vault);
+    assert.equal(willFail(right), false);
   });
 });

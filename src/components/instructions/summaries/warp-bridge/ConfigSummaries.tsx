@@ -1,5 +1,4 @@
 import React from 'react';
-import { PublicKey } from '@solana/web3.js';
 import { InstructionSummaryProps } from '@/lib/instructions/types';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 import { formatNativeAmount } from '@/lib/utils/formatters';
@@ -21,26 +20,18 @@ import {
   accountByName,
 } from './shared';
 import { useBridgeConfig, useBridgeRoles } from './hooks';
-
-function readPubkey(value: unknown): string | undefined {
-  if (!value) return undefined;
-  if (value instanceof PublicKey) return value.toBase58();
-  if (typeof value === 'string') return value;
-  try {
-    return new PublicKey(value as any).toBase58();
-  } catch {
-    return undefined;
-  }
-}
+import { readPubkeyArg } from './shared';
 
 /** `initialize` — one-time creation of the bridge config. */
 export const BridgeInitializeSummary: React.FC<InstructionSummaryProps> = ({ instruction }) => {
   const nativeSymbol = useNativeSymbol();
-  const guardians = (instruction.args?.guardians ?? []).map((g: unknown) => readPubkey(g) ?? '?');
+  const guardians = (instruction.args?.guardians ?? []).map(
+    (g: unknown) => readPubkeyArg(g) ?? '?'
+  );
   const threshold = toNumber(instruction.args?.threshold);
   const config = accountByName(instruction, 'config', 0);
   const admin = accountByName(instruction, 'admin', 1);
-  const feeCollector = readPubkey(instruction.args?.fee_collector);
+  const feeCollector = readPubkeyArg(instruction.args?.fee_collector);
 
   return (
     <SummaryShell
@@ -196,7 +187,7 @@ export const BridgeTransferAdminSummary: React.FC<InstructionSummaryProps> = ({
   connection,
 }) => {
   const { config } = useBridgeConfig(instruction, connection);
-  const newAdmin = readPubkey(instruction.args?.new_admin);
+  const newAdmin = readPubkeyArg(instruction.args?.new_admin);
   const signer = accountByName(instruction, 'admin', 1);
   const currentAdmin = config?.admin?.toBase58();
   const isNoop = Boolean(newAdmin && currentAdmin && newAdmin === currentAdmin);
@@ -329,10 +320,10 @@ export const BridgeSetRoleSummary: React.FC<InstructionSummaryProps> = ({
   const admin = accountByName(instruction, 'admin', 2);
 
   const role = describeRole(instruction.args?.role_type);
-  const newHolder = readPubkey(instruction.args?.pubkey);
+  const newHolder = readPubkeyArg(instruction.args?.pubkey);
   const revoking = instruction.args?.pubkey === null || instruction.args?.pubkey === undefined;
 
-  const currentHolder = roles && role.field ? readPubkey(roles[role.field]) : undefined;
+  const currentHolder = roles && role.field ? readPubkeyArg(roles[role.field]) : undefined;
 
   return (
     <SummaryShell
