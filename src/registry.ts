@@ -72,7 +72,18 @@ import {
   DelegationReleaseEpochLockSummary,
   DelegationForceReleaseLockSummary,
 } from './components/instructions/summaries/delegation';
+import {
+  VestingInitializeTreasurySummary,
+  VestingPauseSummary,
+  VestingTransferAdminSummary,
+  VestingActivateClaimsSummary,
+  VestingCreateGrantSummary,
+  VestingCancelGrantSummary,
+  VestingReplaceBeneficiarySummary,
+  VestingClaimSummary,
+} from './components/instructions/summaries/vesting';
 import { DELEGATION_PROGRAM_ID_LIST } from './lib/delegation/accounts';
+import { VESTING_PROGRAM_ID_LIST } from './lib/vesting/pdas';
 import { WARP_BRIDGE_PROGRAM_ID } from './lib/warpBridge/accounts';
 
 // Import IDLs
@@ -81,6 +92,7 @@ import delegationProgramIdl from './lib/idls/delegation_program.json';
 import tokenProgramIdl from './lib/idls/token_program.json';
 import stakePoolIdl from './lib/idls/stake_pool.json';
 import warpBridgeIdl from './lib/idls/warp_bridge.json';
+import vestingIdl from './lib/idls/vesting.json';
 import { getNativeSymbol } from '@/lib/network';
 import { getRpcUrl } from '@/hooks/useSettings';
 // Stake program IDL is registered but uses custom parsing
@@ -536,6 +548,61 @@ registry.register({
     migrate_token_registry: {
       summary: BridgeMigrateTokenRegistrySummary,
       tags: { label: 'Migrate Token', color: 'yellow', variant: 'subtle' },
+    },
+  },
+});
+
+// ============================================
+// Vesting
+// ============================================
+// Each deployment is a separate program instance with its own immutable
+// principal schedule (mainnet monthly, testnet monthly and testnet linear), so
+// every known ID is registered.
+registry.register({
+  programId: VESTING_PROGRAM_ID_LIST,
+  name: 'Vesting',
+  idl: vestingIdl,
+  instructions: {
+    // Treasury administration
+    initialize_treasury: {
+      summary: VestingInitializeTreasurySummary,
+      tags: { label: 'Initialize Treasury', color: 'purple', variant: 'subtle' },
+    },
+    pause: {
+      summary: VestingPauseSummary,
+      tags: { label: 'Pause / Unpause', color: 'yellow', variant: 'subtle' },
+    },
+    transfer_admin: {
+      summary: VestingTransferAdminSummary,
+      tags: { label: 'Transfer Admin', color: 'red', variant: 'subtle' },
+    },
+    activate_claims: {
+      summary: VestingActivateClaimsSummary,
+      tags: { label: 'Activate Claims', color: 'green', variant: 'subtle' },
+    },
+
+    // Grants
+    create_grant: {
+      summary: VestingCreateGrantSummary,
+      tags: { label: 'Create Grant', color: 'blue', variant: 'subtle' },
+    },
+    cancel_grant: {
+      summary: VestingCancelGrantSummary,
+      tags: { label: 'Cancel Grant', color: 'red', variant: 'subtle' },
+    },
+    replace_beneficiary: {
+      summary: VestingReplaceBeneficiarySummary,
+      tags: { label: 'Replace Beneficiary', color: 'orange', variant: 'subtle' },
+    },
+
+    // Beneficiary claims
+    claim_principal: {
+      summary: VestingClaimSummary,
+      tags: { label: 'Claim Principal', color: 'cyan', variant: 'subtle' },
+    },
+    claim_yield: {
+      summary: VestingClaimSummary,
+      tags: { label: 'Claim Yield', color: 'cyan', variant: 'subtle' },
     },
   },
 });
