@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { BN, BorshInstructionCoder } from '@coral-xyz/anchor';
+import anchor from '@coral-xyz/anchor';
 import { Keypair, PublicKey } from '@solana/web3.js';
 import {
   VESTING_PROGRAM_IDS,
@@ -29,6 +29,9 @@ import {
 } from './preflight.ts';
 import { detectIdlFormat, isAnchorCompatible } from '../idls/idlFormats.ts';
 
+// Anchor ships CJS; Node's ESM loader can't see `BN` as a named export.
+const { BN, BorshInstructionCoder } = anchor;
+
 const idl = JSON.parse(readFileSync(new URL('../idls/vesting.json', import.meta.url), 'utf8'));
 
 // Vectors from `programs/vesting/src/instructions/common.rs` tests:
@@ -43,6 +46,14 @@ describe('vesting program ids and PDAs', () => {
     assert.deepEqual(new Set(VESTING_PROGRAM_ID_LIST), new Set(Object.values(VESTING_PROGRAM_IDS)));
     assert.equal(VESTING_PROGRAM_ID_LIST.length, 3);
     for (const id of VESTING_PROGRAM_ID_LIST) assert.doesNotThrow(() => new PublicKey(id));
+  });
+
+  test('mainnet id is the deployed program, whose treasury exists on chain', () => {
+    assert.equal(VESTING_PROGRAM_IDS.mainnetMonthly, 'x1VStUz3mBkvHJnTvzW6piNBa8Rq7uJtN3ZSDtBhdJ6');
+    assert.equal(
+      getTreasuryPda(VESTING_PROGRAM_IDS.mainnetMonthly).toBase58(),
+      '9wYFpKia33hKFqvu6GXhhZUBVAHJ66Uc2UGUBbRrusGn'
+    );
   });
 
   test('derives treasury, vault and grant PDAs with the program seeds', () => {

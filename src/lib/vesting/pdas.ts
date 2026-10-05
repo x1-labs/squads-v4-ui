@@ -7,7 +7,7 @@ import { PublicKey } from '@solana/web3.js';
  * actually targets. Source: `deployments/profiles.json` in x1-labs/vesting.
  */
 export const VESTING_PROGRAM_IDS = {
-  mainnetMonthly: 'H6y5zco3Ve1K1FY6ZxeEQwFTahTvuvv3DvMY6x442Mk4',
+  mainnetMonthly: 'x1VStUz3mBkvHJnTvzW6piNBa8Rq7uJtN3ZSDtBhdJ6',
   testnetMonthly: 'EGyez2sBCwhL4ssS9V1L6v5RGx2aeRAGeDTsXoyhTEXn',
   testnetLinear: 'DP2sx8VgCvo26vBdfT1ycUjxxDrXg3YLeUAMrUGC1hnT',
 } as const;
