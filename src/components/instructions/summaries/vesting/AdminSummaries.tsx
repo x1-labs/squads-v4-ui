@@ -41,7 +41,7 @@ export const VestingInitializeTreasurySummary: React.FC<InstructionSummaryProps>
   const { exists, loading } = useAccountExists(connection, treasuryPda);
   const schedule = scheduleName(instruction.args?.principal_schedule);
   const admin = accountByName(instruction, 'admin', 1);
-  const vault = accountByName(instruction, 'liquid_vault', 2);
+  const vault = accountByName(instruction, 'liquid_vault', 4);
 
   const preflight = emptyPreflight();
   checkTreasuryAccount(
