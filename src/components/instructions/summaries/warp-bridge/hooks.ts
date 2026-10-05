@@ -1,4 +1,4 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
 import { DecodedInstruction } from '@/lib/transaction/simpleDecoder';
 import {
   BridgeConfigAccount,
@@ -14,6 +14,7 @@ import {
 } from '@/lib/warpBridge/accounts';
 import { decodeSymbol } from '@/lib/warpBridge/values';
 import { useProgramAccount } from '../useProgramAccount';
+import { readPubkeyArg } from '../shared';
 
 /** Current bridge `Config` for the deployment an instruction targets. */
 export function useBridgeConfig(
@@ -69,17 +70,6 @@ export interface BridgeTokenContext {
   /** Symbol from the registry, or from the instruction when registering. */
   symbol: string | null;
   loading: boolean;
-}
-
-function readPubkeyArg(value: unknown): string | undefined {
-  if (!value) return undefined;
-  if (value instanceof PublicKey) return value.toBase58();
-  if (typeof value === 'string') return value;
-  try {
-    return new PublicKey(value as any).toBase58();
-  } catch {
-    return undefined;
-  }
 }
 
 /**

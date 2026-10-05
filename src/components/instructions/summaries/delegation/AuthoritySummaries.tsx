@@ -1,23 +1,12 @@
 import React from 'react';
-import { PublicKey } from '@solana/web3.js';
 import { InstructionSummaryProps } from '@/lib/instructions/types';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 import { DelegationConfigAccount } from '@/lib/delegation/accounts';
 import { DetailBlock, Field, SummaryShell, Tone, accountByName } from './shared';
 import { useDelegationConfig } from './hooks';
+import { readPubkeyArg } from '../shared';
 
 const SYSTEM_PROGRAM = '11111111111111111111111111111111';
-
-function readPubkey(value: unknown): string | undefined {
-  if (!value) return undefined;
-  if (value instanceof PublicKey) return value.toBase58();
-  if (typeof value === 'string') return value;
-  try {
-    return new PublicKey(value as any).toBase58();
-  } catch {
-    return undefined;
-  }
-}
 
 /** An all-zero pubkey means the role is unset rather than assigned. */
 function isUnset(address?: string): boolean {
@@ -55,8 +44,8 @@ const AuthorityChangeSummary: React.FC<AuthorityChangeProps> = ({
 }) => {
   const { config, loading } = useDelegationConfig(instruction, connection);
 
-  const newAuthority = readPubkey(instruction.args?.[argKey]);
-  const currentAuthority = readPubkey(config?.[configKey]);
+  const newAuthority = readPubkeyArg(instruction.args?.[argKey]);
+  const currentAuthority = readPubkeyArg(config?.[configKey]);
   const signer = accountByName(instruction, 'authority', 1);
   const isNoop = Boolean(newAuthority && currentAuthority && newAuthority === currentAuthority);
 
@@ -142,8 +131,8 @@ export const DelegationUpdateReviewerAuthoritySummary: React.FC<InstructionSumma
 export const DelegationInitializeConfigSummary: React.FC<InstructionSummaryProps> = ({
   instruction,
 }) => {
-  const adminAuthority = readPubkey(instruction.args?.admin_authority);
-  const botAuthority = readPubkey(instruction.args?.bot_authority);
+  const adminAuthority = readPubkeyArg(instruction.args?.admin_authority);
+  const botAuthority = readPubkeyArg(instruction.args?.bot_authority);
   const config = accountByName(instruction, 'config', 0);
   const payer = accountByName(instruction, 'payer', 1);
 

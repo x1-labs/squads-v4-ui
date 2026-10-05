@@ -1,4 +1,4 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection } from '@solana/web3.js';
 import { DecodedInstruction } from '@/lib/transaction/simpleDecoder';
 import {
   ClusterInfoAccount,
@@ -10,6 +10,7 @@ import {
 } from '@/lib/delegation/accounts';
 import { accountByName } from './shared';
 import { useProgramAccount } from '../useProgramAccount';
+import { readPubkeyArg } from '../shared';
 
 /** Current on-chain `DelegationConfig` for the deployment an instruction targets. */
 export function useDelegationConfig(
@@ -41,17 +42,6 @@ export interface DelegationValidatorTarget {
   /** Current on-chain record, when it exists and could be decoded. */
   info: ValidatorInfoAccount | null;
   loading: boolean;
-}
-
-function readPubkeyArg(value: unknown): string | undefined {
-  if (!value) return undefined;
-  if (value instanceof PublicKey) return value.toBase58();
-  if (typeof value === 'string') return value;
-  try {
-    return new PublicKey(value as any).toBase58();
-  } catch {
-    return undefined;
-  }
 }
 
 /**
