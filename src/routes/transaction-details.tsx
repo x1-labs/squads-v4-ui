@@ -20,10 +20,11 @@ import { extractTransactionTags } from '@/lib/instructions/extractor';
 import { TransactionTag } from '@/lib/instructions/types';
 import { TransactionTagList } from '@/components/TransactionTag';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useAccess } from '@/hooks/useAccess';
+import { useAccess, useCanVote } from '@/hooks/useAccess';
 import { useBatchApprovals } from '@/hooks/useBatchApprovals';
 import { useBatchExecutes } from '@/hooks/useBatchExecutes';
 import { useBatchCancels } from '@/hooks/useBatchCancels';
+import { isTransactionStale } from '@/lib/proposals';
 import { toast } from 'sonner';
 
 export default function TransactionDetailsPage() {
@@ -39,6 +40,7 @@ export default function TransactionDetailsPage() {
   const { addItem: addToBatchApproval, hasItem: isInBatchApproval, remainingSlots: remainingApprovalSlots } = useBatchApprovals();
   const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
   const { addItem: addToBatchCancel, hasItem: isInBatchCancel } = useBatchCancels();
+  const canVote = useCanVote();
 
   // Create connection with the configured RPC URL
   const connection = useMemo(() => {
@@ -209,11 +211,10 @@ export default function TransactionDetailsPage() {
     );
   }
 
-  // Check if transaction is stale (index <= staleTransactionIndex, as in proposal_vote.rs)
   const isStale =
     transactionIndex !== null &&
-    multisigConfig &&
-    Number(multisigConfig.staleTransactionIndex) >= Number(transactionIndex);
+    !!multisigConfig &&
+    isTransactionStale(Number(multisigConfig.staleTransactionIndex), Number(transactionIndex));
 
   // Check if current user has already approved, rejected or cancelled
   const walletPubkeyStr = wallet.publicKey?.toBase58();
@@ -390,9 +391,13 @@ export default function TransactionDetailsPage() {
                 <SplitButton
                   variant="outline"
                   items={[{
-                    label: isInBatchCancel(multisigAddress, Number(transactionIndex)) ? 'In Batch' : 'Batch Cancel',
+                    label: !canVote
+                      ? 'Batch Cancel (needs Vote permission)'
+                      : isInBatchCancel(multisigAddress, Number(transactionIndex))
+                        ? 'In Batch'
+                        : 'Batch Cancel',
                     onClick: handleAddToCancelBatch,
-                    disabled: isInBatchCancel(multisigAddress, Number(transactionIndex)),
+                    disabled: !canVote || isInBatchCancel(multisigAddress, Number(transactionIndex)),
                   }]}
                 >
                   <CancelButton

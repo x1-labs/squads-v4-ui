@@ -13,10 +13,11 @@ import { toast } from 'sonner';
 import { TransactionTagList } from './TransactionTag';
 import { TransactionTag } from '@/lib/instructions/types';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useAccess } from '@/hooks/useAccess';
+import { useAccess, useCanVote } from '@/hooks/useAccess';
 import { useBatchApprovals } from '@/hooks/useBatchApprovals';
 import { useBatchExecutes } from '@/hooks/useBatchExecutes';
 import { useBatchCancels } from '@/hooks/useBatchCancels';
+import { isTransactionStale } from '@/lib/proposals';
 import { Layers } from 'lucide-react';
 
 // Format address to show first 8 and last 8 characters
@@ -110,9 +111,8 @@ export default function TransactionTable({
     <TableBody>
       {transactions.map((transaction, index) => {
         const stale =
-          (multisigConfig &&
-            Number(multisigConfig.staleTransactionIndex) >= Number(transaction.index)) ||
-          false;
+          !!multisigConfig &&
+          isTransactionStale(Number(multisigConfig.staleTransactionIndex), Number(transaction.index));
         const isExecuted = transaction.proposal?.status.__kind === 'Executed';
         const isCancelled = transaction.proposal?.status.__kind === 'Cancelled';
         const isRejected = transaction.proposal?.status.__kind === 'Rejected';
@@ -226,8 +226,9 @@ function ActionButtons({
   const navigate = useNavigate();
   const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
   const { addItem: addToBatchCancel, hasItem: isInBatchCancel } = useBatchCancels();
+  const canVote = useCanVote();
 
-  // Check if current user has already rejected or cancelled
+  // Check if current user has already rejected or canceled
   const hasUserRejected = proposal?.rejected?.some((member) =>
     wallet.publicKey ? member.equals(wallet.publicKey) : false
   );
@@ -304,9 +305,13 @@ function ActionButtons({
         <SplitButton
           variant="outline"
           items={[{
-            label: isInBatchCancel(multisigPda, transactionIndex) ? 'In Batch' : 'Batch Cancel',
+            label: !canVote
+              ? 'Batch Cancel (needs Vote permission)'
+              : isInBatchCancel(multisigPda, transactionIndex)
+                ? 'In Batch'
+                : 'Batch Cancel',
             onClick: handleAddToCancelBatch,
-            disabled: isInBatchCancel(multisigPda, transactionIndex),
+            disabled: !canVote || isInBatchCancel(multisigPda, transactionIndex),
           }]}
         >
           <CancelButton

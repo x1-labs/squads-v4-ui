@@ -2,7 +2,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { toast } from 'sonner';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from '../ui/button';
-import { useAccess } from '@/hooks/useAccess';
+import { useAccess, useCanVote } from '@/hooks/useAccess';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useBatchCancels, MAX_BATCH_CANCELS } from '@/hooks/useBatchCancels';
 import { useStaleApprovedProposals } from '@/hooks/useStaleApprovedProposals';
@@ -16,6 +16,7 @@ export function StaleApprovedNotice() {
   const { multisigAddress } = useMultisigData();
   const { publicKey } = useWallet();
   const isMember = useAccess();
+  const canVote = useCanVote();
   const { data: staleApproved } = useStaleApprovedProposals();
   const { addItems, hasItem } = useBatchCancels();
 
@@ -23,17 +24,17 @@ export function StaleApprovedNotice() {
     return null;
   }
 
-  const notYetCancelledByMe = publicKey
-    ? staleApproved.filter((p) => !p.cancelled.some((m) => m.equals(publicKey)))
+  const notYetCanceledByMe = publicKey
+    ? staleApproved.filter((p) => !p.canceledBy.some((m) => m.equals(publicKey)))
     : [];
 
   // A member who has voted to cancel all of them has nothing left to do here.
-  if (isMember && publicKey && notYetCancelledByMe.length === 0) {
+  if (isMember && publicKey && notYetCanceledByMe.length === 0) {
     return null;
   }
 
   const handleQueue = () => {
-    const pending = notYetCancelledByMe.filter(
+    const pending = notYetCanceledByMe.filter(
       (p) => !hasItem(multisigAddress, p.transactionIndex)
     );
     if (pending.length === 0) {
@@ -73,9 +74,9 @@ export function StaleApprovedNotice() {
             </p>
           </div>
         </div>
-        {isMember && notYetCancelledByMe.length > 0 && (
+        {canVote && notYetCanceledByMe.length > 0 && (
           <Button variant="outline" size="sm" className="flex-shrink-0" onClick={handleQueue}>
-            Add {notYetCancelledByMe.length} to batch cancel
+            Add {notYetCanceledByMe.length} to batch cancel
           </Button>
         )}
       </div>

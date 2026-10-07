@@ -10,7 +10,7 @@ import type { SendStep } from '~/lib/transaction/signSendAndConfirm';
  * proposalCancel per proposal.
  *
  * The program allows cancel on a stale proposal, which is the main use: a stale
- * Approved vault transaction can still be executed until it is cancelled.
+ * Approved vault transaction can still be executed until it is canceled.
  * Callers must drop proposals the member already voted to cancel, or that are
  * no longer Approved; either makes the whole transaction fail.
  */

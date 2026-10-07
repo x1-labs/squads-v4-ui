@@ -7,9 +7,10 @@ import { useMultisigData } from '@/hooks/useMultisigData';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAccess } from '@/hooks/useAccess';
+import { useCanVote } from '@/hooks/useAccess';
 import { toast } from 'sonner';
 import { submitBatchCancels } from '@/lib/transaction/batchCancels';
+import { getMultipleAccountsInfoChunked } from '@/lib/proposals';
 import type { SendStep } from '@/lib/transaction/signSendAndConfirm';
 import { PublicKey } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
@@ -23,12 +24,12 @@ interface Progress {
 }
 
 export function BatchCancelPanel() {
-  const { itemsFor, removeItem, clearMultisig } = useBatchCancels();
+  const { itemsFor, removeItem, removeItems, clearMultisig } = useBatchCancels();
   const { connection, programId, multisigAddress } = useMultisigData();
   const wallet = useWallet();
   const walletModal = useWalletModal();
   const queryClient = useQueryClient();
-  const isMember = useAccess();
+  const canVote = useCanVote();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
 
@@ -55,53 +56,69 @@ export function BatchCancelPanel() {
       return;
     }
 
+    // Snapshot the queue: items added while the wallet prompt is open are not
+    // part of this transaction and must stay queued.
+    const batch = items;
+    const member = wallet.publicKey;
+
     setIsSubmitting(true);
     setProgress({ currentStep: 'preparing' });
 
     try {
       // One ineligible cancel fails the whole transaction (AlreadyCancelled, or
-      // InvalidProposalStatus once a proposal reaches Cancelled), so re-read
-      // each proposal and keep only those this wallet can still cancel.
-      const multisigPubkey = new PublicKey(multisigAddress);
-      const checks = await Promise.all(
-        items.map(async (item) => {
-          const [proposalPda] = multisig.getProposalPda({
-            multisigPda: multisigPubkey,
-            transactionIndex: BigInt(item.transactionIndex),
-            programId,
-          });
-          try {
-            const proposal = await multisig.accounts.Proposal.fromAccountAddress(
-              connection as any,
-              proposalPda
-            );
-            const alreadyCancelled = proposal.cancelled.some((m: PublicKey) =>
-              m.equals(wallet.publicKey!)
-            );
-            return { item, eligible: proposal.status.__kind === 'Approved' && !alreadyCancelled };
-          } catch {
-            return { item, eligible: false };
-          }
-        })
-      );
+      // InvalidProposalStatus once a proposal is Cancelled), so re-read each
+      // proposal and keep only those this wallet can still cancel. A failed read
+      // throws: it must never pass for "nothing left to cancel".
+      let infos;
+      try {
+        const multisigPubkey = new PublicKey(multisigAddress);
+        infos = await getMultipleAccountsInfoChunked(
+          connection,
+          batch.map(
+            (item) =>
+              multisig.getProposalPda({
+                multisigPda: multisigPubkey,
+                transactionIndex: BigInt(item.transactionIndex),
+                programId,
+              })[0]
+          )
+        );
+      } catch (error: any) {
+        throw new Error(
+          `Could not read the proposals, so nothing was sent: ${error?.message || String(error)}`
+        );
+      }
 
-      const eligible = checks.filter((c) => c.eligible).map((c) => c.item.transactionIndex);
-      const skipped = itemCount - eligible.length;
+      const eligible: BatchCancelItem[] = [];
+      const done: BatchCancelItem[] = [];
+      batch.forEach((item, k) => {
+        const info = infos[k];
+        if (!info) {
+          // No proposal account (closed, or never created): nothing to cancel.
+          done.push(item);
+          return;
+        }
+        const [proposal] = multisig.accounts.Proposal.fromAccountInfo(info);
+        const alreadyCanceled = proposal.cancelled.some((m: PublicKey) => m.equals(member));
+        (proposal.status.__kind === 'Approved' && !alreadyCanceled ? eligible : done).push(item);
+      });
+
+      // Items that need nothing more from this wallet leave the queue either way.
+      removeItems(done.map((item) => item.id));
 
       if (eligible.length === 0) {
-        toast.info('Nothing left to cancel: already cancelled by you, or no longer Approved');
-        clearMultisig(multisigAddress);
+        toast.info('Nothing left to cancel: already canceled by you, or no longer Approved');
         return;
       }
 
-      if (skipped > 0) {
+      if (done.length > 0) {
         toast.info(
-          `Skipping ${skipped} ${skipped === 1 ? 'proposal' : 'proposals'} already cancelled by you or no longer Approved`
+          `Skipping ${done.length} ${done.length === 1 ? 'proposal' : 'proposals'} already canceled by you or no longer Approved`
         );
       }
 
       await submitBatchCancels(
-        eligible,
+        eligible.map((item) => item.transactionIndex),
         connection,
         multisigAddress,
         programId,
@@ -111,7 +128,7 @@ export function BatchCancelPanel() {
 
       setProgress({ currentStep: 'done' });
       toast.success(`Voted to cancel ${eligible.length} ${eligible.length === 1 ? 'proposal' : 'proposals'}`);
-      clearMultisig(multisigAddress);
+      removeItems(eligible.map((item) => item.id));
 
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['transactions'] }),
@@ -179,7 +196,7 @@ export function BatchCancelPanel() {
           <span className="font-mono">
             {multisigAddress.slice(0, 4)}...{multisigAddress.slice(-4)}
           </span>{' '}
-          in a single transaction. A proposal is cancelled for good once enough members (the
+          in a single transaction. A proposal is canceled for good once enough members (the
           threshold) have voted.
         </CardDescription>
       </CardHeader>
@@ -214,7 +231,7 @@ export function BatchCancelPanel() {
           className="w-full"
           variant="destructive"
           onClick={handleSubmit}
-          disabled={isSubmitting || !isMember}
+          disabled={isSubmitting || !canVote}
         >
           {isSubmitting ? (
             <>

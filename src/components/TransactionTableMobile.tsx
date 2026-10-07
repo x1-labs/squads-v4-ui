@@ -15,6 +15,7 @@ import { useAccess } from '@/hooks/useAccess';
 import { useBatchApprovals } from '@/hooks/useBatchApprovals';
 import { useBatchExecutes } from '@/hooks/useBatchExecutes';
 import { useBatchCancels } from '@/hooks/useBatchCancels';
+import { isTransactionStale } from '@/lib/proposals';
 import { Layers } from 'lucide-react';
 
 // Format address to show first 8 and last 8 characters
@@ -86,9 +87,8 @@ export default function TransactionTableMobile({
     <div className="space-y-3">
       {transactions.map((transaction, index) => {
         const stale =
-          (multisigConfig &&
-            Number(multisigConfig.staleTransactionIndex) >= Number(transaction.index)) ||
-          false;
+          !!multisigConfig &&
+          isTransactionStale(Number(multisigConfig.staleTransactionIndex), Number(transaction.index));
         const isExecuted = transaction.proposal?.status.__kind === 'Executed';
         const isCancelled = transaction.proposal?.status.__kind === 'Cancelled';
         const isRejected = transaction.proposal?.status.__kind === 'Rejected';

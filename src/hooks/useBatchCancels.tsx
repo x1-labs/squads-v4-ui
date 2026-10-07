@@ -7,7 +7,7 @@ export interface BatchCancelItem {
   id: string;
   /**
    * The queue outlives navigation between multisigs, and a transaction index
-   * only means something within one multisig. Cancelling at threshold is
+   * only means something within one multisig. Canceling at threshold is
    * final, so every item records which multisig it belongs to.
    */
   multisigPda: string;
@@ -21,6 +21,7 @@ interface BatchCancelsContextType {
   /** Queue several at once; returns how many were added (skips duplicates, stops at the cap). */
   addItems: (items: Omit<BatchCancelItem, 'id'>[]) => number;
   removeItem: (id: string) => void;
+  removeItems: (ids: string[]) => void;
   /** Drop every queued item for one multisig. */
   clearMultisig: (multisigPda: string) => void;
   hasItem: (multisigPda: string, transactionIndex: number) => boolean;
@@ -68,6 +69,11 @@ export function BatchCancelsProvider({ children }: { children: ReactNode }) {
     setItems((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
+  const removeItems = useCallback((ids: string[]) => {
+    const drop = new Set(ids);
+    setItems((prev) => prev.filter((item) => !drop.has(item.id)));
+  }, []);
+
   const clearMultisig = useCallback((multisigPda: string) => {
     setItems((prev) => prev.filter((item) => item.multisigPda !== multisigPda));
   }, []);
@@ -85,7 +91,7 @@ export function BatchCancelsProvider({ children }: { children: ReactNode }) {
 
   return (
     <BatchCancelsContext.Provider
-      value={{ items, addItem, addItems, removeItem, clearMultisig, hasItem, itemsFor }}
+      value={{ items, addItem, addItems, removeItem, removeItems, clearMultisig, hasItem, itemsFor }}
     >
       {children}
     </BatchCancelsContext.Provider>
