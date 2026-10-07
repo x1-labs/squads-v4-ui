@@ -17,8 +17,46 @@ export function StaleApprovedNotice() {
   const { publicKey } = useWallet();
   const isMember = useAccess();
   const canVote = useCanVote();
-  const { data: staleApproved } = useStaleApprovedProposals();
+  const {
+    data: staleApproved,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = useStaleApprovedProposals();
   const { addItems, hasItem } = useBatchCancels();
+
+  // A failed scan must not look like "nothing to worry about": the rows only
+  // say "Stale", so this card is the only warning that some can still execute.
+  if (multisigAddress && isError && !staleApproved) {
+    return (
+      <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-950/30">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-yellow-600 dark:text-yellow-400" />
+            <div>
+              <h3 className="font-semibold text-yellow-800 dark:text-yellow-300">
+                Could not check for stale Approved proposals
+              </h3>
+              <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-400">
+                Stale proposals approved before going stale can still be executed. The check
+                failed: {(error as Error)?.message || String(error)}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-shrink-0"
+            onClick={() => refetch()}
+            disabled={isFetching}
+          >
+            {isFetching ? 'Retrying...' : 'Retry'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (!multisigAddress || !staleApproved || staleApproved.length === 0) {
     return null;

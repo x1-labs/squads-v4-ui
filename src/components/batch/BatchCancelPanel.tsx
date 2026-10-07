@@ -40,6 +40,16 @@ export function BatchCancelPanel() {
     return null;
   }
 
+  // Refetch everything that shows proposal state, so the rows and the stale
+  // notice can't offer to queue what was just canceled or found done.
+  const refreshProposals = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+      queryClient.invalidateQueries({ queryKey: ['multisig'] }),
+      queryClient.invalidateQueries({ queryKey: ['proposal'] }),
+      queryClient.invalidateQueries({ queryKey: ['transaction-details'] }),
+    ]);
+
   const handleSubmit = async () => {
     if (!wallet.publicKey) {
       walletModal.setVisible(true);
@@ -108,6 +118,7 @@ export function BatchCancelPanel() {
 
       if (eligible.length === 0) {
         toast.info('Nothing left to cancel: already canceled by you, or no longer Approved');
+        await refreshProposals();
         return;
       }
 
@@ -129,13 +140,7 @@ export function BatchCancelPanel() {
       setProgress({ currentStep: 'done' });
       toast.success(`Voted to cancel ${eligible.length} ${eligible.length === 1 ? 'proposal' : 'proposals'}`);
       removeItems(eligible.map((item) => item.id));
-
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
-        queryClient.invalidateQueries({ queryKey: ['multisig'] }),
-        queryClient.invalidateQueries({ queryKey: ['proposal'] }),
-        queryClient.invalidateQueries({ queryKey: ['transaction-details'] }),
-      ]);
+      await refreshProposals();
     } catch (error: any) {
       const msg = error?.message || String(error);
       if (!msg.includes('User rejected')) {
