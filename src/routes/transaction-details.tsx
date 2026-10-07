@@ -20,9 +20,11 @@ import { extractTransactionTags } from '@/lib/instructions/extractor';
 import { TransactionTag } from '@/lib/instructions/types';
 import { TransactionTagList } from '@/components/TransactionTag';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useAccess } from '@/hooks/useAccess';
+import { useAccess, useCanVote } from '@/hooks/useAccess';
 import { useBatchApprovals } from '@/hooks/useBatchApprovals';
 import { useBatchExecutes } from '@/hooks/useBatchExecutes';
+import { useBatchCancels } from '@/hooks/useBatchCancels';
+import { isTransactionStale } from '@/lib/proposals';
 import { toast } from 'sonner';
 
 export default function TransactionDetailsPage() {
@@ -37,6 +39,8 @@ export default function TransactionDetailsPage() {
   const isMember = useAccess();
   const { addItem: addToBatchApproval, hasItem: isInBatchApproval, remainingSlots: remainingApprovalSlots } = useBatchApprovals();
   const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
+  const { addItem: addToBatchCancel, hasItem: isInBatchCancel } = useBatchCancels();
+  const canVote = useCanVote();
 
   // Create connection with the configured RPC URL
   const connection = useMemo(() => {
@@ -46,6 +50,7 @@ export default function TransactionDetailsPage() {
   const [transactionIndex, setTransactionIndex] = React.useState<bigint | null>(null);
   const [proposal, setProposal] = React.useState<multisig.generated.Proposal | null>(null);
   const [tags, setTags] = React.useState<TransactionTag[]>([]);
+  const [isConfigTransaction, setIsConfigTransaction] = React.useState<boolean>(false);
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
 
   // Helper function to set up squad
@@ -124,6 +129,7 @@ export default function TransactionDetailsPage() {
       );
       const index = BigInt(configTx.index.toString());
       setTransactionIndex(index);
+      setIsConfigTransaction(true);
 
       const multisigPubkey = setupSquad(configTx.multisig);
       await extractTagsForTransaction(multisigPubkey, index);
@@ -156,6 +162,7 @@ export default function TransactionDetailsPage() {
   React.useEffect(() => {
     const fetchTransactionDetails = async () => {
       if (!transactionPda || !programId) return;
+      setIsConfigTransaction(false);
 
       try {
         // Try to fetch the transaction to get its index and multisig
@@ -204,11 +211,10 @@ export default function TransactionDetailsPage() {
     );
   }
 
-  // Check if transaction is stale
   const isStale =
     transactionIndex !== null &&
-    multisigConfig &&
-    Number(multisigConfig.staleTransactionIndex) > Number(transactionIndex);
+    !!multisigConfig &&
+    isTransactionStale(Number(multisigConfig.staleTransactionIndex), Number(transactionIndex));
 
   // Check if current user has already approved, rejected or cancelled
   const walletPubkeyStr = wallet.publicKey?.toBase58();
@@ -222,14 +228,17 @@ export default function TransactionDetailsPage() {
   );
   const hasUserTakenNegativeAction = hasUserRejected || hasUserCancelled;
 
-  // Determine which action buttons to show
+  // Determine which action buttons to show. The program refuses approve/reject
+  // on a stale proposal but allows cancel, and a stale Approved vault
+  // transaction can still execute, so Cancel ignores staleness. Reject stays
+  // available after approving: the program swaps the member's vote.
   const proposalStatus = proposal?.status.__kind || 'None';
   const showApprove =
     !isStale && !hasUserApproved && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
   const showReject =
-    !isStale && !hasUserApproved && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+    !isStale && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
   const showExecute = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
-  const showCancel = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
+  const showCancel = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
 
   const actualProgramId = programId?.toBase58() || multisig.PROGRAM_ID.toBase58();
 
@@ -275,6 +284,24 @@ export default function TransactionDetailsPage() {
     }
   };
 
+  const handleAddToCancelBatch = () => {
+    if (transactionIndex === null || !multisigAddress) return;
+
+    const txIndex = Number(transactionIndex);
+    const added = addToBatchCancel({
+      multisigPda: multisigAddress,
+      transactionIndex: txIndex,
+      label: tags.length > 0 ? tags.map((t) => t.label).join(', ') : 'Transaction',
+    });
+
+    if (added) {
+      toast.success(`Added #${txIndex} to batch cancel`);
+      navigate(`/${multisigAddress}/transactions`);
+    } else {
+      toast.error('Batch is full');
+    }
+  };
+
   return (
     <div className="px-3 py-4 sm:container sm:mx-auto sm:py-8">
       {/* Header with tags on right */}
@@ -298,7 +325,7 @@ export default function TransactionDetailsPage() {
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-foreground sm:text-2xl">Transaction Details</h1>
               {isStale && proposalStatus !== 'Executed' && proposalStatus !== 'Cancelled' && (
-                <div className="text-warning bg-warning/10 border-warning/20 flex items-center gap-1 rounded-md border px-2 py-1">
+                <div className="flex items-center gap-1 rounded-md border border-yellow-500/20 bg-yellow-500/10 px-2 py-1 text-yellow-600 dark:text-yellow-500">
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
                       strokeLinecap="round"
@@ -361,12 +388,25 @@ export default function TransactionDetailsPage() {
                 </SplitButton>
               )}
               {showCancel && (
-                <CancelButton
-                  multisigPda={multisigAddress}
-                  transactionIndex={Number(transactionIndex)}
-                  proposalStatus={proposalStatus}
-                  programId={actualProgramId}
-                />
+                <SplitButton
+                  variant="outline"
+                  items={[{
+                    label: !canVote
+                      ? 'Batch Cancel (needs Vote permission)'
+                      : isInBatchCancel(multisigAddress, Number(transactionIndex))
+                        ? 'In Batch'
+                        : 'Batch Cancel',
+                    onClick: handleAddToCancelBatch,
+                    disabled: !canVote || isInBatchCancel(multisigAddress, Number(transactionIndex)),
+                  }]}
+                >
+                  <CancelButton
+                    multisigPda={multisigAddress}
+                    transactionIndex={Number(transactionIndex)}
+                    proposalStatus={proposalStatus}
+                    programId={actualProgramId}
+                  />
+                </SplitButton>
               )}
             </div>
           )}
@@ -375,10 +415,10 @@ export default function TransactionDetailsPage() {
 
       {/* Stale Transaction Warning */}
       {isStale && proposalStatus !== 'Executed' && proposalStatus !== 'Cancelled' && (
-        <div className="border-warning/50 bg-warning/10 mb-6 rounded-lg border p-4">
+        <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-950/30">
           <div className="flex items-start gap-3">
             <svg
-              className="text-warning mt-0.5 h-5 w-5"
+              className="mt-0.5 h-5 w-5 text-yellow-600 dark:text-yellow-400"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -391,11 +431,20 @@ export default function TransactionDetailsPage() {
               />
             </svg>
             <div>
-              <h3 className="text-warning font-semibold">This transaction is stale</h3>
-              <p className="text-warning/80 mt-1 text-sm">
-                A newer transaction has been executed since this one was created. This transaction
-                can no longer be executed and should be considered obsolete.
-              </p>
+              <h3 className="font-semibold text-yellow-800 dark:text-yellow-300">This transaction is stale</h3>
+              {/* The program still executes a stale vault or batch transaction that
+                  was approved first; a stale config transaction is refused. */}
+              {proposalStatus === 'Approved' && !isConfigTransaction ? (
+                <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-400">
+                  The multisig config has changed since this transaction was created, but it was
+                  approved first, so it can still be executed. Cancel it if it should not run.
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-400">
+                  The multisig config has changed since this transaction was created. It can no
+                  longer be approved or executed and should be considered obsolete.
+                </p>
+              )}
             </div>
           </div>
         </div>

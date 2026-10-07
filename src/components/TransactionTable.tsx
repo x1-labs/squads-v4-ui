@@ -13,9 +13,11 @@ import { toast } from 'sonner';
 import { TransactionTagList } from './TransactionTag';
 import { TransactionTag } from '@/lib/instructions/types';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useAccess } from '@/hooks/useAccess';
+import { useAccess, useCanVote } from '@/hooks/useAccess';
 import { useBatchApprovals } from '@/hooks/useBatchApprovals';
 import { useBatchExecutes } from '@/hooks/useBatchExecutes';
+import { useBatchCancels } from '@/hooks/useBatchCancels';
+import { isTransactionStale } from '@/lib/proposals';
 import { Layers } from 'lucide-react';
 
 // Format address to show first 8 and last 8 characters
@@ -32,6 +34,7 @@ interface ActionButtonsProps {
   programId: string;
   proposal: multisig.generated.Proposal | null;
   tags?: TransactionTag[];
+  isStale: boolean;
 }
 
 export default function TransactionTable({
@@ -55,6 +58,7 @@ export default function TransactionTable({
   const { connected } = useWallet();
   const { hasItem: isInBatchApproval } = useBatchApprovals();
   const { hasItem: isInBatchExecute } = useBatchExecutes();
+  const { hasItem: isInBatchCancel } = useBatchCancels();
 
   if (transactions.length === 0) {
     return (
@@ -107,9 +111,8 @@ export default function TransactionTable({
     <TableBody>
       {transactions.map((transaction, index) => {
         const stale =
-          (multisigConfig &&
-            Number(multisigConfig.staleTransactionIndex) > Number(transaction.index)) ||
-          false;
+          !!multisigConfig &&
+          isTransactionStale(Number(multisigConfig.staleTransactionIndex), Number(transaction.index));
         const isExecuted = transaction.proposal?.status.__kind === 'Executed';
         const isCancelled = transaction.proposal?.status.__kind === 'Cancelled';
         const isRejected = transaction.proposal?.status.__kind === 'Rejected';
@@ -133,7 +136,9 @@ export default function TransactionTable({
                 >
                   {Number(transaction.index)}
                 </span>
-                {(isInBatchApproval(Number(transaction.index)) || isInBatchExecute(Number(transaction.index))) && (
+                {(isInBatchApproval(Number(transaction.index)) ||
+                  isInBatchExecute(Number(transaction.index)) ||
+                  isInBatchCancel(multisigPda!, Number(transaction.index))) && (
                   <Badge variant="secondary" className="gap-1 px-1.5 py-0.5 text-xs">
                     <Layers className="h-3 w-3" />
                     Batch
@@ -187,7 +192,7 @@ export default function TransactionTable({
               </div>
             </TableCell>
             <TableCell className="text-right">
-              {(!stale || isExecuted || isCancelled) && connected && isMember && (
+              {connected && isMember && (
                 <ActionButtons
                   multisigPda={multisigPda!}
                   transactionIndex={Number(transaction.index)}
@@ -196,6 +201,7 @@ export default function TransactionTable({
                   programId={programId ? programId : multisig.PROGRAM_ID.toBase58()}
                   proposal={transaction.proposal}
                   tags={transaction.tags}
+                  isStale={stale}
                 />
               )}
             </TableCell>
@@ -214,15 +220,15 @@ function ActionButtons({
   programId,
   proposal,
   tags,
+  isStale,
 }: ActionButtonsProps) {
   const wallet = useWallet();
   const navigate = useNavigate();
   const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
+  const { addItem: addToBatchCancel, hasItem: isInBatchCancel } = useBatchCancels();
+  const canVote = useCanVote();
 
-  // Check if current user has already approved, rejected or cancelled
-  const walletPubkeyStr = wallet.publicKey?.toBase58();
-  const approvedListStr = proposal?.approved?.map(m => m.toBase58()) || [];
-  const hasUserApproved = walletPubkeyStr ? approvedListStr.includes(walletPubkeyStr) : false;
+  // Check if current user has already rejected or canceled
   const hasUserRejected = proposal?.rejected?.some((member) =>
     wallet.publicKey ? member.equals(wallet.publicKey) : false
   );
@@ -231,10 +237,13 @@ function ActionButtons({
   );
   const hasUserTakenNegativeAction = hasUserRejected || hasUserCancelled;
 
-  // Determine which buttons to show based on status
+  // Determine which buttons to show based on status. The program refuses
+  // approve/reject on a stale proposal but allows cancel, and a stale Approved
+  // vault transaction can still execute, so Cancel ignores staleness. Reject
+  // stays available after approving: the program swaps the member's vote.
   const showReject =
-    !hasUserApproved && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
-  const showExecute = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
+    !isStale && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+  const showExecute = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
   const showCancel = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
 
   const handleAddToExecuteBatch = () => {
@@ -249,6 +258,19 @@ function ActionButtons({
 
     if (added) {
       navigate(`/${multisigPda}/transactions`);
+    }
+  };
+
+  const handleAddToCancelBatch = () => {
+    const added = addToBatchCancel({
+      multisigPda,
+      transactionIndex,
+      label: tags && tags.length > 0 ? tags.map((t) => t.label).join(', ') : 'Transaction',
+    });
+    if (added) {
+      toast.success(`Added #${transactionIndex} to batch cancel`);
+    } else {
+      toast.error('Batch is full');
     }
   };
 
@@ -280,12 +302,25 @@ function ActionButtons({
         </SplitButton>
       )}
       {showCancel && (
-        <CancelButton
-          multisigPda={multisigPda}
-          transactionIndex={transactionIndex}
-          proposalStatus={proposalStatus}
-          programId={programId}
-        />
+        <SplitButton
+          variant="outline"
+          items={[{
+            label: !canVote
+              ? 'Batch Cancel (needs Vote permission)'
+              : isInBatchCancel(multisigPda, transactionIndex)
+                ? 'In Batch'
+                : 'Batch Cancel',
+            onClick: handleAddToCancelBatch,
+            disabled: !canVote || isInBatchCancel(multisigPda, transactionIndex),
+          }]}
+        >
+          <CancelButton
+            multisigPda={multisigPda}
+            transactionIndex={transactionIndex}
+            proposalStatus={proposalStatus}
+            programId={programId}
+          />
+        </SplitButton>
       )}
     </div>
   );

@@ -14,6 +14,8 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess } from '@/hooks/useAccess';
 import { useBatchApprovals } from '@/hooks/useBatchApprovals';
 import { useBatchExecutes } from '@/hooks/useBatchExecutes';
+import { useBatchCancels } from '@/hooks/useBatchCancels';
+import { isTransactionStale } from '@/lib/proposals';
 import { Layers } from 'lucide-react';
 
 // Format address to show first 8 and last 8 characters
@@ -29,6 +31,7 @@ interface ActionButtonsProps {
   proposalStatus: string;
   programId: string;
   proposal: multisig.generated.Proposal | null;
+  isStale: boolean;
 }
 
 export default function TransactionTableMobile({
@@ -52,6 +55,7 @@ export default function TransactionTableMobile({
   const { connected } = useWallet();
   const { hasItem: isInBatchApproval } = useBatchApprovals();
   const { hasItem: isInBatchExecute } = useBatchExecutes();
+  const { hasItem: isInBatchCancel } = useBatchCancels();
 
   if (transactions.length === 0) {
     return (
@@ -83,9 +87,8 @@ export default function TransactionTableMobile({
     <div className="space-y-3">
       {transactions.map((transaction, index) => {
         const stale =
-          (multisigConfig &&
-            Number(multisigConfig.staleTransactionIndex) > Number(transaction.index)) ||
-          false;
+          !!multisigConfig &&
+          isTransactionStale(Number(multisigConfig.staleTransactionIndex), Number(transaction.index));
         const isExecuted = transaction.proposal?.status.__kind === 'Executed';
         const isCancelled = transaction.proposal?.status.__kind === 'Cancelled';
         const isRejected = transaction.proposal?.status.__kind === 'Rejected';
@@ -109,7 +112,9 @@ export default function TransactionTableMobile({
                 >
                   {Number(transaction.index)}
                 </span>
-                {(isInBatchApproval(Number(transaction.index)) || isInBatchExecute(Number(transaction.index))) && (
+                {(isInBatchApproval(Number(transaction.index)) ||
+                  isInBatchExecute(Number(transaction.index)) ||
+                  isInBatchCancel(multisigPda!, Number(transaction.index))) && (
                   <Badge variant="secondary" className="gap-1 px-1.5 py-0.5 text-xs">
                     <Layers className="h-3 w-3" />
                     Batch
@@ -167,6 +172,7 @@ export default function TransactionTableMobile({
                 proposalStatus={transaction.proposal?.status.__kind || 'None'}
                 programId={programId ? programId : multisig.PROGRAM_ID.toBase58()}
                 proposal={transaction.proposal}
+                isStale={stale}
               />
             )}
           </div>
@@ -183,6 +189,7 @@ function ActionButtons({
   proposalStatus,
   programId,
   proposal,
+  isStale,
 }: ActionButtonsProps) {
   const wallet = useWallet();
 
@@ -195,10 +202,12 @@ function ActionButtons({
   );
   const hasUserTakenNegativeAction = hasUserRejected || hasUserCancelled;
 
-  // Determine which buttons to show based on status
+  // Determine which buttons to show based on status. The program refuses
+  // approve/reject on a stale proposal but allows cancel, and a stale Approved
+  // vault transaction can still execute, so only Cancel ignores staleness.
   const showReject =
-    !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
-  const showExecute = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
+    !isStale && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+  const showExecute = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
   const showCancel = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
 
   return (

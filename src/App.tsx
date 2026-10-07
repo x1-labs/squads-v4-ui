@@ -24,6 +24,7 @@ import { AutoAddEnvSquads } from './components/AutoAddEnvSquads';
 import { BatchTransactionsProvider } from './hooks/useBatchTransactions';
 import { BatchApprovalsProvider } from './hooks/useBatchApprovals';
 import { BatchExecutesProvider } from './hooks/useBatchExecutes';
+import { BatchCancelsProvider } from './hooks/useBatchCancels';
 
 // Create the QueryClient once at module scope. Creating it inside the component
 // body would discard the entire query cache (RPC URL, multisig data, …) on every
@@ -39,6 +40,7 @@ const App = () => {
           <BatchTransactionsProvider>
           <BatchApprovalsProvider>
           <BatchExecutesProvider>
+          <BatchCancelsProvider>
           <BrowserRouter>
             <div className="flex h-screen min-w-full flex-col bg-background dark:bg-background md:flex-row">
               <Suspense fallback={null}>
@@ -78,6 +80,7 @@ const App = () => {
               />
             </div>
           </BrowserRouter>
+          </BatchCancelsProvider>
           </BatchExecutesProvider>
           </BatchApprovalsProvider>
           </BatchTransactionsProvider>

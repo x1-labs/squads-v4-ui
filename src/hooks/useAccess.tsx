@@ -23,3 +23,23 @@ export const useAccess = () => {
     return false;
   }
 };
+
+/**
+ * Whether the connected wallet is a member with the Vote permission, which the
+ * program requires for approve, reject and cancel. useAccess only checks
+ * membership.
+ */
+export const useCanVote = () => {
+  const { data: multisigAccount } = useMultisig();
+  const { publicKey } = useWallet();
+
+  if (!multisigAccount || !publicKey) {
+    return false;
+  }
+
+  const member = isMember(publicKey, multisigAccount.members);
+  return (
+    !!member &&
+    (member.permissions.mask & multisig.types.Permission.Vote) === multisig.types.Permission.Vote
+  );
+};
