@@ -16,6 +16,8 @@ import { useNavigate } from 'react-router-dom';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { BatchApprovalPanel } from '@/components/batch/BatchApprovalPanel';
 import { BatchExecutePanel } from '@/components/batch/BatchExecutePanel';
+import { BatchCancelPanel } from '@/components/batch/BatchCancelPanel';
+import { StaleApprovedNotice } from '@/components/batch/StaleApprovedNotice';
 
 const TRANSACTIONS_PER_PAGE = 10;
 
@@ -86,8 +88,10 @@ export default function TransactionsPage() {
             <CreateTransaction />
           </div>
 
+          <StaleApprovedNotice />
           <BatchApprovalPanel />
           <BatchExecutePanel />
+          <BatchCancelPanel />
 
           <Suspense>
             {/* Desktop Table View */}

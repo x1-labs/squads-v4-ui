@@ -14,6 +14,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess } from '@/hooks/useAccess';
 import { useBatchApprovals } from '@/hooks/useBatchApprovals';
 import { useBatchExecutes } from '@/hooks/useBatchExecutes';
+import { useBatchCancels } from '@/hooks/useBatchCancels';
 import { Layers } from 'lucide-react';
 
 // Format address to show first 8 and last 8 characters
@@ -53,6 +54,7 @@ export default function TransactionTableMobile({
   const { connected } = useWallet();
   const { hasItem: isInBatchApproval } = useBatchApprovals();
   const { hasItem: isInBatchExecute } = useBatchExecutes();
+  const { hasItem: isInBatchCancel } = useBatchCancels();
 
   if (transactions.length === 0) {
     return (
@@ -110,7 +112,9 @@ export default function TransactionTableMobile({
                 >
                   {Number(transaction.index)}
                 </span>
-                {(isInBatchApproval(Number(transaction.index)) || isInBatchExecute(Number(transaction.index))) && (
+                {(isInBatchApproval(Number(transaction.index)) ||
+                  isInBatchExecute(Number(transaction.index)) ||
+                  isInBatchCancel(multisigPda!, Number(transaction.index))) && (
                   <Badge variant="secondary" className="gap-1 px-1.5 py-0.5 text-xs">
                     <Layers className="h-3 w-3" />
                     Batch

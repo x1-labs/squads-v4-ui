@@ -23,6 +23,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess } from '@/hooks/useAccess';
 import { useBatchApprovals } from '@/hooks/useBatchApprovals';
 import { useBatchExecutes } from '@/hooks/useBatchExecutes';
+import { useBatchCancels } from '@/hooks/useBatchCancels';
 import { toast } from 'sonner';
 
 export default function TransactionDetailsPage() {
@@ -37,6 +38,7 @@ export default function TransactionDetailsPage() {
   const isMember = useAccess();
   const { addItem: addToBatchApproval, hasItem: isInBatchApproval, remainingSlots: remainingApprovalSlots } = useBatchApprovals();
   const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
+  const { addItem: addToBatchCancel, hasItem: isInBatchCancel } = useBatchCancels();
 
   // Create connection with the configured RPC URL
   const connection = useMemo(() => {
@@ -278,6 +280,24 @@ export default function TransactionDetailsPage() {
     }
   };
 
+  const handleAddToCancelBatch = () => {
+    if (transactionIndex === null || !multisigAddress) return;
+
+    const txIndex = Number(transactionIndex);
+    const added = addToBatchCancel({
+      multisigPda: multisigAddress,
+      transactionIndex: txIndex,
+      label: tags.length > 0 ? tags.map((t) => t.label).join(', ') : 'Transaction',
+    });
+
+    if (added) {
+      toast.success(`Added #${txIndex} to batch cancel`);
+      navigate(`/${multisigAddress}/transactions`);
+    } else {
+      toast.error('Batch is full');
+    }
+  };
+
   return (
     <div className="px-3 py-4 sm:container sm:mx-auto sm:py-8">
       {/* Header with tags on right */}
@@ -301,7 +321,7 @@ export default function TransactionDetailsPage() {
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-bold text-foreground sm:text-2xl">Transaction Details</h1>
               {isStale && proposalStatus !== 'Executed' && proposalStatus !== 'Cancelled' && (
-                <div className="text-warning bg-warning/10 border-warning/20 flex items-center gap-1 rounded-md border px-2 py-1">
+                <div className="flex items-center gap-1 rounded-md border border-yellow-500/20 bg-yellow-500/10 px-2 py-1 text-yellow-600 dark:text-yellow-500">
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
                       strokeLinecap="round"
@@ -364,12 +384,21 @@ export default function TransactionDetailsPage() {
                 </SplitButton>
               )}
               {showCancel && (
-                <CancelButton
-                  multisigPda={multisigAddress}
-                  transactionIndex={Number(transactionIndex)}
-                  proposalStatus={proposalStatus}
-                  programId={actualProgramId}
-                />
+                <SplitButton
+                  variant="outline"
+                  items={[{
+                    label: isInBatchCancel(multisigAddress, Number(transactionIndex)) ? 'In Batch' : 'Batch Cancel',
+                    onClick: handleAddToCancelBatch,
+                    disabled: isInBatchCancel(multisigAddress, Number(transactionIndex)),
+                  }]}
+                >
+                  <CancelButton
+                    multisigPda={multisigAddress}
+                    transactionIndex={Number(transactionIndex)}
+                    proposalStatus={proposalStatus}
+                    programId={actualProgramId}
+                  />
+                </SplitButton>
               )}
             </div>
           )}
@@ -378,10 +407,10 @@ export default function TransactionDetailsPage() {
 
       {/* Stale Transaction Warning */}
       {isStale && proposalStatus !== 'Executed' && proposalStatus !== 'Cancelled' && (
-        <div className="border-warning/50 bg-warning/10 mb-6 rounded-lg border p-4">
+        <div className="mb-6 rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-950/30">
           <div className="flex items-start gap-3">
             <svg
-              className="text-warning mt-0.5 h-5 w-5"
+              className="mt-0.5 h-5 w-5 text-yellow-600 dark:text-yellow-400"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -394,14 +423,14 @@ export default function TransactionDetailsPage() {
               />
             </svg>
             <div>
-              <h3 className="text-warning font-semibold">This transaction is stale</h3>
+              <h3 className="font-semibold text-yellow-800 dark:text-yellow-300">This transaction is stale</h3>
               {proposalStatus === 'Approved' ? (
-                <p className="text-warning/80 mt-1 text-sm">
+                <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-400">
                   The multisig config has changed since this transaction was created, but it was
                   approved first, so it can still be executed. Cancel it if it should not run.
                 </p>
               ) : (
-                <p className="text-warning/80 mt-1 text-sm">
+                <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-400">
                   The multisig config has changed since this transaction was created. It can no
                   longer be approved or executed and should be considered obsolete.
                 </p>

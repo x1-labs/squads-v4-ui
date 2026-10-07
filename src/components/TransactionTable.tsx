@@ -16,6 +16,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess } from '@/hooks/useAccess';
 import { useBatchApprovals } from '@/hooks/useBatchApprovals';
 import { useBatchExecutes } from '@/hooks/useBatchExecutes';
+import { useBatchCancels } from '@/hooks/useBatchCancels';
 import { Layers } from 'lucide-react';
 
 // Format address to show first 8 and last 8 characters
@@ -56,6 +57,7 @@ export default function TransactionTable({
   const { connected } = useWallet();
   const { hasItem: isInBatchApproval } = useBatchApprovals();
   const { hasItem: isInBatchExecute } = useBatchExecutes();
+  const { hasItem: isInBatchCancel } = useBatchCancels();
 
   if (transactions.length === 0) {
     return (
@@ -134,7 +136,9 @@ export default function TransactionTable({
                 >
                   {Number(transaction.index)}
                 </span>
-                {(isInBatchApproval(Number(transaction.index)) || isInBatchExecute(Number(transaction.index))) && (
+                {(isInBatchApproval(Number(transaction.index)) ||
+                  isInBatchExecute(Number(transaction.index)) ||
+                  isInBatchCancel(multisigPda!, Number(transaction.index))) && (
                   <Badge variant="secondary" className="gap-1 px-1.5 py-0.5 text-xs">
                     <Layers className="h-3 w-3" />
                     Batch
@@ -221,6 +225,7 @@ function ActionButtons({
   const wallet = useWallet();
   const navigate = useNavigate();
   const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
+  const { addItem: addToBatchCancel, hasItem: isInBatchCancel } = useBatchCancels();
 
   // Check if current user has already rejected or cancelled
   const hasUserRejected = proposal?.rejected?.some((member) =>
@@ -255,6 +260,19 @@ function ActionButtons({
     }
   };
 
+  const handleAddToCancelBatch = () => {
+    const added = addToBatchCancel({
+      multisigPda,
+      transactionIndex,
+      label: tags && tags.length > 0 ? tags.map((t) => t.label).join(', ') : 'Transaction',
+    });
+    if (added) {
+      toast.success(`Added #${transactionIndex} to batch cancel`);
+    } else {
+      toast.error('Batch is full');
+    }
+  };
+
   return (
     <div className="flex items-center justify-end gap-1">
       {showReject && <ReviewButton multisigPda={multisigPda} transactionPda={transactionPda} />}
@@ -283,12 +301,21 @@ function ActionButtons({
         </SplitButton>
       )}
       {showCancel && (
-        <CancelButton
-          multisigPda={multisigPda}
-          transactionIndex={transactionIndex}
-          proposalStatus={proposalStatus}
-          programId={programId}
-        />
+        <SplitButton
+          variant="outline"
+          items={[{
+            label: isInBatchCancel(multisigPda, transactionIndex) ? 'In Batch' : 'Batch Cancel',
+            onClick: handleAddToCancelBatch,
+            disabled: isInBatchCancel(multisigPda, transactionIndex),
+          }]}
+        >
+          <CancelButton
+            multisigPda={multisigPda}
+            transactionIndex={transactionIndex}
+            proposalStatus={proposalStatus}
+            programId={programId}
+          />
+        </SplitButton>
       )}
     </div>
   );
