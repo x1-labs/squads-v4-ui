@@ -48,6 +48,7 @@ export default function TransactionDetailsPage() {
   const [transactionIndex, setTransactionIndex] = React.useState<bigint | null>(null);
   const [proposal, setProposal] = React.useState<multisig.generated.Proposal | null>(null);
   const [tags, setTags] = React.useState<TransactionTag[]>([]);
+  const [isConfigTransaction, setIsConfigTransaction] = React.useState<boolean>(false);
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
 
   // Helper function to set up squad
@@ -126,6 +127,7 @@ export default function TransactionDetailsPage() {
       );
       const index = BigInt(configTx.index.toString());
       setTransactionIndex(index);
+      setIsConfigTransaction(true);
 
       const multisigPubkey = setupSquad(configTx.multisig);
       await extractTagsForTransaction(multisigPubkey, index);
@@ -158,6 +160,7 @@ export default function TransactionDetailsPage() {
   React.useEffect(() => {
     const fetchTransactionDetails = async () => {
       if (!transactionPda || !programId) return;
+      setIsConfigTransaction(false);
 
       try {
         // Try to fetch the transaction to get its index and multisig
@@ -206,11 +209,11 @@ export default function TransactionDetailsPage() {
     );
   }
 
-  // Check if transaction is stale
+  // Check if transaction is stale (index <= staleTransactionIndex, as in proposal_vote.rs)
   const isStale =
     transactionIndex !== null &&
     multisigConfig &&
-    Number(multisigConfig.staleTransactionIndex) > Number(transactionIndex);
+    Number(multisigConfig.staleTransactionIndex) >= Number(transactionIndex);
 
   // Check if current user has already approved, rejected or cancelled
   const walletPubkeyStr = wallet.publicKey?.toBase58();
@@ -424,7 +427,9 @@ export default function TransactionDetailsPage() {
             </svg>
             <div>
               <h3 className="font-semibold text-yellow-800 dark:text-yellow-300">This transaction is stale</h3>
-              {proposalStatus === 'Approved' ? (
+              {/* The program still executes a stale vault or batch transaction that
+                  was approved first; a stale config transaction is refused. */}
+              {proposalStatus === 'Approved' && !isConfigTransaction ? (
                 <p className="mt-1 text-sm text-yellow-700 dark:text-yellow-400">
                   The multisig config has changed since this transaction was created, but it was
                   approved first, so it can still be executed. Cancel it if it should not run.

@@ -111,7 +111,7 @@ export default function TransactionTable({
       {transactions.map((transaction, index) => {
         const stale =
           (multisigConfig &&
-            Number(multisigConfig.staleTransactionIndex) > Number(transaction.index)) ||
+            Number(multisigConfig.staleTransactionIndex) >= Number(transaction.index)) ||
           false;
         const isExecuted = transaction.proposal?.status.__kind === 'Executed';
         const isCancelled = transaction.proposal?.status.__kind === 'Cancelled';

@@ -175,8 +175,12 @@ export function BatchCancelPanel() {
           </Button>
         </div>
         <CardDescription>
-          Vote to cancel multiple Approved proposals in a single transaction. A proposal is
-          cancelled for good once enough members (the threshold) have voted.
+          Vote to cancel multiple Approved proposals on multisig{' '}
+          <span className="font-mono">
+            {multisigAddress.slice(0, 4)}...{multisigAddress.slice(-4)}
+          </span>{' '}
+          in a single transaction. A proposal is cancelled for good once enough members (the
+          threshold) have voted.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
