@@ -27,6 +27,11 @@ export function StaleApprovedNotice() {
     ? staleApproved.filter((p) => !p.cancelled.some((m) => m.equals(publicKey)))
     : [];
 
+  // A member who has voted to cancel all of them has nothing left to do here.
+  if (isMember && publicKey && notYetCancelledByMe.length === 0) {
+    return null;
+  }
+
   const handleQueue = () => {
     const pending = notYetCancelledByMe.filter(
       (p) => !hasItem(multisigAddress, p.transactionIndex)
