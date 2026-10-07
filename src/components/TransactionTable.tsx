@@ -32,6 +32,7 @@ interface ActionButtonsProps {
   programId: string;
   proposal: multisig.generated.Proposal | null;
   tags?: TransactionTag[];
+  isStale: boolean;
 }
 
 export default function TransactionTable({
@@ -187,7 +188,7 @@ export default function TransactionTable({
               </div>
             </TableCell>
             <TableCell className="text-right">
-              {(!stale || isExecuted || isCancelled) && connected && isMember && (
+              {connected && isMember && (
                 <ActionButtons
                   multisigPda={multisigPda!}
                   transactionIndex={Number(transaction.index)}
@@ -196,6 +197,7 @@ export default function TransactionTable({
                   programId={programId ? programId : multisig.PROGRAM_ID.toBase58()}
                   proposal={transaction.proposal}
                   tags={transaction.tags}
+                  isStale={stale}
                 />
               )}
             </TableCell>
@@ -214,15 +216,13 @@ function ActionButtons({
   programId,
   proposal,
   tags,
+  isStale,
 }: ActionButtonsProps) {
   const wallet = useWallet();
   const navigate = useNavigate();
   const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
 
-  // Check if current user has already approved, rejected or cancelled
-  const walletPubkeyStr = wallet.publicKey?.toBase58();
-  const approvedListStr = proposal?.approved?.map(m => m.toBase58()) || [];
-  const hasUserApproved = walletPubkeyStr ? approvedListStr.includes(walletPubkeyStr) : false;
+  // Check if current user has already rejected or cancelled
   const hasUserRejected = proposal?.rejected?.some((member) =>
     wallet.publicKey ? member.equals(wallet.publicKey) : false
   );
@@ -231,10 +231,13 @@ function ActionButtons({
   );
   const hasUserTakenNegativeAction = hasUserRejected || hasUserCancelled;
 
-  // Determine which buttons to show based on status
+  // Determine which buttons to show based on status. The program refuses
+  // approve/reject on a stale proposal but allows cancel, and a stale Approved
+  // vault transaction can still execute, so Cancel ignores staleness. Reject
+  // stays available after approving: the program swaps the member's vote.
   const showReject =
-    !hasUserApproved && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
-  const showExecute = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
+    !isStale && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+  const showExecute = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
   const showCancel = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
 
   const handleAddToExecuteBatch = () => {

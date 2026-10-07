@@ -222,14 +222,17 @@ export default function TransactionDetailsPage() {
   );
   const hasUserTakenNegativeAction = hasUserRejected || hasUserCancelled;
 
-  // Determine which action buttons to show
+  // Determine which action buttons to show. The program refuses approve/reject
+  // on a stale proposal but allows cancel, and a stale Approved vault
+  // transaction can still execute, so Cancel ignores staleness. Reject stays
+  // available after approving: the program swaps the member's vote.
   const proposalStatus = proposal?.status.__kind || 'None';
   const showApprove =
     !isStale && !hasUserApproved && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
   const showReject =
-    !isStale && !hasUserApproved && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
+    !isStale && !hasUserTakenNegativeAction && ['None', 'Draft', 'Active'].includes(proposalStatus);
   const showExecute = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
-  const showCancel = !isStale && !hasUserTakenNegativeAction && proposalStatus === 'Approved';
+  const showCancel = !hasUserTakenNegativeAction && proposalStatus === 'Approved';
 
   const actualProgramId = programId?.toBase58() || multisig.PROGRAM_ID.toBase58();
 
@@ -392,10 +395,17 @@ export default function TransactionDetailsPage() {
             </svg>
             <div>
               <h3 className="text-warning font-semibold">This transaction is stale</h3>
-              <p className="text-warning/80 mt-1 text-sm">
-                A newer transaction has been executed since this one was created. This transaction
-                can no longer be executed and should be considered obsolete.
-              </p>
+              {proposalStatus === 'Approved' ? (
+                <p className="text-warning/80 mt-1 text-sm">
+                  The multisig config has changed since this transaction was created, but it was
+                  approved first, so it can still be executed. Cancel it if it should not run.
+                </p>
+              ) : (
+                <p className="text-warning/80 mt-1 text-sm">
+                  The multisig config has changed since this transaction was created. It can no
+                  longer be approved or executed and should be considered obsolete.
+                </p>
+              )}
             </div>
           </div>
         </div>
