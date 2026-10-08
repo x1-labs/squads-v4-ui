@@ -16,6 +16,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess, useCanVote } from '@/hooks/useAccess';
 import { useBatchApprovals } from '@/hooks/useBatchApprovals';
 import { useBatchExecutes } from '@/hooks/useBatchExecutes';
+import { useTimeLockStatus } from '@/hooks/useTimeLockStatus';
 import { useBatchCancels } from '@/hooks/useBatchCancels';
 import { isTransactionStale } from '@/lib/proposals';
 import { Layers } from 'lucide-react';
@@ -225,6 +226,7 @@ function ActionButtons({
   const wallet = useWallet();
   const navigate = useNavigate();
   const { addItem: addToBatchExecute, hasItem: isInBatchExecute } = useBatchExecutes();
+  const { locked: isTimeLocked } = useTimeLockStatus(proposal);
   const { addItem: addToBatchCancel, hasItem: isInBatchCancel } = useBatchCancels();
   const canVote = useCanVote();
 
@@ -290,13 +292,14 @@ function ActionButtons({
           items={[{
             label: isInBatchExecute(transactionIndex) ? 'In Batch' : 'Batch Execute',
             onClick: handleAddToExecuteBatch,
-            disabled: isInBatchExecute(transactionIndex),
+            disabled: isTimeLocked || isInBatchExecute(transactionIndex),
           }]}
         >
           <ExecuteButton
             multisigPda={multisigPda}
             transactionIndex={transactionIndex}
             proposalStatus={proposalStatus}
+            proposal={proposal}
             programId={programId}
           />
         </SplitButton>

@@ -226,6 +226,7 @@ function ActionButtons({
           multisigPda={multisigPda}
           transactionIndex={transactionIndex}
           proposalStatus={proposalStatus}
+          proposal={proposal}
           programId={programId}
         />
       )}
