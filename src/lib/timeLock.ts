@@ -45,6 +45,28 @@ export function timeLockRemaining(
   return Math.max(0, executableAt(approvedTimestamp, timeLock) - Math.floor(nowSeconds));
 }
 
+/** Longest delay `setTimeout` supports (2^31 - 1 ms, about 24.8 days). A longer delay fires at once. */
+export const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+
+/**
+ * Delay for a timer that fires when the time lock releases: the milliseconds
+ * until the proposal can execute, capped at MAX_TIMEOUT_MS. A capped timer
+ * fires before the release, so the caller must check again and set a new timer.
+ */
+export function timeLockTimerDelay(
+  approvedTimestamp: bigint | number,
+  timeLock: number,
+  nowMs: number
+): number {
+  const remainingMs = executableAt(approvedTimestamp, timeLock) * 1000 - nowMs;
+  return Math.min(MAX_TIMEOUT_MS, Math.max(0, remainingMs));
+}
+
+/** Milliseconds until the next whole second, when `timeLockRemaining` changes next. */
+export function nextSecondDelay(nowMs: number): number {
+  return 1000 - (nowMs % 1000);
+}
+
 /** Short duration such as "2 d 3 h", "45 min" or "30 s". Zero is "None". */
 export function formatDuration(totalSeconds: number): string {
   if (totalSeconds <= 0) return 'None';
