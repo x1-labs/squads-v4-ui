@@ -1,5 +1,6 @@
 import AddMemberInput from '@/components/AddMemberInput';
 import ChangeThresholdInput from '@/components/ChangeThresholdInput';
+import ChangeTimeLockInput from '@/components/ChangeTimeLockInput';
 import RemoveMemberButton from '@/components/RemoveMemberButton';
 import EditMemberPermissions from '@/components/EditMemberPermissions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -208,6 +209,25 @@ const ConfigurationPage = () => {
                   <span>Current Threshold: {multisigConfig.threshold} </span>
                 ) : null}
                 <ChangeThresholdInput
+                  multisigPda={multisigAddress!}
+                  transactionIndex={
+                    Number(multisigConfig ? multisigConfig.transactionIndex : 0) + 1
+                  }
+                />
+              </CardContent>
+            </Card>
+          </div>
+          <div className="flex flex-col gap-4 pb-4 sm:flex-row">
+            <Card className="w-full sm:w-1/2">
+              <CardHeader>
+                <CardTitle>Change Time Lock</CardTitle>
+                <CardDescription>
+                  Change how long an approved proposal must wait before it can execute. Members can
+                  cancel an approved proposal during the wait.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ChangeTimeLockInput
                   multisigPda={multisigAddress!}
                   transactionIndex={
                     Number(multisigConfig ? multisigConfig.transactionIndex : 0) + 1

@@ -17,6 +17,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getPriorityFeeMicroLamports } from '../lib/transaction/priorityFee';
 import { describeSendError, signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
 import { toastSteps } from '../lib/transaction/toastSteps';
+import { useTimeLockStatus } from '@/hooks/useTimeLockStatus';
+import { formatDuration } from '@/lib/timeLock';
 
 /** One execute to send: the instruction plus the lookup tables it needs to fit. */
 type Execute = {
@@ -28,6 +30,7 @@ type ExecuteButtonProps = {
   multisigPda: string;
   transactionIndex: number;
   proposalStatus: string;
+  proposal: multisig.generated.Proposal | null;
   programId: string;
 };
 
@@ -35,6 +38,7 @@ const ExecuteButton = ({
   multisigPda,
   transactionIndex,
   proposalStatus,
+  proposal,
   programId,
 }: ExecuteButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -51,7 +55,11 @@ const ExecuteButton = ({
   const [priorityFeeEdited, setPriorityFeeEdited] = useState(false);
   const [computeUnitBudget, setComputeUnitBudget] = useState<number>(200_000);
 
-  const isTransactionReady = proposalStatus === 'Approved';
+  const timeLock = useTimeLockStatus(proposal);
+  const isTransactionReady = proposalStatus === 'Approved' && !timeLock.locked;
+  const executableAtLabel = timeLock.executableAt
+    ? new Date(timeLock.executableAt * 1000).toLocaleString()
+    : '';
 
   const { connection } = useMultisigData();
   const queryClient = useQueryClient();
@@ -111,6 +119,9 @@ const ExecuteButton = ({
     const member = wallet.publicKey;
     let bigIntTransactionIndex = BigInt(transactionIndex);
 
+    if (timeLock.locked) {
+      throw new Error(`Time lock: this proposal can execute after ${executableAtLabel}.`);
+    }
     if (!isTransactionReady) {
       toast.error('Proposal has not reached threshold.');
       return;
@@ -281,8 +292,9 @@ const ExecuteButton = ({
         disabled={!isTransactionReady}
         className={`h-8 px-3 text-sm ${!isTransactionReady ? `bg-primary/50` : `bg-primary hover:bg-primary/90`} rounded-md text-primary-foreground`}
         onClick={() => setIsOpen(true)}
+        title={timeLock.locked ? `Time lock: executable after ${executableAtLabel}` : undefined}
       >
-        Execute
+        {timeLock.locked ? `Executable in ${formatDuration(timeLock.remainingSeconds)}` : 'Execute'}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

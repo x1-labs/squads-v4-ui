@@ -23,6 +23,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useAccess, useCanVote } from '@/hooks/useAccess';
 import { useBatchApprovals } from '@/hooks/useBatchApprovals';
 import { useBatchExecutes } from '@/hooks/useBatchExecutes';
+import { useTimeLockStatus } from '@/hooks/useTimeLockStatus';
 import { useBatchCancels } from '@/hooks/useBatchCancels';
 import { isTransactionStale } from '@/lib/proposals';
 import { toast } from 'sonner';
@@ -49,6 +50,7 @@ export default function TransactionDetailsPage() {
 
   const [transactionIndex, setTransactionIndex] = React.useState<bigint | null>(null);
   const [proposal, setProposal] = React.useState<multisig.generated.Proposal | null>(null);
+  const { locked: isTimeLocked } = useTimeLockStatus(proposal);
   const [tags, setTags] = React.useState<TransactionTag[]>([]);
   const [isConfigTransaction, setIsConfigTransaction] = React.useState<boolean>(false);
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
@@ -376,13 +378,14 @@ export default function TransactionDetailsPage() {
                   items={[{
                     label: isInBatchExecute(Number(transactionIndex)) ? 'In Batch' : 'Batch Execute',
                     onClick: handleAddToExecuteBatch,
-                    disabled: isInBatchExecute(Number(transactionIndex)),
+                    disabled: isTimeLocked || isInBatchExecute(Number(transactionIndex)),
                   }]}
                 >
                   <ExecuteButton
                     multisigPda={multisigAddress}
                     transactionIndex={Number(transactionIndex)}
                     proposalStatus={proposalStatus}
+                    proposal={proposal}
                     programId={actualProgramId}
                   />
                 </SplitButton>
