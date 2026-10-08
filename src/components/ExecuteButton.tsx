@@ -9,7 +9,7 @@ import { Dialog, DialogDescription, DialogHeader } from './ui/dialog';
 import { DialogTrigger } from './ui/dialog';
 import { DialogContent, DialogTitle } from './ui/dialog';
 import { useEffect, useState } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Clock } from 'lucide-react';
 import { Input } from './ui/input';
 import { range } from '@/lib/utils';
 import { useMultisigData } from '@/hooks/useMultisigData';
@@ -18,7 +18,7 @@ import { getPriorityFeeMicroLamports } from '../lib/transaction/priorityFee';
 import { describeSendError, signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
 import { toastSteps } from '../lib/transaction/toastSteps';
 import { useTimeLockStatus } from '@/hooks/useTimeLockStatus';
-import { formatDuration } from '@/lib/timeLock';
+import { formatCountdown } from '@/lib/timeLock';
 
 /** One execute to send: the instruction plus the lookup tables it needs to fit. */
 type Execute = {
@@ -290,11 +290,23 @@ const ExecuteButton = ({
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger
         disabled={!isTransactionReady}
-        className={`h-8 px-3 text-sm ${!isTransactionReady ? `bg-primary/50` : `bg-primary hover:bg-primary/90`} rounded-md text-primary-foreground`}
+        className={`inline-flex h-8 items-center gap-1.5 whitespace-nowrap px-3 text-sm ${!isTransactionReady ? `bg-primary/50` : `bg-primary hover:bg-primary/90`} rounded-md text-primary-foreground`}
         onClick={() => setIsOpen(true)}
         title={timeLock.locked ? `Time lock: executable after ${executableAtLabel}` : undefined}
+        aria-label={
+          timeLock.locked
+            ? `Time lock: executable in ${formatCountdown(timeLock.remainingSeconds)}`
+            : undefined
+        }
       >
-        {timeLock.locked ? `Executable in ${formatDuration(timeLock.remainingSeconds)}` : 'Execute'}
+        {timeLock.locked ? (
+          <>
+            <Clock className="h-3.5 w-3.5" />
+            <span className="tabular-nums">{formatCountdown(timeLock.remainingSeconds)}</span>
+          </>
+        ) : (
+          'Execute'
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

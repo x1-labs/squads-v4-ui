@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   MAX_TIME_LOCK_SECONDS,
   executableAt,
+  formatCountdown,
   formatDuration,
   parseTimeLockInput,
   timeLockRemaining,
@@ -71,5 +72,24 @@ describe('formatDuration', () => {
     assert.equal(formatDuration(86_400), '1 d');
     assert.equal(formatDuration(97_200), '1 d 3 h');
     assert.equal(formatDuration(MAX_TIME_LOCK_SECONDS), '90 d');
+  });
+});
+
+describe('formatCountdown', () => {
+  test('shows the two largest units, compact', () => {
+    assert.equal(formatCountdown(521), '8m 41s');
+    assert.equal(formatCountdown(8_100), '2h 15m');
+    assert.equal(formatCountdown(97_200), '1d 3h');
+    assert.equal(formatCountdown(41), '41s');
+  });
+
+  test('skips a zero second unit', () => {
+    assert.equal(formatCountdown(7_200), '2h');
+    assert.equal(formatCountdown(86_430), '1d');
+  });
+
+  test('zero and below is 0s', () => {
+    assert.equal(formatCountdown(0), '0s');
+    assert.equal(formatCountdown(-3), '0s');
   });
 });

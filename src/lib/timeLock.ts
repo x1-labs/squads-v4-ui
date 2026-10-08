@@ -59,3 +59,21 @@ export function formatDuration(totalSeconds: number): string {
   if (seconds && !days && !hours) parts.push(`${seconds} s`);
   return parts.join(' ');
 }
+
+/** Compact countdown for buttons: the two largest units, such as "1d 3h", "2h 15m" or "8m 41s". */
+export function formatCountdown(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const units: [number, string][] = [
+    [Math.floor(s / 86_400), 'd'],
+    [Math.floor((s % 86_400) / 3_600), 'h'],
+    [Math.floor((s % 3_600) / 60), 'm'],
+    [s % 60, 's'],
+  ];
+  const first = units.findIndex(([n]) => n > 0);
+  if (first === -1) return '0s';
+  return units
+    .slice(first, first + 2)
+    .filter(([n]) => n > 0)
+    .map(([n, unit]) => `${n}${unit}`)
+    .join(' ');
+}
