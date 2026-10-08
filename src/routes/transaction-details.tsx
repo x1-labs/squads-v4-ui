@@ -51,6 +51,14 @@ export default function TransactionDetailsPage() {
   const [transactionIndex, setTransactionIndex] = React.useState<bigint | null>(null);
   const [proposal, setProposal] = React.useState<multisig.generated.Proposal | null>(null);
   const { locked: isTimeLocked } = useTimeLockStatus(proposal);
+  const multisigPda = useMemo(() => {
+    if (!multisigAddress) return null;
+    try {
+      return new PublicKey(multisigAddress);
+    } catch {
+      return null;
+    }
+  }, [multisigAddress]);
   const [tags, setTags] = React.useState<TransactionTag[]>([]);
   const [isConfigTransaction, setIsConfigTransaction] = React.useState<boolean>(false);
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
@@ -462,11 +470,11 @@ export default function TransactionDetailsPage() {
       )}
 
       {/* Transaction Decoder */}
-      {transactionIndex !== null && multisigAddress && (
+      {transactionIndex !== null && multisigPda && (
         <div className="rounded-lg border border-border bg-card">
           <TransactionDecoder
             connection={connection}
-            multisigPda={new PublicKey(multisigAddress)}
+            multisigPda={multisigPda}
             transactionIndex={transactionIndex}
             programId={programId}
           />

@@ -55,7 +55,7 @@ const ExecuteButton = ({
   const [priorityFeeEdited, setPriorityFeeEdited] = useState(false);
   const [computeUnitBudget, setComputeUnitBudget] = useState<number>(200_000);
 
-  const timeLock = useTimeLockStatus(proposal);
+  const timeLock = useTimeLockStatus(proposal, { countdown: true });
   const isTransactionReady = proposalStatus === 'Approved' && !timeLock.locked;
   const executableAtLabel = timeLock.executableAt
     ? new Date(timeLock.executableAt * 1000).toLocaleString()
