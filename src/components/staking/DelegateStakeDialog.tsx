@@ -24,9 +24,11 @@ import { useMultisigData } from '@/hooks/useMultisigData';
 import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useValidatorMetadata } from '@/hooks/useValidatorMetadata';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAccess } from '@/hooks/useAccess';
+import { useProposePermissions } from '@/hooks/useProposePermissions';
+import { DisabledReason } from '@/components/DisabledReason';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { toastSteps } from '@/lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '@/lib/transaction/proposalInstructions';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import {
   createStakeAccountWithSeedInstructions,
@@ -52,7 +54,7 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
   const queryClient = useQueryClient();
   const parsedAmount = parseFloat(amount);
   const isAmountValid = !isNaN(parsedAmount) && parsedAmount > 0;
-  const isMember = useAccess();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
   const [minStake, setMinStake] = useState<number>(1);
   const { data: validatorInfo } = useValidatorMetadata(
     isPublickey(validatorAddress) ? validatorAddress : undefined
@@ -133,27 +135,19 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
 
-    const proposalIx = multisig.instructions.proposalCreate({
+    const proposalIxs = withProposal(multisigTransactionIx, {
       multisigPda: new PublicKey(multisigAddress),
       creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: transactionIndexBN,
-      rentPayer: wallet.publicKey,
-      programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-    });
-
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda: new PublicKey(multisigAddress),
-      member: wallet.publicKey,
       transactionIndex: transactionIndexBN,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+      approve: canVote,
     });
 
     // Get FRESH blockhash right before sending
 
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
-    await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+    await signSendAndConfirmV0(connection, wallet, proposalIxs, {
       label: 'DelegateStakeDialog',
       onStep: toastSteps(),
     });
@@ -163,27 +157,30 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
     setMemo('');
     closeDialog();
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await queryClient.invalidateQueries({ queryKey: ['multisig'] });
     await queryClient.invalidateQueries({ queryKey: ['stakeAccounts'] });
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button
-          disabled={!isMember}
-          onClick={(e) => {
-            if (!wallet.publicKey) {
-              e.preventDefault();
-              walletModal.setVisible(true);
-              return;
-            } else {
-              setIsOpen(true);
-            }
-          }}
-        >
-          Stake
-        </Button>
-      </DialogTrigger>
+      <DisabledReason reason={initiateReason}>
+        <DialogTrigger asChild>
+          <Button
+            disabled={!canInitiate}
+            onClick={(e) => {
+              if (!wallet.publicKey) {
+                e.preventDefault();
+                walletModal.setVisible(true);
+                return;
+              } else {
+                setIsOpen(true);
+              }
+            }}
+          >
+            Stake
+          </Button>
+        </DialogTrigger>
+      </DisabledReason>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Delegate Stake to Validator</DialogTitle>
@@ -265,7 +262,7 @@ export function DelegateStakeDialog({ vaultIndex = 0 }: DelegateStakeDialogProps
             toast.promise(delegate, {
               id: 'transaction',
               loading: 'Creating stake delegation...',
-              success: 'Stake delegation proposed.',
+              success: proposedMessage('Stake delegation proposed.', canVote),
               error: (e) => `Failed to propose: ${e}`,
             })
           }

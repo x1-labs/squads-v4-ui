@@ -18,8 +18,11 @@ import { simulateEncodedTransaction } from '@/lib/transaction/simulateEncodedTra
 import { importTransaction } from '@/lib/transaction/importTransaction';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import invariant from 'invariant';
+import { useQueryClient } from '@tanstack/react-query';
 import { VaultSelector } from './VaultSelector';
 import { useMultisig } from '@/hooks/useServices';
+import { useProposePermissions } from '@/hooks/useProposePermissions';
+import { proposedMessage } from '@/lib/transaction/proposalInstructions';
 
 const CreateTransaction = () => {
   const wallet = useWallet();
@@ -29,6 +32,8 @@ const CreateTransaction = () => {
 
   const { connection, multisigAddress, vaultIndex, programId } = useMultisigData();
   const { data: multisigConfig } = useMultisig();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
+  const queryClient = useQueryClient();
 
   // Check if this is a controlled multisig
   const isControlled =
@@ -122,6 +127,7 @@ const CreateTransaction = () => {
           defaultValue={tx}
           onChange={(e) => setTx(e.target.value.trim())}
         />
+        {initiateReason && <p className="text-xs text-red-500">{initiateReason}</p>}
         <div className="flex items-center justify-end gap-2">
           <Button
             onClick={() => {
@@ -142,6 +148,7 @@ const CreateTransaction = () => {
           </Button>
           {multisigAddress && (
             <Button
+              disabled={!canInitiate}
               onClick={() =>
                 toast.promise(
                   importTransaction(
@@ -150,14 +157,20 @@ const CreateTransaction = () => {
                     multisigAddress,
                     programId.toBase58(),
                     vaultIndex,
-                    wallet
+                    wallet,
+                    canVote
+                  ).then(() =>
+                    Promise.all([
+                      queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+                      queryClient.invalidateQueries({ queryKey: ['multisig'] }),
+                    ])
                   ),
                   {
                     id: 'transaction',
                     loading: 'Building transaction...',
                     success: () => {
                       setOpen(false);
-                      return 'Transaction proposed.';
+                      return proposedMessage('Transaction proposed.', canVote);
                     },
                     error: (e) => `Failed to propose: ${e}`,
                   }

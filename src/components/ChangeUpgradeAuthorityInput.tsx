@@ -15,8 +15,11 @@ import { toast } from 'sonner';
 import { isPublickey } from '@/lib/isPublickey';
 import { SimplifiedProgramInfo } from '../hooks/useProgram';
 import { useMultisigData } from '../hooks/useMultisigData';
+import { useProposePermissions } from '../hooks/useProposePermissions';
+import { DisabledReason } from './DisabledReason';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
 import { toastSteps } from '../lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '../lib/transaction/proposalInstructions';
 import { useQueryClient } from '@tanstack/react-query';
 
 type ChangeUpgradeAuthorityInputProps = {
@@ -32,6 +35,7 @@ const ChangeUpgradeAuthorityInput = ({
   const wallet = useWallet();
   const walletModal = useWalletModal();
   const queryClient = useQueryClient();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
   const bigIntTransactionIndex = BigInt(transactionIndex);
   const { connection, multisigAddress, vaultIndex, programId, multisigVault } = useMultisigData();
 
@@ -99,28 +103,22 @@ const ChangeUpgradeAuthorityInput = ({
       vaultIndex: vaultIndex,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
-    const proposalIx = multisig.instructions.proposalCreate({
+    const proposalIxs = withProposal(multisigTransactionIx, {
       multisigPda: new PublicKey(multisigPda),
       creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: bigIntTransactionIndex,
-      rentPayer: wallet.publicKey,
-      programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-    });
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda: new PublicKey(multisigPda),
-      member: wallet.publicKey,
       transactionIndex: bigIntTransactionIndex,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+      approve: canVote,
     });
 
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
-    await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+    await signSendAndConfirmV0(connection, wallet, proposalIxs, {
       label: 'ChangeUpgradeAuthorityInput',
       onStep: toastSteps(),
     });
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await queryClient.invalidateQueries({ queryKey: ['multisig'] });
   };
   return (
     <div>
@@ -130,25 +128,28 @@ const ChangeUpgradeAuthorityInput = ({
         onChange={(e) => setNewAuthority(e.target.value)}
         className="mb-3"
       />
-      <Button
-        onClick={() =>
-          toast.promise(changeUpgradeAuth, {
-            id: 'transaction',
-            loading: 'Loading...',
-            success: 'Upgrade authority change proposed.',
-            error: (e) => `Failed to propose: ${e}`,
-          })
-        }
-        disabled={
-          !programId ||
-          !isPublickey(newAuthority) ||
-          !isPublickey(programInfos.programAddress) ||
-          !isPublickey(programInfos.authority) ||
-          !isPublickey(programInfos.programDataAddress)
-        }
-      >
-        Change Authority
-      </Button>
+      <DisabledReason reason={initiateReason}>
+        <Button
+          onClick={() =>
+            toast.promise(changeUpgradeAuth, {
+              id: 'transaction',
+              loading: 'Loading...',
+              success: proposedMessage('Upgrade authority change proposed.', canVote),
+              error: (e) => `Failed to propose: ${e}`,
+            })
+          }
+          disabled={
+            !canInitiate ||
+            !programId ||
+            !isPublickey(newAuthority) ||
+            !isPublickey(programInfos.programAddress) ||
+            !isPublickey(programInfos.authority) ||
+            !isPublickey(programInfos.programDataAddress)
+          }
+        >
+          Change Authority
+        </Button>
+      </DisabledReason>
     </div>
   );
 };

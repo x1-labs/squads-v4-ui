@@ -11,8 +11,11 @@ import invariant from 'invariant';
 import { types as multisigTypes } from '@sqds/multisig';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
 import { toastSteps } from '../lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '../lib/transaction/proposalInstructions';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMultisigData } from '../hooks/useMultisigData';
+import { useProposePermissions } from '../hooks/useProposePermissions';
+import { DisabledReason } from './DisabledReason';
 
 type ChangeThresholdInputProps = {
   multisigPda: string;
@@ -25,6 +28,7 @@ const ChangeThresholdInput = ({ multisigPda, transactionIndex }: ChangeThreshold
   const wallet = useWallet();
   const walletModal = useWalletModal();
   const queryClient = useQueryClient();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
 
   const bigIntTransactionIndex = BigInt(transactionIndex);
   const { connection, programId } = useMultisigData();
@@ -72,28 +76,22 @@ const ChangeThresholdInput = ({ multisigPda, transactionIndex }: ChangeThreshold
       rentPayer: wallet.publicKey,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
-    const proposalIx = multisig.instructions.proposalCreate({
+    const proposalIxs = withProposal(changeThresholdIx, {
       multisigPda: new PublicKey(multisigPda),
       creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: bigIntTransactionIndex,
-      rentPayer: wallet.publicKey,
-      programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-    });
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda: new PublicKey(multisigPda),
-      member: wallet.publicKey,
       transactionIndex: bigIntTransactionIndex,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+      approve: canVote,
     });
 
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
-    await signSendAndConfirmV0(connection, wallet, [changeThresholdIx, proposalIx, approveIx], {
+    await signSendAndConfirmV0(connection, wallet, proposalIxs, {
       label: 'ChangeThresholdInput',
       onStep: toastSteps(),
     });
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await queryClient.invalidateQueries({ queryKey: ['multisig'] });
   };
   return (
     <div>
@@ -103,21 +101,25 @@ const ChangeThresholdInput = ({ multisigPda, transactionIndex }: ChangeThreshold
         onChange={(e) => setThreshold(e.target.value.trim())}
         className="mb-3"
       />
-      <Button
-        onClick={() =>
-          toast.promise(changeThreshold, {
-            id: 'transaction',
-            loading: 'Loading...',
-            success: 'Threshold change proposed.',
-            error: (e) => `Failed to propose: ${e}`,
-          })
-        }
-        disabled={
-          !threshold || (!!multisigConfig && multisigConfig.threshold == parseInt(threshold, 10))
-        }
-      >
-        Change Threshold
-      </Button>
+      <DisabledReason reason={initiateReason}>
+        <Button
+          onClick={() =>
+            toast.promise(changeThreshold, {
+              id: 'transaction',
+              loading: 'Loading...',
+              success: proposedMessage('Threshold change proposed.', canVote),
+              error: (e) => `Failed to propose: ${e}`,
+            })
+          }
+          disabled={
+            !canInitiate ||
+            !threshold ||
+            (!!multisigConfig && multisigConfig.threshold == parseInt(threshold, 10))
+          }
+        >
+          Change Threshold
+        </Button>
+      </DisabledReason>
     </div>
   );
 };

@@ -24,7 +24,9 @@ import { useMultisig } from '@/hooks/useServices';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { toastSteps } from '@/lib/transaction/toastSteps';
-import { useAccess } from '@/hooks/useAccess';
+import { proposedMessage, withProposal } from '@/lib/transaction/proposalInstructions';
+import { useProposePermissions } from '@/hooks/useProposePermissions';
+import { DisabledReason } from '@/components/DisabledReason';
 import { createMemoInstruction } from '@/lib/utils/memoInstruction';
 import { useStakePoolProgramId } from '@/hooks/useSettings';
 import { simulateVaultInstructions } from '@/lib/transaction/simulateVaultInstructions';
@@ -81,7 +83,7 @@ export function WithdrawXntDialog() {
   const { data: stakePools, isLoading: poolsLoading } = useStakePools();
   const { data: multisigInfo } = useMultisig();
   const queryClient = useQueryClient();
-  const isMember = useAccess();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
   const { stakePoolProgramId } = useStakePoolProgramId();
 
   // Filter pools that have staked balance
@@ -230,40 +232,30 @@ export function WithdrawXntDialog() {
         programId: multisigProgramId ? new PublicKey(multisigProgramId) : multisig.PROGRAM_ID,
       });
 
-      const proposalIx = multisig.instructions.proposalCreate({
+      const proposalIxs = withProposal(multisigTransactionIx, {
         multisigPda: new PublicKey(multisigAddress),
         creator: wallet.publicKey,
-        isDraft: false,
-        transactionIndex,
-        rentPayer: wallet.publicKey,
-        programId: multisigProgramId ? new PublicKey(multisigProgramId) : multisig.PROGRAM_ID,
-      });
-
-      const approveIx = multisig.instructions.proposalApprove({
-        multisigPda: new PublicKey(multisigAddress),
-        member: wallet.publicKey,
         transactionIndex,
         programId: multisigProgramId ? new PublicKey(multisigProgramId) : multisig.PROGRAM_ID,
+        approve: canVote,
       });
 
       // Create and send transaction
       // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
       // until confirmed or expired. Throws with a message that says whether it landed.
-      await signSendAndConfirmV0(
-        connection,
-        wallet,
-        [multisigTransactionIx, proposalIx, approveIx],
-        {
-          label: 'WithdrawXntDialog',
-          onStep: toastSteps(
-            { confirming: 'Confirming unstake transaction...' },
-            'unstake-transaction'
-          ),
-        }
-      );
+      await signSendAndConfirmV0(connection, wallet, proposalIxs, {
+        label: 'WithdrawXntDialog',
+        onStep: toastSteps(
+          { confirming: 'Confirming unstake transaction...' },
+          'unstake-transaction'
+        ),
+      });
 
       toast.success(
-        `Successfully proposed unstaking ${displayAmount(poolTokens, ctx.decimals)} pool tokens from ${selectedPoolInfo.name}`,
+        proposedMessage(
+          `Successfully proposed unstaking ${displayAmount(poolTokens, ctx.decimals)} pool tokens from ${selectedPoolInfo.name}.`,
+          canVote
+        ),
         {
           id: 'unstake-transaction',
         }
@@ -277,6 +269,7 @@ export function WithdrawXntDialog() {
 
       // Invalidate queries to refresh data
       await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      await queryClient.invalidateQueries({ queryKey: ['multisig'] });
       await queryClient.invalidateQueries({ queryKey: ['stakePools'] });
       await queryClient.invalidateQueries({ queryKey: ['stakePoolWithdrawContext'] });
     } catch (error) {
@@ -294,22 +287,24 @@ export function WithdrawXntDialog() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          disabled={!isMember || stakedPools.length === 0}
-          onClick={(e) => {
-            if (!wallet.publicKey) {
-              e.preventDefault();
-              walletModal.setVisible(true);
-              return;
-            }
-            setIsOpen(true);
-          }}
-        >
-          Unstake
-        </Button>
-      </DialogTrigger>
+      <DisabledReason reason={initiateReason}>
+        <DialogTrigger asChild>
+          <Button
+            variant="outline"
+            disabled={!canInitiate || stakedPools.length === 0}
+            onClick={(e) => {
+              if (!wallet.publicKey) {
+                e.preventDefault();
+                walletModal.setVisible(true);
+                return;
+              }
+              setIsOpen(true);
+            }}
+          >
+            Unstake
+          </Button>
+        </DialogTrigger>
+      </DisabledReason>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Unstake from Stake Pool</DialogTitle>

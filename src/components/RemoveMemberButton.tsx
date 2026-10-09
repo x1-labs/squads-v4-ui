@@ -4,11 +4,13 @@ import * as multisig from '@sqds/multisig';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
-import { useAccess } from '../hooks/useAccess';
+import { useProposePermissions } from '../hooks/useProposePermissions';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
 import { toastSteps } from '../lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '../lib/transaction/proposalInstructions';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMultisigData } from '../hooks/useMultisigData';
+import { DisabledReason } from './DisabledReason';
 
 type RemoveMemberButtonProps = {
   multisigPda: string;
@@ -25,7 +27,7 @@ const RemoveMemberButton = ({
 }: RemoveMemberButtonProps) => {
   const wallet = useWallet();
   const walletModal = useWalletModal();
-  const isMember = useAccess();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
   const member = new PublicKey(memberKey);
   const queryClient = useQueryClient();
   const { connection } = useMultisigData();
@@ -50,44 +52,40 @@ const RemoveMemberButton = ({
       rentPayer: wallet.publicKey,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
-    const proposalIx = multisig.instructions.proposalCreate({
+    const proposalIxs = withProposal(removeMemberIx, {
       multisigPda: new PublicKey(multisigPda),
       creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: bigIntTransactionIndex,
-      rentPayer: wallet.publicKey,
-      programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-    });
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda: new PublicKey(multisigPda),
-      member: wallet.publicKey,
       transactionIndex: bigIntTransactionIndex,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+      approve: canVote,
     });
 
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
-    await signSendAndConfirmV0(connection, wallet, [removeMemberIx, proposalIx, approveIx], {
+    await signSendAndConfirmV0(connection, wallet, proposalIxs, {
       label: 'RemoveMemberButton',
       onStep: toastSteps(),
     });
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await queryClient.invalidateQueries({ queryKey: ['multisig'] });
   };
   return (
-    <Button
-      size="sm"
-      disabled={!isMember}
-      onClick={() =>
-        toast.promise(removeMember, {
-          id: 'transaction',
-          loading: 'Submitting...',
-          success: 'Remove Member action proposed.',
-          error: (e) => `Failed to propose: ${e}`,
-        })
-      }
-    >
-      Remove
-    </Button>
+    <DisabledReason reason={initiateReason}>
+      <Button
+        size="sm"
+        disabled={!canInitiate}
+        onClick={() =>
+          toast.promise(removeMember, {
+            id: 'transaction',
+            loading: 'Submitting...',
+            success: proposedMessage('Remove Member action proposed.', canVote),
+            error: (e) => `Failed to propose: ${e}`,
+          })
+        }
+      >
+        Remove
+      </Button>
+    </DisabledReason>
   );
 };
 

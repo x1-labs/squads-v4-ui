@@ -25,9 +25,11 @@ import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAccess } from '@/hooks/useAccess';
+import { useProposePermissions } from '@/hooks/useProposePermissions';
+import { DisabledReason } from '@/components/DisabledReason';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { toastSteps } from '@/lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '@/lib/transaction/proposalInstructions';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import {
   createMergeStakeInstruction,
@@ -65,7 +67,7 @@ export function MergeStakeDialog({
   const { connection, programId, multisigAddress } = useMultisigData();
   const nativeSymbol = useNativeSymbol();
   const queryClient = useQueryClient();
-  const isMember = useAccess();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
 
   if (!preSelectedAccount) {
     return null;
@@ -141,25 +143,17 @@ export function MergeStakeDialog({
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
 
-    const proposalIx = multisig.instructions.proposalCreate({
+    const proposalIxs = withProposal(multisigTransactionIx, {
       multisigPda: new PublicKey(multisigAddress),
       creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: transactionIndexBN,
-      rentPayer: wallet.publicKey,
-      programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-    });
-
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda: new PublicKey(multisigAddress),
-      member: wallet.publicKey,
       transactionIndex: transactionIndexBN,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+      approve: canVote,
     });
 
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
-    await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+    await signSendAndConfirmV0(connection, wallet, proposalIxs, {
       label: 'MergeStakeDialog',
       onStep: toastSteps(),
     });
@@ -168,29 +162,32 @@ export function MergeStakeDialog({
     setMemo('');
     closeDialog();
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await queryClient.invalidateQueries({ queryKey: ['multisig'] });
     await queryClient.invalidateQueries({ queryKey: ['stakeAccounts'] });
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {externalIsOpen === undefined && (
-        <DialogTrigger asChild>
-          <Button
-            variant="outline"
-            disabled={!isMember || compatibleAccounts.length === 0}
-            onClick={(e) => {
-              if (!wallet.publicKey) {
-                e.preventDefault();
-                walletModal.setVisible(true);
-                return;
-              } else {
-                setIsOpen(true);
-              }
-            }}
-          >
-            Merge Stakes
-          </Button>
-        </DialogTrigger>
+        <DisabledReason reason={initiateReason}>
+          <DialogTrigger asChild>
+            <Button
+              variant="outline"
+              disabled={!canInitiate || compatibleAccounts.length === 0}
+              onClick={(e) => {
+                if (!wallet.publicKey) {
+                  e.preventDefault();
+                  walletModal.setVisible(true);
+                  return;
+                } else {
+                  setIsOpen(true);
+                }
+              }}
+            >
+              Merge Stakes
+            </Button>
+          </DialogTrigger>
+        </DisabledReason>
       )}
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
@@ -331,17 +328,18 @@ export function MergeStakeDialog({
             )}
           </div>
 
+          {initiateReason && <p className="text-xs text-red-500">{initiateReason}</p>}
           {/* Submit Button */}
           <Button
             onClick={() =>
               toast.promise(mergeStake, {
                 id: 'transaction',
                 loading: 'Creating merge transaction...',
-                success: 'Merge proposed.',
+                success: proposedMessage('Merge proposed.', canVote),
                 error: (e) => `Failed to propose: ${e}`,
               })
             }
-            disabled={!selectedSourceAccount || compatibleAccounts.length === 0}
+            disabled={!canInitiate || !selectedSourceAccount || compatibleAccounts.length === 0}
             className="w-full"
             size="lg"
           >

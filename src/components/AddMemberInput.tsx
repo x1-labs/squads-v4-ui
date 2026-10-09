@@ -8,15 +8,17 @@ import { PublicKey } from '@solana/web3.js';
 import { toast } from 'sonner';
 import { isPublickey } from '@/lib/isPublickey';
 import { useMultisig } from '@/hooks/useServices';
-import { useAccess } from '@/hooks/useAccess';
+import { useProposePermissions } from '@/hooks/useProposePermissions';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { isMember } from '../lib/utils';
 import invariant from 'invariant';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
 import { toastSteps } from '../lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '../lib/transaction/proposalInstructions';
 import { useQueryClient } from '@tanstack/react-query';
 import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
+import { DisabledReason } from './DisabledReason';
 
 type AddMemberInputProps = {
   multisigPda: string;
@@ -40,7 +42,7 @@ const AddMemberInput = ({ multisigPda, transactionIndex, programId }: AddMemberI
   const bigIntTransactionIndex = BigInt(transactionIndex);
   const { connection } = useMultisigData();
   const queryClient = useQueryClient();
-  const hasAccess = useAccess();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
 
   const handlePermissionToggle = (permission: number) => {
     setPermissions((prev) => prev ^ permission); // XOR to toggle the bit
@@ -78,28 +80,22 @@ const AddMemberInput = ({ multisigPda, transactionIndex, programId }: AddMemberI
       rentPayer: wallet.publicKey,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
-    const proposalIx = multisig.instructions.proposalCreate({
+    const proposalIxs = withProposal(addMemberIx, {
       multisigPda: new PublicKey(multisigPda),
       creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: bigIntTransactionIndex,
-      rentPayer: wallet.publicKey,
-      programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-    });
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda: new PublicKey(multisigPda),
-      member: wallet.publicKey,
       transactionIndex: bigIntTransactionIndex,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+      approve: canVote,
     });
 
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
-    await signSendAndConfirmV0(connection, wallet, [addMemberIx, proposalIx, approveIx], {
+    await signSendAndConfirmV0(connection, wallet, proposalIxs, {
       label: 'AddMemberInput',
       onStep: toastSteps(),
     });
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await queryClient.invalidateQueries({ queryKey: ['multisig'] });
   };
   return (
     <div className="space-y-4">
@@ -141,19 +137,21 @@ const AddMemberInput = ({ multisigPda, transactionIndex, programId }: AddMemberI
         </div>
       </div>
 
-      <Button
-        onClick={() =>
-          toast.promise(addMember, {
-            id: 'transaction',
-            loading: 'Loading...',
-            success: 'Add member action proposed.',
-            error: (e) => `Failed to propose: ${e}`,
-          })
-        }
-        disabled={!isPublickey(member) || !hasAccess || permissions === 0}
-      >
-        Add Member
-      </Button>
+      <DisabledReason reason={initiateReason}>
+        <Button
+          onClick={() =>
+            toast.promise(addMember, {
+              id: 'transaction',
+              loading: 'Loading...',
+              success: proposedMessage('Add member action proposed.', canVote),
+              error: (e) => `Failed to propose: ${e}`,
+            })
+          }
+          disabled={!isPublickey(member) || !canInitiate || permissions === 0}
+        >
+          Add Member
+        </Button>
+      </DisabledReason>
     </div>
   );
 };

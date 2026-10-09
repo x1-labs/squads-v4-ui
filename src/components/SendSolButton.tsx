@@ -23,10 +23,12 @@ import { toast } from 'sonner';
 import { isPublickey } from '~/lib/isPublickey';
 import { useMultisigData } from '~/hooks/useMultisigData';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAccess } from '../hooks/useAccess';
+import { useProposePermissions } from '../hooks/useProposePermissions';
+import { DisabledReason } from './DisabledReason';
 import { useNativeSymbol } from '../hooks/useNativeSymbol';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
 import { toastSteps } from '../lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '../lib/transaction/proposalInstructions';
 import { addMemoToInstructions } from '../lib/utils/memoInstruction';
 
 type SendSolProps = {
@@ -46,7 +48,7 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
   const queryClient = useQueryClient();
   const parsedAmount = parseFloat(amount);
   const isAmountValid = !isNaN(parsedAmount) && parsedAmount > 0;
-  const isMember = useAccess();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
   const nativeSymbol = useNativeSymbol();
 
   const transfer = async () => {
@@ -99,24 +101,17 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
       vaultIndex: vaultIndex,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
-    const proposalIx = multisig.instructions.proposalCreate({
+    const proposalIxs = withProposal(multisigTransactionIx, {
       multisigPda: new PublicKey(multisigPda),
       creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: transactionIndexBN,
-      rentPayer: wallet.publicKey,
-      programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-    });
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda: new PublicKey(multisigPda),
-      member: wallet.publicKey,
       transactionIndex: transactionIndexBN,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+      approve: canVote,
     });
 
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
-    await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+    await signSendAndConfirmV0(connection, wallet, proposalIxs, {
       label: 'SendSolButton',
       onStep: toastSteps(),
     });
@@ -125,26 +120,29 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
     setMemo('');
     closeDialog();
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await queryClient.invalidateQueries({ queryKey: ['multisig'] });
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button
-          disabled={!isMember}
-          onClick={(e) => {
-            if (!wallet.publicKey) {
-              e.preventDefault();
-              walletModal.setVisible(true);
-              return;
-            } else {
-              setIsOpen(true);
-            }
-          }}
-        >
-          Send
-        </Button>
-      </DialogTrigger>
+      <DisabledReason reason={initiateReason}>
+        <DialogTrigger asChild>
+          <Button
+            disabled={!canInitiate}
+            onClick={(e) => {
+              if (!wallet.publicKey) {
+                e.preventDefault();
+                walletModal.setVisible(true);
+                return;
+              } else {
+                setIsOpen(true);
+              }
+            }}
+          >
+            Send
+          </Button>
+        </DialogTrigger>
+      </DisabledReason>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Transfer {nativeSymbol}</DialogTitle>
@@ -173,7 +171,7 @@ const SendSol = ({ multisigPda, vaultIndex }: SendSolProps) => {
             toast.promise(transfer, {
               id: 'transaction',
               loading: 'Loading...',
-              success: 'Transfer proposed.',
+              success: proposedMessage('Transfer proposed.', canVote),
               error: (e) => `Failed to propose: ${e}`,
             })
           }

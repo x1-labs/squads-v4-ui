@@ -12,12 +12,13 @@ import { useMultisigData } from '@/hooks/useMultisigData';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAccess } from '@/hooks/useAccess';
+import { useProposePermissions } from '@/hooks/useProposePermissions';
 import { toast } from 'sonner';
 import {
   submitBatchProposal,
   BatchProgress,
 } from '@/lib/transaction/batchProposals';
+import { proposedMessage } from '@/lib/transaction/proposalInstructions';
 import {
   X,
   Trash2,
@@ -50,7 +51,7 @@ export function BatchPanel() {
   const wallet = useWallet();
   const walletModal = useWalletModal();
   const queryClient = useQueryClient();
-  const isMember = useAccess();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [progress, setProgress] = useState<BatchProgress | null>(null);
   const [memo, setMemo] = useState('');
@@ -89,14 +90,16 @@ export function BatchPanel() {
         multisigAddress,
         programId,
         wallet,
+        canVote,
         (p) => setProgress({ ...p }),
         memo
       );
 
-      toast.success(`Proposal created with ${itemCount} operations`);
+      toast.success(proposedMessage(`Proposal created with ${itemCount} operations.`, canVote));
       clearAll();
       setMemo('');
       await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      await queryClient.invalidateQueries({ queryKey: ['multisig'] });
       await queryClient.invalidateQueries({ queryKey: ['stakeAccounts'] });
     } catch (error: any) {
       const msg = error?.message || String(error);
@@ -202,11 +205,13 @@ export function BatchPanel() {
           )}
         </div>
 
+        {initiateReason && <p className="text-xs text-red-500">{initiateReason}</p>}
+
         {/* Submit button */}
         <Button
           className="w-full"
           onClick={handleSubmit}
-          disabled={isSubmitting || !isMember || itemCount === 0}
+          disabled={isSubmitting || !canInitiate || itemCount === 0}
         >
           {isSubmitting ? (
             <>

@@ -4,6 +4,7 @@ import type { Connection, TransactionInstruction } from '@solana/web3.js';
 import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { signSendAndConfirmV0 } from '~/lib/transaction/signSendAndConfirm';
 import { addMemoToInstructions } from '~/lib/utils/memoInstruction';
+import { withProposal } from '~/lib/transaction/proposalInstructions';
 import {
   simulateVaultInstructions,
   describeVaultSimulationError,
@@ -23,6 +24,7 @@ export interface BatchProgress {
 /**
  * Combines all batch items into a single vault transaction / proposal.
  * All instructions are merged into one TransactionMessage executed by the vault.
+ * With `approve`, the creator also approves it. Approve needs the Vote permission.
  */
 export async function submitBatchProposal(
   items: BatchProposalItem[],
@@ -30,6 +32,7 @@ export async function submitBatchProposal(
   multisigPda: string,
   programId: PublicKey,
   wallet: WalletContextState,
+  approve: boolean,
   onProgress: (progress: BatchProgress) => void,
   memo?: string
 ): Promise<void> {
@@ -106,20 +109,12 @@ export async function submitBatchProposal(
     programId,
   });
 
-  const proposalIx = multisig.instructions.proposalCreate({
+  const proposalIxs = withProposal(vaultTransactionIx, {
     multisigPda: new PublicKey(multisigPda),
     creator: wallet.publicKey,
-    isDraft: false,
-    transactionIndex,
-    rentPayer: wallet.publicKey,
-    programId,
-  });
-
-  const approveIx = multisig.instructions.proposalApprove({
-    multisigPda: new PublicKey(multisigPda),
-    member: wallet.publicKey,
     transactionIndex,
     programId,
+    approve,
   });
 
   const [transactionPda] = multisig.getTransactionPda({
@@ -136,7 +131,7 @@ export async function submitBatchProposal(
   // Priority fee, compute budget, fresh blockhash, sign, rebroadcast until it
   // confirms or the blockhash expires. Sizes the packet after the budget
   // instructions are in, so its "too large" is the real number.
-  await signSendAndConfirmV0(connection, wallet, [vaultTransactionIx, proposalIx, approveIx], {
+  await signSendAndConfirmV0(connection, wallet, proposalIxs, {
     writableAccounts: [new PublicKey(multisigPda), transactionPda, proposalPda],
     label: `BatchProposal(${allInstructions.length} ops)`,
     tooLargeHint: 'Remove some operations and try again.',
