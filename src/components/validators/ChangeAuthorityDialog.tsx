@@ -114,12 +114,14 @@ export function ChangeAuthorityDialog({ validator }: ChangeAuthorityDialogProps)
         onStep: toastSteps(),
       });
 
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+        queryClient.invalidateQueries({ queryKey: ['multisig'] }),
+        queryClient.invalidateQueries({ queryKey: ['squad'] }),
+      ]);
       toast.success(proposedMessage('Transaction created successfully.', canVote), {
         id: 'transaction',
       });
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['multisig'] });
-      queryClient.invalidateQueries({ queryKey: ['squad'] });
       setOpen(false);
     } catch (error) {
       console.error('Error creating transaction:', error);
