@@ -1,6 +1,8 @@
 import AddMemberInput from '@/components/AddMemberInput';
 import ChangeThresholdInput from '@/components/ChangeThresholdInput';
 import ChangeTimeLockInput from '@/components/ChangeTimeLockInput';
+import AddSpendingLimitInput from '@/components/AddSpendingLimitInput';
+import SpendingLimitsList from '@/components/SpendingLimitsList';
 import RemoveMemberButton from '@/components/RemoveMemberButton';
 import EditMemberPermissions from '@/components/EditMemberPermissions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -235,7 +237,40 @@ const ConfigurationPage = () => {
                 />
               </CardContent>
             </Card>
+            <Card className="w-full sm:w-1/2">
+              <CardHeader>
+                <CardTitle>Add Spending Limit</CardTitle>
+                <CardDescription>
+                  Let listed members send a fixed amount from a vault in each period, with no
+                  proposal.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AddSpendingLimitInput
+                  multisigPda={multisigAddress!}
+                  transactionIndex={
+                    Number(multisigConfig ? multisigConfig.transactionIndex : 0) + 1
+                  }
+                />
+              </CardContent>
+            </Card>
           </div>
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle>Spending Limits</CardTitle>
+              <CardDescription>
+                Members of a limit can send funds from its vault with no proposal, up to the
+                remaining amount. Removing a member from the multisig does not remove them from a
+                limit.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SpendingLimitsList
+                multisigPda={multisigAddress!}
+                transactionIndex={Number(multisigConfig ? multisigConfig.transactionIndex : 0) + 1}
+              />
+            </CardContent>
+          </Card>
         </div>
       </Suspense>
     </ErrorBoundary>
