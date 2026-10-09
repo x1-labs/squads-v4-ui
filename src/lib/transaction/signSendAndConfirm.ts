@@ -24,6 +24,8 @@ import { describeRpc, getSendableBlockhash, sendAndConfirm } from './sendAndConf
 export type SigningWallet = {
   publicKey: PublicKey | null;
   signTransaction?: <T extends Transaction | VersionedTransaction>(transaction: T) => Promise<T>;
+  /** Called when the wallet refuses to sign for `publicKey`, so the user connects again. */
+  disconnect?: () => Promise<void>;
 };
 
 /** Where the pipeline is, for callers that show progress. */
@@ -92,6 +94,49 @@ function describeSimulation(err: unknown, logs: string[]): string {
   return `Transaction simulation failed: ${lastLog ?? JSON.stringify(err)}`;
 }
 
+const WALLET_ACCOUNT_MISMATCH_MESSAGE =
+  "Your wallet's active account is not the connected account. Nothing was sent. " +
+  'Disconnect and connect again.';
+const WALLET_ACCOUNT_MISMATCH_DISCONNECTED_MESSAGE =
+  "Your wallet's active account is not the connected account, so the page disconnected it. " +
+  'Nothing was sent. Connect again to use the active account.';
+
+/**
+ * True when the wallet refused to sign because its active account is not the
+ * account the page connected. This occurs when the user switches accounts in
+ * the extension and the extension does not announce the change. The match uses
+ * the error name, not `instanceof`, so this module does not import the adapter.
+ */
+export function isWalletAccountMismatch(error: unknown): boolean {
+  if (!(error instanceof Error) || error.name !== 'WalletSignTransactionError') return false;
+  const cause = (error as { error?: unknown }).error;
+  const causeMessage = cause instanceof Error ? cause.message : '';
+  return /invalid account/i.test(error.message) || /invalid account/i.test(causeMessage);
+}
+
+/**
+ * The wallet refused to sign for the connected account, because the user
+ * switched accounts in the wallet. Nothing was sent. A reconnect fixes it.
+ * `disconnected` tells if the pipeline already disconnected the wallet.
+ */
+export class WalletAccountMismatchError extends Error {
+  constructor(
+    public readonly walletError: unknown,
+    public readonly disconnected: boolean
+  ) {
+    super(
+      disconnected ? WALLET_ACCOUNT_MISMATCH_DISCONNECTED_MESSAGE : WALLET_ACCOUNT_MISMATCH_MESSAGE
+    );
+    this.name = 'WalletAccountMismatchError';
+  }
+
+  // Many toasts interpolate the error as `${e}`. Return only the message, so
+  // the toast does not show the class name.
+  toString(): string {
+    return this.message;
+  }
+}
+
 /**
  * User-facing text for anything the pipeline can throw. The pipeline's own
  * errors already explain themselves; this rewrites the raw ones — the wallet's
@@ -99,6 +144,7 @@ function describeSimulation(err: unknown, logs: string[]): string {
  */
 export function describeSendError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
+  if (isWalletAccountMismatch(error)) return WALLET_ACCOUNT_MISMATCH_MESSAGE;
   if (/User rejected|rejected the request/i.test(message)) return 'Transaction cancelled by user.';
   if (/blockhash not found/i.test(message)) return 'Transaction expired. Please try again.';
   if (/insufficient funds|insufficient lamports/i.test(message)) {
@@ -119,7 +165,8 @@ export function describeSendError(error: unknown): string {
  *
  * Resolves with the signature. Throws `SimulationFailedError` before the wallet
  * prompt, `TransactionFailedError` / `TransactionExpiredError` /
- * `TransactionStatusUnknownError` from `sendAndConfirm`, or the wallet's own
+ * `TransactionStatusUnknownError` from `sendAndConfirm`, `WalletAccountMismatchError`
+ * if the wallet's active account is not the connected one, or the wallet's own
  * error if the user declines to sign.
  */
 export async function signSendAndConfirm(
@@ -199,6 +246,8 @@ const SIGN_WATCHDOG_INTERVAL_MS = 5_000;
 const SIGN_WATCHDOG_LOG_EVERY = 3;
 /** Give up on the wallet after this long if the RPC will not tell us the block height. */
 const SIGN_MAX_WAIT_MS = 180_000;
+/** Stop waiting for the wallet to disconnect after this long, so the error still shows. */
+const DISCONNECT_MAX_WAIT_MS = 3_000;
 
 /**
  * The wallet never returned a signature, or returned it after the blockhash it
@@ -401,12 +450,42 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
   // errors some wallets throw on send.
   options.onStep?.('signing');
   const startSign = Date.now();
-  const signedTransaction = await signBeforeExpiry(
-    connection,
-    () => wallet.signTransaction!(transaction),
-    lastValidBlockHeight,
-    tag
-  );
+  let signedTransaction: T;
+  try {
+    signedTransaction = await signBeforeExpiry(
+      connection,
+      () => wallet.signTransaction!(transaction),
+      lastValidBlockHeight,
+      tag
+    );
+  } catch (error) {
+    if (!isWalletAccountMismatch(error)) throw error;
+    console.error(
+      `${tag} The wallet refused to sign for ${payer.toBase58()}. Its active account is different.`,
+      error
+    );
+    // The page cannot follow the switch, because the wallet did not announce it.
+    // Disconnect, so the next connect reads the wallet's active account. This is
+    // the same call as the Disconnect button.
+    let disconnected = false;
+    if (wallet.disconnect) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        disconnected = await Promise.race([
+          wallet.disconnect().then(() => true),
+          new Promise<false>((resolve) => {
+            timer = setTimeout(() => resolve(false), DISCONNECT_MAX_WAIT_MS);
+          }),
+        ]);
+        if (!disconnected) console.warn(`${tag} The wallet did not disconnect in time`);
+      } catch (disconnectError) {
+        console.warn(`${tag} Could not disconnect the wallet:`, disconnectError);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    throw new WalletAccountMismatchError(error, disconnected);
+  }
   console.log(`${tag} Signed in ${Date.now() - startSign}ms`);
   options.onStep?.('confirming');
 
