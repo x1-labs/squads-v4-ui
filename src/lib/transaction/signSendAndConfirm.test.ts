@@ -9,14 +9,18 @@ import {
   VersionedTransaction,
 } from '@solana/web3.js';
 import type { Connection } from '@solana/web3.js';
+import { WalletSignTransactionError } from '@solana/wallet-adapter-base';
 import {
   SimulationFailedError,
+  WalletAccountMismatchError,
   WalletSignatureTimeoutError,
   describeSendError,
+  isWalletAccountMismatch,
   signSendAndConfirm,
   signSendAndConfirmV0,
 } from './signSendAndConfirm.ts';
 import type { SendStep, SigningWallet } from './signSendAndConfirm.ts';
+import { formatError } from '../utils/errorHandler.ts';
 import bs58 from 'bs58';
 
 const keypair = Keypair.generate();
@@ -278,6 +282,81 @@ describe('describeSendError', () => {
     ]);
     assert.equal(describeSendError(error), error.message);
     assert.equal(describeSendError('plain string'), 'plain string');
+  });
+});
+
+describe('wallet account mismatch', () => {
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout', 'Date'] }));
+  afterEach(() => mock.timers.reset());
+
+  const clearText = /active account is not the connected account.*Disconnect and connect again/;
+
+  test('recognizes the wallet refusing to sign for a stale account', () => {
+    assert.ok(isWalletAccountMismatch(new WalletSignTransactionError('invalid account')));
+    assert.ok(isWalletAccountMismatch(new WalletSignTransactionError('Invalid Account')));
+    assert.ok(
+      isWalletAccountMismatch(
+        new WalletSignTransactionError(undefined, new Error('invalid account'))
+      )
+    );
+  });
+
+  test('ignores other sign errors and look-alikes from elsewhere', () => {
+    assert.ok(
+      !isWalletAccountMismatch(new WalletSignTransactionError('User rejected the request.'))
+    );
+    assert.ok(!isWalletAccountMismatch(new Error('invalid account')));
+    assert.ok(!isWalletAccountMismatch('invalid account'));
+    assert.ok(!isWalletAccountMismatch(null));
+  });
+
+  test('describeSendError explains the raw wallet error', () => {
+    assert.match(describeSendError(new WalletSignTransactionError('invalid account')), clearText);
+  });
+
+  test('the pipeline replaces the bare wallet error with the clear text, and sends nothing', async () => {
+    const { calls, connection } = fakeConnection();
+    const wallet: SigningWallet = {
+      publicKey: keypair.publicKey,
+      signTransaction: async () => {
+        throw new WalletSignTransactionError('invalid account');
+      },
+    };
+    const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], options));
+    assert.ok(error instanceof WalletAccountMismatchError, String(error));
+    assert.ok(error.walletError instanceof WalletSignTransactionError);
+    assert.equal(calls.sends, 0);
+    // Every toast style in the app shows the clear text, never "invalid account".
+    for (const shown of [`${error}`, formatError(error), describeSendError(error), error.message]) {
+      assert.match(shown, clearText);
+      assert.doesNotMatch(shown, /invalid account|WalletAccountMismatchError/);
+    }
+  });
+
+  test('the v0 pipeline does the same', async () => {
+    const { connection } = fakeConnection();
+    const wallet: SigningWallet = {
+      publicKey: keypair.publicKey,
+      signTransaction: async () => {
+        throw new WalletSignTransactionError('invalid account');
+      },
+    };
+    const error = await rejects(signSendAndConfirmV0(connection, wallet, [ix()], options));
+    assert.ok(error instanceof WalletAccountMismatchError, String(error));
+  });
+
+  test('a user rejection still passes through unchanged', async () => {
+    const { connection } = fakeConnection();
+    const rejection = new WalletSignTransactionError('User rejected the request.');
+    const wallet: SigningWallet = {
+      publicKey: keypair.publicKey,
+      signTransaction: async () => {
+        throw rejection;
+      },
+    };
+    const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], options));
+    assert.equal(error, rejection);
+    assert.equal(describeSendError(error), 'Transaction cancelled by user.');
   });
 });
 

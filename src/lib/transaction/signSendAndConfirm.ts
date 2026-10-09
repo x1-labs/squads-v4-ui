@@ -92,6 +92,40 @@ function describeSimulation(err: unknown, logs: string[]): string {
   return `Transaction simulation failed: ${lastLog ?? JSON.stringify(err)}`;
 }
 
+const WALLET_ACCOUNT_MISMATCH_MESSAGE =
+  "Your wallet's active account is not the connected account. Nothing was sent. " +
+  'Disconnect and connect again.';
+
+/**
+ * True when the wallet refused to sign because its active account is not the
+ * account the page connected. This occurs when the user switches accounts in
+ * the extension and the extension does not announce the change. The match uses
+ * the error name, not `instanceof`, so this module does not import the adapter.
+ */
+export function isWalletAccountMismatch(error: unknown): boolean {
+  if (!(error instanceof Error) || error.name !== 'WalletSignTransactionError') return false;
+  const cause = (error as { error?: unknown }).error;
+  const causeMessage = cause instanceof Error ? cause.message : '';
+  return /invalid account/i.test(error.message) || /invalid account/i.test(causeMessage);
+}
+
+/**
+ * The wallet refused to sign for the connected account, because the user
+ * switched accounts in the wallet. Nothing was sent. A reconnect fixes it.
+ */
+export class WalletAccountMismatchError extends Error {
+  constructor(public readonly walletError: unknown) {
+    super(WALLET_ACCOUNT_MISMATCH_MESSAGE);
+    this.name = 'WalletAccountMismatchError';
+  }
+
+  // Many toasts interpolate the error as `${e}`. Return only the message, so
+  // the toast does not show the class name.
+  toString(): string {
+    return this.message;
+  }
+}
+
 /**
  * User-facing text for anything the pipeline can throw. The pipeline's own
  * errors already explain themselves; this rewrites the raw ones — the wallet's
@@ -99,6 +133,7 @@ function describeSimulation(err: unknown, logs: string[]): string {
  */
 export function describeSendError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
+  if (isWalletAccountMismatch(error)) return WALLET_ACCOUNT_MISMATCH_MESSAGE;
   if (/User rejected|rejected the request/i.test(message)) return 'Transaction cancelled by user.';
   if (/blockhash not found/i.test(message)) return 'Transaction expired. Please try again.';
   if (/insufficient funds|insufficient lamports/i.test(message)) {
@@ -119,7 +154,8 @@ export function describeSendError(error: unknown): string {
  *
  * Resolves with the signature. Throws `SimulationFailedError` before the wallet
  * prompt, `TransactionFailedError` / `TransactionExpiredError` /
- * `TransactionStatusUnknownError` from `sendAndConfirm`, or the wallet's own
+ * `TransactionStatusUnknownError` from `sendAndConfirm`, `WalletAccountMismatchError`
+ * if the wallet's active account is not the connected one, or the wallet's own
  * error if the user declines to sign.
  */
 export async function signSendAndConfirm(
@@ -401,12 +437,22 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
   // errors some wallets throw on send.
   options.onStep?.('signing');
   const startSign = Date.now();
-  const signedTransaction = await signBeforeExpiry(
-    connection,
-    () => wallet.signTransaction!(transaction),
-    lastValidBlockHeight,
-    tag
-  );
+  let signedTransaction: T;
+  try {
+    signedTransaction = await signBeforeExpiry(
+      connection,
+      () => wallet.signTransaction!(transaction),
+      lastValidBlockHeight,
+      tag
+    );
+  } catch (error) {
+    if (!isWalletAccountMismatch(error)) throw error;
+    console.error(
+      `${tag} The wallet refused to sign for ${payer.toBase58()}. Its active account is different.`,
+      error
+    );
+    throw new WalletAccountMismatchError(error);
+  }
   console.log(`${tag} Signed in ${Date.now() - startSign}ms`);
   options.onStep?.('confirming');
 
