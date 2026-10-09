@@ -1,12 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Connection, PublicKey } from '@solana/web3.js';
-import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, unpackMint } from '@solana/spl-token';
 import * as multisig from '@sqds/multisig';
 import bs58 from 'bs58';
 import { useMultisigData } from './useMultisigData';
 import { useNativeSymbol } from './useNativeSymbol';
 import { getTokenMetadata } from '@/lib/token/tokenMetadata';
-import { NATIVE_DECIMALS, isNativeMint } from '@/lib/spendingLimits';
+import { NATIVE_DECIMALS, decodeSplMint, isNativeMint } from '@/lib/spendingLimits';
 
 export type SpendingLimitToken = {
   mint: PublicKey;
@@ -27,26 +26,30 @@ export type SpendingLimitEntry = {
 /** Byte offset of `multisig` in the SpendingLimit account, after the 8-byte discriminator. */
 const MULTISIG_OFFSET = 8;
 
-/** Decimals, token program and symbol of an SPL mint. */
+/**
+ * Decimals, token program and symbol of an SPL mint. An account that is not a
+ * valid mint gives `decimals: null`. RPC errors still throw.
+ */
 export async function fetchSplToken(
   connection: Connection,
   mint: PublicKey
 ): Promise<SpendingLimitToken> {
-  const info = await connection.getAccountInfo(mint);
-  const isTokenProgram =
-    !!info && (info.owner.equals(TOKEN_PROGRAM_ID) || info.owner.equals(TOKEN_2022_PROGRAM_ID));
-  if (!info || !isTokenProgram) {
-    return { mint, native: false, symbol: shortMint(mint), decimals: null, tokenProgram: null };
+  const decoded = decodeSplMint(mint, await connection.getAccountInfo(mint));
+  if (!decoded) {
+    return unreadableToken(mint);
   }
-  const { decimals } = unpackMint(mint, info, info.owner);
   const metadata = await getTokenMetadata(mint, connection).catch(() => null);
   return {
     mint,
     native: false,
     symbol: metadata?.symbol || shortMint(mint),
-    decimals,
-    tokenProgram: info.owner,
+    decimals: decoded.decimals,
+    tokenProgram: decoded.tokenProgram,
   };
+}
+
+function unreadableToken(mint: PublicKey): SpendingLimitToken {
+  return { mint, native: false, symbol: shortMint(mint), decimals: null, tokenProgram: null };
 }
 
 function shortMint(mint: PublicKey): string {
@@ -64,7 +67,13 @@ export const useSpendingLimits = () => {
   const nativeSymbol = useNativeSymbol();
 
   return useQuery({
-    queryKey: ['spendingLimits', multisigAddress, programId.toBase58(), nativeSymbol],
+    queryKey: [
+      'spendingLimits',
+      connection.rpcEndpoint,
+      multisigAddress,
+      programId.toBase58(),
+      nativeSymbol,
+    ],
     enabled: !!multisigAddress,
     queryFn: async (): Promise<SpendingLimitEntry[]> => {
       const multisigPda = new PublicKey(multisigAddress!);
@@ -92,9 +101,12 @@ export const useSpendingLimits = () => {
       ];
       const tokens = new Map(
         await Promise.all(
-          splMints.map(
-            async (mint) => [mint, await fetchSplToken(connection, new PublicKey(mint))] as const
-          )
+          splMints.map(async (mint) => {
+            const key = new PublicKey(mint);
+            // One unreadable mint must not hide the other limits.
+            const token = await fetchSplToken(connection, key).catch(() => unreadableToken(key));
+            return [mint, token] as const;
+          })
         )
       );
 

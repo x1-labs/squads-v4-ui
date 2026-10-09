@@ -43,3 +43,21 @@ export const useCanVote = () => {
     (member.permissions.mask & multisig.types.Permission.Vote) === multisig.types.Permission.Vote
   );
 };
+
+/**
+ * Permissions of the connected wallet in the selected multisig. Config
+ * transaction create needs Initiate, and approve needs Vote.
+ */
+export const useMemberPermissions = () => {
+  const { data: multisigAccount } = useMultisig();
+  const { publicKey } = useWallet();
+
+  const member =
+    multisigAccount && publicKey ? isMember(publicKey, multisigAccount.members) : undefined;
+  const mask = member?.permissions.mask ?? 0;
+  const has = (permission: number) => (mask & permission) === permission;
+  return {
+    canInitiate: has(multisig.types.Permission.Initiate),
+    canVote: has(multisig.types.Permission.Vote),
+  };
+};

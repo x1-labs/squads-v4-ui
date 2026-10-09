@@ -282,6 +282,7 @@ const ExecuteButton = ({
       queryClient.invalidateQueries({ queryKey: ['multisig'] }),
       queryClient.invalidateQueries({ queryKey: ['proposal'] }),
       queryClient.invalidateQueries({ queryKey: ['transaction-details'] }),
+      queryClient.invalidateQueries({ queryKey: ['spendingLimits'] }),
     ]);
 
     // Return success result

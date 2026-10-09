@@ -1,4 +1,6 @@
 import { PublicKey } from '@solana/web3.js';
+import type { AccountInfo } from '@solana/web3.js';
+import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, unpackMint } from '@solana/spl-token';
 import * as multisig from '@sqds/multisig';
 
 /** The program uses the default pubkey as the mint of a native-token (XNT/SOL) limit. */
@@ -29,6 +31,27 @@ export const PERIOD_LABELS: Record<Period, string> = {
 
 export function isNativeMint(mint: PublicKey): boolean {
   return mint.equals(NATIVE_MINT_KEY);
+}
+
+/**
+ * Decimals and token program of an SPL mint account. Returns null when the
+ * account is missing, is not owned by Token or Token-2022, or is not an
+ * initialized mint (for example a token account). A limit can name any key as its mint.
+ */
+export function decodeSplMint(
+  mint: PublicKey,
+  info: AccountInfo<Buffer> | null
+): { decimals: number; tokenProgram: PublicKey } | null {
+  if (!info) return null;
+  if (!info.owner.equals(TOKEN_PROGRAM_ID) && !info.owner.equals(TOKEN_2022_PROGRAM_ID)) {
+    return null;
+  }
+  try {
+    const decoded = unpackMint(mint, info, info.owner);
+    return decoded.isInitialized ? { decimals: decoded.decimals, tokenProgram: info.owner } : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

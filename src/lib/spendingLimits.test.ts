@@ -1,9 +1,18 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Keypair, PublicKey } from '@solana/web3.js';
+import { Keypair, PublicKey, SystemProgram } from '@solana/web3.js';
+import type { AccountInfo } from '@solana/web3.js';
+import {
+  ACCOUNT_SIZE,
+  MINT_SIZE,
+  MintLayout,
+  TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
+} from '@solana/spl-token';
 import * as multisig from '@sqds/multisig';
 import {
   NATIVE_MINT_KEY,
+  decodeSplMint,
   isNativeMint,
   normalizeKeys,
   parseAddressList,
@@ -268,5 +277,62 @@ describe('parseAddressList', () => {
     assert.deepEqual(parseAddressList(`${a}\nnot-an-address`), {
       error: 'Invalid address: not-an-address',
     });
+  });
+});
+
+describe('decodeSplMint', () => {
+  const mint = Keypair.generate().publicKey;
+  const account = (owner: PublicKey, data: Buffer): AccountInfo<Buffer> => ({
+    owner,
+    data,
+    executable: false,
+    lamports: 1_000_000,
+  });
+  const mintData = (decimals: number) => {
+    const data = Buffer.alloc(MINT_SIZE);
+    MintLayout.encode(
+      {
+        mintAuthorityOption: 0,
+        mintAuthority: PublicKey.default,
+        supply: 0n,
+        decimals,
+        isInitialized: true,
+        freezeAuthorityOption: 0,
+        freezeAuthority: PublicKey.default,
+      },
+      data
+    );
+    return data;
+  };
+
+  test('reads decimals and the token program of a Token mint', () => {
+    assert.deepEqual(decodeSplMint(mint, account(TOKEN_PROGRAM_ID, mintData(6))), {
+      decimals: 6,
+      tokenProgram: TOKEN_PROGRAM_ID,
+    });
+  });
+
+  test('keeps the Token-2022 program for a Token-2022 mint', () => {
+    const decoded = decodeSplMint(mint, account(TOKEN_2022_PROGRAM_ID, mintData(9)));
+    assert.equal(decoded?.decimals, 9);
+    assert.ok(decoded?.tokenProgram.equals(TOKEN_2022_PROGRAM_ID));
+  });
+
+  test('a token account owned by the token program is not a mint', () => {
+    assert.equal(decodeSplMint(mint, account(TOKEN_PROGRAM_ID, Buffer.alloc(ACCOUNT_SIZE))), null);
+    assert.equal(
+      decodeSplMint(mint, account(TOKEN_2022_PROGRAM_ID, Buffer.alloc(ACCOUNT_SIZE))),
+      null
+    );
+  });
+
+  test('malformed or uninitialized mint data is not a mint', () => {
+    assert.equal(decodeSplMint(mint, account(TOKEN_PROGRAM_ID, Buffer.alloc(10))), null);
+    assert.equal(decodeSplMint(mint, account(TOKEN_PROGRAM_ID, Buffer.alloc(MINT_SIZE))), null);
+  });
+
+  test('a missing account or another owner is not a mint', () => {
+    assert.equal(decodeSplMint(mint, null), null);
+    assert.equal(decodeSplMint(mint, account(SystemProgram.programId, mintData(6))), null);
   });
 });

@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMultisig } from '../hooks/useServices';
 import { useMultisigData } from '../hooks/useMultisigData';
-import { useAccess } from '../hooks/useAccess';
+import { useMemberPermissions } from '../hooks/useAccess';
 import { useNativeSymbol } from '../hooks/useNativeSymbol';
 import { fetchSplToken, useSpendingLimits } from '../hooks/useSpendingLimits';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
@@ -45,7 +45,7 @@ const AddSpendingLimitInput = ({ multisigPda, transactionIndex }: AddSpendingLim
   const nativeSymbol = useNativeSymbol();
   const wallet = useWallet();
   const walletModal = useWalletModal();
-  const isMember = useAccess();
+  const { canInitiate, canVote } = useMemberPermissions();
   const queryClient = useQueryClient();
 
   const [vaultIndexInput, setVaultIndexInput] = useState(String(selectedVaultIndex ?? 0));
@@ -61,8 +61,12 @@ const AddSpendingLimitInput = ({ multisigPda, transactionIndex }: AddSpendingLim
   const vaultIndexValid = vaultIndex !== null && vaultIndex <= 255;
 
   const mintKey = tokenKind === 'spl' && isPublickey(mintInput) ? new PublicKey(mintInput) : null;
-  const { data: splToken, isFetching: splTokenLoading } = useQuery({
-    queryKey: ['splToken', mintKey?.toBase58()],
+  const {
+    data: splToken,
+    isFetching: splTokenLoading,
+    isError: splTokenError,
+  } = useQuery({
+    queryKey: ['splToken', connection.rpcEndpoint, mintKey?.toBase58()],
     queryFn: () => fetchSplToken(connection, mintKey!),
     enabled: !!mintKey,
   });
@@ -123,13 +127,17 @@ const AddSpendingLimitInput = ({ multisigPda, transactionIndex }: AddSpendingLim
       creator: wallet.publicKey,
       transactionIndex: BigInt(transactionIndex),
       programId,
+      approve: canVote,
     });
     await signSendAndConfirmV0(connection, wallet, instructions, {
       label: 'AddSpendingLimitInput',
       onStep: toastSteps(),
     });
     setConfirmed(false);
-    await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+      queryClient.invalidateQueries({ queryKey: ['multisig'] }),
+    ]);
   };
 
   return (
@@ -174,6 +182,9 @@ const AddSpendingLimitInput = ({ multisigPda, transactionIndex }: AddSpendingLim
           />
           {mintInput && !mintKey && (
             <p className="text-xs text-destructive">Invalid mint address</p>
+          )}
+          {mintKey && !splTokenLoading && splTokenError && (
+            <p className="text-xs text-destructive">Could not load the mint. Try again.</p>
           )}
           {mintKey && splTokenLoading && (
             <p className="text-xs text-muted-foreground">Loading mint...</p>
@@ -305,11 +316,13 @@ const AddSpendingLimitInput = ({ multisigPda, transactionIndex }: AddSpendingLim
           toast.promise(addSpendingLimit, {
             id: 'transaction',
             loading: 'Loading...',
-            success: 'Spending limit proposed.',
+            success: canVote
+              ? 'Spending limit proposed.'
+              : 'Spending limit proposed. It still needs approvals.',
             error: (e) => `Failed to propose: ${formatError(e)}`,
           })
         }
-        disabled={!isMember || !formValid || !confirmed}
+        disabled={!canInitiate || !formValid || !confirmed}
       >
         Add Spending Limit
       </Button>

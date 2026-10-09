@@ -4,7 +4,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAccess } from '../hooks/useAccess';
+import { useMemberPermissions } from '../hooks/useAccess';
 import { useMultisigData } from '../hooks/useMultisigData';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
 import { toastSteps } from '../lib/transaction/toastSteps';
@@ -24,7 +24,7 @@ const RemoveSpendingLimitButton = ({
 }: RemoveSpendingLimitButtonProps) => {
   const wallet = useWallet();
   const walletModal = useWalletModal();
-  const isMember = useAccess();
+  const { canInitiate, canVote } = useMemberPermissions();
   const queryClient = useQueryClient();
   const { connection, programId } = useMultisigData();
 
@@ -39,24 +39,30 @@ const RemoveSpendingLimitButton = ({
       creator: wallet.publicKey,
       transactionIndex: BigInt(transactionIndex),
       programId,
+      approve: canVote,
     });
     await signSendAndConfirmV0(connection, wallet, instructions, {
       label: 'RemoveSpendingLimitButton',
       onStep: toastSteps(),
     });
-    await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+      queryClient.invalidateQueries({ queryKey: ['multisig'] }),
+    ]);
   };
 
   return (
     <Button
       size="sm"
       variant="outline"
-      disabled={!isMember}
+      disabled={!canInitiate}
       onClick={() =>
         toast.promise(removeSpendingLimit, {
           id: 'transaction',
           loading: 'Loading...',
-          success: 'Spending limit removal proposed.',
+          success: canVote
+            ? 'Spending limit removal proposed.'
+            : 'Spending limit removal proposed. It still needs approvals.',
           error: (e) => `Failed to propose: ${formatError(e)}`,
         })
       }
