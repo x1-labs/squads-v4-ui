@@ -246,6 +246,8 @@ const SIGN_WATCHDOG_INTERVAL_MS = 5_000;
 const SIGN_WATCHDOG_LOG_EVERY = 3;
 /** Give up on the wallet after this long if the RPC will not tell us the block height. */
 const SIGN_MAX_WAIT_MS = 180_000;
+/** Stop waiting for the wallet to disconnect after this long, so the error still shows. */
+const DISCONNECT_MAX_WAIT_MS = 3_000;
 
 /**
  * The wallet never returned a signature, or returned it after the blockhash it
@@ -467,11 +469,19 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
     // the same call as the Disconnect button.
     let disconnected = false;
     if (wallet.disconnect) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await wallet.disconnect();
-        disconnected = true;
+        disconnected = await Promise.race([
+          wallet.disconnect().then(() => true),
+          new Promise<false>((resolve) => {
+            timer = setTimeout(() => resolve(false), DISCONNECT_MAX_WAIT_MS);
+          }),
+        ]);
+        if (!disconnected) console.warn(`${tag} The wallet did not disconnect in time`);
       } catch (disconnectError) {
         console.warn(`${tag} Could not disconnect the wallet:`, disconnectError);
+      } finally {
+        clearTimeout(timer);
       }
     }
     throw new WalletAccountMismatchError(error, disconnected);

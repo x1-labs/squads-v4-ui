@@ -368,6 +368,16 @@ describe('wallet account mismatch', () => {
     assert.match(`${error}`, /Disconnect and connect again/);
   });
 
+  test('a disconnect that never settles does not hold back the error', async () => {
+    const { connection } = fakeConnection();
+    const { wallet } = walletRefusing(new WalletSignTransactionError('invalid account'));
+    wallet.disconnect = () => new Promise(() => {});
+    const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], options));
+    assert.ok(error instanceof WalletAccountMismatchError, String(error));
+    assert.equal(error.disconnected, false);
+    assert.match(`${error}`, /Disconnect and connect again/);
+  });
+
   test('a wallet without disconnect gets the same clear text', async () => {
     const { connection } = fakeConnection();
     const { wallet } = walletRefusing(new WalletSignTransactionError('invalid account'));
