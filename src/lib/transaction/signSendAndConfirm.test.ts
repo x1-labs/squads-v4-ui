@@ -289,7 +289,20 @@ describe('wallet account mismatch', () => {
   beforeEach(() => mock.timers.enable({ apis: ['setTimeout', 'Date'] }));
   afterEach(() => mock.timers.reset());
 
-  const clearText = /active account is not the connected account.*Disconnect and connect again/;
+  const clearText = /active account is not the connected account.*Connect again/i;
+  const walletRefusing = (rejection: Error) => {
+    const disconnects: number[] = [];
+    const wallet: SigningWallet = {
+      publicKey: keypair.publicKey,
+      signTransaction: async () => {
+        throw rejection;
+      },
+      disconnect: async () => {
+        disconnects.push(Date.now());
+      },
+    };
+    return { wallet, disconnects };
+  };
 
   test('recognizes the wallet refusing to sign for a stale account', () => {
     assert.ok(isWalletAccountMismatch(new WalletSignTransactionError('invalid account')));
@@ -314,17 +327,17 @@ describe('wallet account mismatch', () => {
     assert.match(describeSendError(new WalletSignTransactionError('invalid account')), clearText);
   });
 
-  test('the pipeline replaces the bare wallet error with the clear text, and sends nothing', async () => {
+  test('the pipeline disconnects the stale wallet and explains why, and sends nothing', async () => {
     const { calls, connection } = fakeConnection();
-    const wallet: SigningWallet = {
-      publicKey: keypair.publicKey,
-      signTransaction: async () => {
-        throw new WalletSignTransactionError('invalid account');
-      },
-    };
+    const { wallet, disconnects } = walletRefusing(
+      new WalletSignTransactionError('invalid account')
+    );
     const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], options));
     assert.ok(error instanceof WalletAccountMismatchError, String(error));
     assert.ok(error.walletError instanceof WalletSignTransactionError);
+    assert.equal(error.disconnected, true);
+    assert.match(error.message, /the page disconnected the wallet/);
+    assert.equal(disconnects.length, 1);
     assert.equal(calls.sends, 0);
     // Every toast style in the app shows the clear text, never "invalid account".
     for (const shown of [`${error}`, formatError(error), describeSendError(error), error.message]) {
@@ -335,28 +348,44 @@ describe('wallet account mismatch', () => {
 
   test('the v0 pipeline does the same', async () => {
     const { connection } = fakeConnection();
-    const wallet: SigningWallet = {
-      publicKey: keypair.publicKey,
-      signTransaction: async () => {
-        throw new WalletSignTransactionError('invalid account');
-      },
-    };
+    const { wallet, disconnects } = walletRefusing(
+      new WalletSignTransactionError('invalid account')
+    );
     const error = await rejects(signSendAndConfirmV0(connection, wallet, [ix()], options));
     assert.ok(error instanceof WalletAccountMismatchError, String(error));
+    assert.equal(disconnects.length, 1);
   });
 
-  test('a user rejection still passes through unchanged', async () => {
+  test('a failed disconnect still gives the clear text, and asks the user to disconnect', async () => {
+    const { connection } = fakeConnection();
+    const { wallet } = walletRefusing(new WalletSignTransactionError('invalid account'));
+    wallet.disconnect = async () => {
+      throw new Error('extension closed');
+    };
+    const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], options));
+    assert.ok(error instanceof WalletAccountMismatchError, String(error));
+    assert.equal(error.disconnected, false);
+    assert.match(`${error}`, /Disconnect and connect again/);
+  });
+
+  test('a wallet without disconnect gets the same clear text', async () => {
+    const { connection } = fakeConnection();
+    const { wallet } = walletRefusing(new WalletSignTransactionError('invalid account'));
+    delete wallet.disconnect;
+    const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], options));
+    assert.ok(error instanceof WalletAccountMismatchError, String(error));
+    assert.equal(error.disconnected, false);
+    assert.match(`${error}`, /Disconnect and connect again/);
+  });
+
+  test('a user rejection passes through unchanged and keeps the wallet connected', async () => {
     const { connection } = fakeConnection();
     const rejection = new WalletSignTransactionError('User rejected the request.');
-    const wallet: SigningWallet = {
-      publicKey: keypair.publicKey,
-      signTransaction: async () => {
-        throw rejection;
-      },
-    };
+    const { wallet, disconnects } = walletRefusing(rejection);
     const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], options));
     assert.equal(error, rejection);
     assert.equal(describeSendError(error), 'Transaction cancelled by user.');
+    assert.equal(disconnects.length, 0);
   });
 });
 

@@ -24,6 +24,8 @@ import { describeRpc, getSendableBlockhash, sendAndConfirm } from './sendAndConf
 export type SigningWallet = {
   publicKey: PublicKey | null;
   signTransaction?: <T extends Transaction | VersionedTransaction>(transaction: T) => Promise<T>;
+  /** Called when the wallet refuses to sign for `publicKey`, so the user connects again. */
+  disconnect?: () => Promise<void>;
 };
 
 /** Where the pipeline is, for callers that show progress. */
@@ -95,6 +97,9 @@ function describeSimulation(err: unknown, logs: string[]): string {
 const WALLET_ACCOUNT_MISMATCH_MESSAGE =
   "Your wallet's active account is not the connected account. Nothing was sent. " +
   'Disconnect and connect again.';
+const WALLET_ACCOUNT_MISMATCH_DISCONNECTED_MESSAGE =
+  "Your wallet's active account is not the connected account, so the page disconnected " +
+  'the wallet. Nothing was sent. Connect again to use the active account.';
 
 /**
  * True when the wallet refused to sign because its active account is not the
@@ -112,10 +117,16 @@ export function isWalletAccountMismatch(error: unknown): boolean {
 /**
  * The wallet refused to sign for the connected account, because the user
  * switched accounts in the wallet. Nothing was sent. A reconnect fixes it.
+ * `disconnected` tells if the pipeline already disconnected the wallet.
  */
 export class WalletAccountMismatchError extends Error {
-  constructor(public readonly walletError: unknown) {
-    super(WALLET_ACCOUNT_MISMATCH_MESSAGE);
+  constructor(
+    public readonly walletError: unknown,
+    public readonly disconnected: boolean
+  ) {
+    super(
+      disconnected ? WALLET_ACCOUNT_MISMATCH_DISCONNECTED_MESSAGE : WALLET_ACCOUNT_MISMATCH_MESSAGE
+    );
     this.name = 'WalletAccountMismatchError';
   }
 
@@ -451,7 +462,19 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
       `${tag} The wallet refused to sign for ${payer.toBase58()}. Its active account is different.`,
       error
     );
-    throw new WalletAccountMismatchError(error);
+    // The page cannot follow the switch, because the wallet did not announce it.
+    // Disconnect, so the next connect reads the wallet's active account. This is
+    // the same call as the Disconnect button.
+    let disconnected = false;
+    if (wallet.disconnect) {
+      try {
+        await wallet.disconnect();
+        disconnected = true;
+      } catch (disconnectError) {
+        console.warn(`${tag} Could not disconnect the wallet:`, disconnectError);
+      }
+    }
+    throw new WalletAccountMismatchError(error, disconnected);
   }
   console.log(`${tag} Signed in ${Date.now() - startSign}ms`);
   options.onStep?.('confirming');
