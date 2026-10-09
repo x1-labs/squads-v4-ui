@@ -32,9 +32,15 @@ import type { SpendingLimitEntry } from '@/hooks/useSpendingLimits';
 type UseSpendingLimitButtonProps = {
   multisigPda: string;
   limit: SpendingLimitEntry;
+  /** Current Unix time from the list's clock. */
+  nowSeconds: number;
 };
 
-const UseSpendingLimitButton = ({ multisigPda, limit }: UseSpendingLimitButtonProps) => {
+const UseSpendingLimitButton = ({
+  multisigPda,
+  limit,
+  nowSeconds,
+}: UseSpendingLimitButtonProps) => {
   const wallet = useWallet();
   const queryClient = useQueryClient();
   const { connection, programId } = useMultisigData();
@@ -46,7 +52,7 @@ const UseSpendingLimitButton = ({ multisigPda, limit }: UseSpendingLimitButtonPr
   const { account, token } = limit;
   const decimals = token.decimals;
   const allowedDestinations = account.destinations;
-  const remaining = spendingLimitState(account, Date.now() / 1000).remaining;
+  const remaining = spendingLimitState(account, nowSeconds).remaining;
 
   const parsed = amount && decimals !== null ? parseTokenAmount(amount, decimals) : null;
   const destinationKey = isPublickey(destination) ? new PublicKey(destination) : null;

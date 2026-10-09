@@ -6,9 +6,18 @@ import UseSpendingLimitButton from './UseSpendingLimitButton';
 import { useSpendingLimits } from '@/hooks/useSpendingLimits';
 import type { SpendingLimitEntry } from '@/hooks/useSpendingLimits';
 import { useMultisig } from '@/hooks/useServices';
+import { useNow } from '@/hooks/useNow';
 import { formatTokenAmount } from '@/lib/utils/formatters';
 import { formatDuration } from '@/lib/timeLock';
-import { PERIOD_LABELS, removedMembers, spendingLimitState } from '@/lib/spendingLimits';
+import {
+  PERIOD_LABELS,
+  earliestResetAt,
+  removedMembers,
+  spendingLimitState,
+} from '@/lib/spendingLimits';
+
+/** How often the list refreshes the remaining amounts and countdowns. */
+const CLOCK_INTERVAL_MS = 30_000;
 
 type SpendingLimitsListProps = {
   multisigPda: string;
@@ -17,6 +26,14 @@ type SpendingLimitsListProps = {
 
 const SpendingLimitsList = ({ multisigPda, transactionIndex }: SpendingLimitsListProps) => {
   const { data: limits, isPending, isError, error, refetch, isFetching } = useSpendingLimits();
+  // A local clock: a period reset changes the remaining amount with no RPC call.
+  const nowSeconds = useNow(
+    CLOCK_INTERVAL_MS,
+    earliestResetAt(
+      (limits ?? []).map((l) => l.account),
+      Date.now() / 1000
+    )
+  );
 
   if (isPending) {
     return <p className="text-sm text-muted-foreground">Loading spending limits...</p>;
@@ -46,6 +63,7 @@ const SpendingLimitsList = ({ multisigPda, transactionIndex }: SpendingLimitsLis
           limit={limit}
           multisigPda={multisigPda}
           transactionIndex={transactionIndex}
+          nowSeconds={nowSeconds}
         />
       ))}
     </div>
@@ -56,15 +74,16 @@ const SpendingLimitItem = ({
   limit,
   multisigPda,
   transactionIndex,
+  nowSeconds,
 }: {
   limit: SpendingLimitEntry;
   multisigPda: string;
   transactionIndex: number;
+  nowSeconds: number;
 }) => {
   const { data: multisigConfig } = useMultisig();
   const { publicKey } = useWallet();
   const { account, token } = limit;
-  const nowSeconds = Date.now() / 1000;
   const { remaining, nextReset } = spendingLimitState(account, nowSeconds);
   const removed = new Set(
     removedMembers(account.members, multisigConfig?.members.map((m) => m.key) ?? []).map((k) =>
@@ -118,7 +137,13 @@ const SpendingLimitItem = ({
           </p>
         </div>
         <div className="flex gap-2 self-end sm:self-auto">
-          {canUse && <UseSpendingLimitButton multisigPda={multisigPda} limit={limit} />}
+          {canUse && (
+            <UseSpendingLimitButton
+              multisigPda={multisigPda}
+              limit={limit}
+              nowSeconds={nowSeconds}
+            />
+          )}
           <RemoveSpendingLimitButton
             multisigPda={multisigPda}
             transactionIndex={transactionIndex}

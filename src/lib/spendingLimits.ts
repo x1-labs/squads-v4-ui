@@ -132,6 +132,41 @@ export function spendingLimitState(
   return { remaining, nextReset: Number(lastReset + period) };
 }
 
+/**
+ * Earliest Unix time (seconds) at which one of the limits resets, or null when
+ * none resets. The reset applies one second after `nextReset`, because
+ * spending_limit_use needs `now - last_reset > period`.
+ */
+export function earliestResetAt(limits: SpendingLimitTiming[], nowSeconds: number): number | null {
+  let earliest: number | null = null;
+  for (const limit of limits) {
+    const { nextReset } = spendingLimitState(limit, nowSeconds);
+    if (nextReset !== null && (earliest === null || nextReset + 1 < earliest)) {
+      earliest = nextReset + 1;
+    }
+  }
+  return earliest;
+}
+
+/** Longest delay `setTimeout` supports (2^31 - 1 ms). A longer delay fires at once. */
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+
+/** Shortest clock delay, so a wake time in the past cannot cause a tight loop. */
+const MIN_CLOCK_DELAY_MS = 250;
+
+/**
+ * Delay for the next clock tick: `intervalMs`, or less when `wakeAtSeconds`
+ * comes first. Kept between MIN_CLOCK_DELAY_MS and the setTimeout maximum.
+ */
+export function clockTimerDelay(
+  nowMs: number,
+  intervalMs: number,
+  wakeAtSeconds: number | null
+): number {
+  const untilWake = wakeAtSeconds === null ? Infinity : wakeAtSeconds * 1000 - nowMs;
+  return Math.min(MAX_TIMEOUT_MS, Math.max(MIN_CLOCK_DELAY_MS, Math.min(intervalMs, untilWake)));
+}
+
 /** Keys in a limit's members list that are no longer members of the multisig. */
 export function removedMembers(
   limitMembers: PublicKey[],

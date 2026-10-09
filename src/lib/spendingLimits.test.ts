@@ -12,6 +12,8 @@ import {
 import * as multisig from '@sqds/multisig';
 import {
   NATIVE_MINT_KEY,
+  clockTimerDelay,
+  earliestResetAt,
   decodeSplMint,
   isNativeMint,
   normalizeKeys,
@@ -361,5 +363,53 @@ describe('selectedCurrentMembers', () => {
 
   test('returns nothing when only stale keys are selected', () => {
     assert.deepEqual(selectedCurrentMembers([key(9).toBase58()], [key(1)]), []);
+  });
+});
+
+describe('earliestResetAt', () => {
+  const lastReset = 1_760_000_000;
+  const limit = (period: multisig.types.Period, offset = 0) => ({
+    amount: 10n,
+    remainingAmount: 1n,
+    lastReset: lastReset + offset,
+    period,
+  });
+
+  test('the reset applies one second after the earliest next reset', () => {
+    const limits = [limit(Period.Week), limit(Period.Day, 3_600), limit(Period.Day)];
+    assert.equal(earliestResetAt(limits, lastReset + 10), lastReset + DAY + 1);
+  });
+
+  test('after a reset applies, the next boundary is one period later', () => {
+    assert.equal(
+      earliestResetAt([limit(Period.Day)], lastReset + DAY + 1),
+      lastReset + 2 * DAY + 1
+    );
+  });
+
+  test('OneTime limits and an empty list never reset', () => {
+    assert.equal(earliestResetAt([limit(Period.OneTime)], lastReset), null);
+    assert.equal(earliestResetAt([], lastReset), null);
+  });
+});
+
+describe('clockTimerDelay', () => {
+  const nowMs = 1_760_000_000_000;
+
+  test('uses the interval when nothing resets sooner', () => {
+    assert.equal(clockTimerDelay(nowMs, 30_000, null), 30_000);
+    assert.equal(clockTimerDelay(nowMs, 30_000, nowMs / 1000 + 3_600), 30_000);
+  });
+
+  test('wakes at the reset when it comes before the next interval', () => {
+    assert.equal(clockTimerDelay(nowMs, 30_000, nowMs / 1000 + 5), 5_000);
+  });
+
+  test('a wake time in the past waits the minimum, not zero', () => {
+    assert.equal(clockTimerDelay(nowMs, 30_000, nowMs / 1000 - 10), 250);
+  });
+
+  test('never exceeds the setTimeout maximum', () => {
+    assert.equal(clockTimerDelay(nowMs, 2 ** 40, null), 2 ** 31 - 1);
   });
 });
