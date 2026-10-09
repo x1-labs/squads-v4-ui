@@ -151,6 +151,19 @@ export function normalizeKeys(keys: PublicKey[]): PublicKey[] {
 }
 
 /**
+ * The selected member keys that are members of the loaded multisig, deduped
+ * and sorted for AddSpendingLimit. Selections left from another multisig are
+ * dropped.
+ */
+export function selectedCurrentMembers(
+  selected: string[],
+  multisigMembers: PublicKey[]
+): PublicKey[] {
+  const current = new Set(multisigMembers.map((k) => k.toBase58()));
+  return normalizeKeys(selected.filter((k) => current.has(k)).map((k) => new PublicKey(k)));
+}
+
+/**
  * Checks a send against the rules of spending_limit_use. Returns an error
  * message, or null when the program would accept the send.
  */

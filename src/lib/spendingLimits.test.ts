@@ -18,6 +18,7 @@ import {
   parseAddressList,
   parseTokenAmount,
   removedMembers,
+  selectedCurrentMembers,
   spendingLimitAccountsForActions,
   spendingLimitState,
   validateSpend,
@@ -334,5 +335,31 @@ describe('decodeSplMint', () => {
   test('a missing account or another owner is not a mint', () => {
     assert.equal(decodeSplMint(mint, null), null);
     assert.equal(decodeSplMint(mint, account(SystemProgram.programId, mintData(6))), null);
+  });
+});
+
+describe('selectedCurrentMembers', () => {
+  test('drops a key that is not a member of the loaded multisig', () => {
+    const [current, stale] = [key(1), key(2)];
+    assert.deepEqual(
+      selectedCurrentMembers([stale.toBase58(), current.toBase58()], [current, key(3)]).map((k) =>
+        k.toBase58()
+      ),
+      [current.toBase58()]
+    );
+  });
+
+  test('keeps current members, deduped and sorted by bytes', () => {
+    const [a, b] = [key(1), key(2)];
+    assert.deepEqual(
+      selectedCurrentMembers([b.toBase58(), a.toBase58(), b.toBase58()], [a, b]).map((k) =>
+        k.toBase58()
+      ),
+      [a.toBase58(), b.toBase58()]
+    );
+  });
+
+  test('returns nothing when only stale keys are selected', () => {
+    assert.deepEqual(selectedCurrentMembers([key(9).toBase58()], [key(1)]), []);
   });
 });

@@ -26,7 +26,7 @@ import {
   NATIVE_DECIMALS,
   NATIVE_MINT_KEY,
   PERIOD_LABELS,
-  normalizeKeys,
+  selectedCurrentMembers,
   parseAddressList,
   parseTokenAmount,
 } from '@/lib/spendingLimits';
@@ -76,7 +76,10 @@ const AddSpendingLimitInput = ({ multisigPda, transactionIndex }: AddSpendingLim
 
   const parsedAmount = amount && decimals !== null ? parseTokenAmount(amount, decimals) : null;
   const parsedDestinations = parseAddressList(destinationsInput);
-  const memberKeys = normalizeKeys(members.map((m) => new PublicKey(m)));
+  const memberKeys = selectedCurrentMembers(
+    members,
+    multisigConfig?.members.map((m) => m.key) ?? []
+  );
   const otherLimitsOnVault =
     vaultIndex === null
       ? []

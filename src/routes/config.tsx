@@ -247,6 +247,7 @@ const ConfigurationPage = () => {
               </CardHeader>
               <CardContent>
                 <AddSpendingLimitInput
+                  key={multisigAddress}
                   multisigPda={multisigAddress!}
                   transactionIndex={
                     Number(multisigConfig ? multisigConfig.transactionIndex : 0) + 1
@@ -266,6 +267,7 @@ const ConfigurationPage = () => {
             </CardHeader>
             <CardContent>
               <SpendingLimitsList
+                key={multisigAddress}
                 multisigPda={multisigAddress!}
                 transactionIndex={Number(multisigConfig ? multisigConfig.transactionIndex : 0) + 1}
               />
