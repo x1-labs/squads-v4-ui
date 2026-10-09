@@ -24,9 +24,11 @@ import { useBalance, useMultisig } from '@/hooks/useServices';
 import { useQueryClient } from '@tanstack/react-query';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { toastSteps } from '@/lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '@/lib/transaction/proposalInstructions';
 import { stakePoolInfo, getStakePoolAccount, StakePoolInstruction } from '@x1-labs/spl-stake-pool';
 import * as splToken from '@solana/spl-token';
-import { useAccess } from '@/hooks/useAccess';
+import { useProposePermissions } from '@/hooks/useProposePermissions';
+import { DisabledReason } from '@/components/DisabledReason';
 import { createMemoInstruction } from '@/lib/utils/memoInstruction';
 import { useStakePoolProgramId } from '@/hooks/useSettings';
 
@@ -50,7 +52,7 @@ export function DepositXntDialog() {
   const { data: solBalance } = useBalance();
   const { data: multisigInfo } = useMultisig();
   const queryClient = useQueryClient();
-  const isMember = useAccess();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
   const { stakePoolProgramId } = useStakePoolProgramId();
 
   const parsedAmount = parseFloat(amount);
@@ -182,40 +184,27 @@ export function DepositXntDialog() {
         programId: multisigProgramId ? new PublicKey(multisigProgramId) : multisig.PROGRAM_ID,
       });
 
-      const proposalIx = multisig.instructions.proposalCreate({
+      const proposalIxs = withProposal(multisigTransactionIx, {
         multisigPda: new PublicKey(multisigAddress),
         creator: wallet.publicKey,
-        isDraft: false,
-        transactionIndex,
-        rentPayer: wallet.publicKey,
-        programId: multisigProgramId ? new PublicKey(multisigProgramId) : multisig.PROGRAM_ID,
-      });
-
-      const approveIx = multisig.instructions.proposalApprove({
-        multisigPda: new PublicKey(multisigAddress),
-        member: wallet.publicKey,
         transactionIndex,
         programId: multisigProgramId ? new PublicKey(multisigProgramId) : multisig.PROGRAM_ID,
+        approve: canVote,
       });
 
       // Create and send transaction
       // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
       // until confirmed or expired. Throws with a message that says whether it landed.
-      await signSendAndConfirmV0(
-        connection,
-        wallet,
-        [multisigTransactionIx, proposalIx, approveIx],
-        {
-          label: 'DepositXntDialog',
-          onStep: toastSteps(
-            { confirming: 'Confirming stake transaction...' },
-            'stake-transaction'
-          ),
-        }
-      );
+      await signSendAndConfirmV0(connection, wallet, proposalIxs, {
+        label: 'DepositXntDialog',
+        onStep: toastSteps({ confirming: 'Confirming stake transaction...' }, 'stake-transaction'),
+      });
 
       toast.success(
-        `Successfully proposed staking ${parsedAmount} ${nativeSymbol} to ${selectedPoolInfo.name}`,
+        proposedMessage(
+          `Successfully proposed staking ${parsedAmount} ${nativeSymbol} to ${selectedPoolInfo.name}.`,
+          canVote
+        ),
         {
           id: 'stake-transaction',
         }
@@ -228,6 +217,7 @@ export function DepositXntDialog() {
       setIsOpen(false);
 
       await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      await queryClient.invalidateQueries({ queryKey: ['multisig'] });
       await queryClient.invalidateQueries({ queryKey: ['stakePools'] });
     } catch (error) {
       console.error('Error creating stake transaction:', error);
@@ -241,22 +231,24 @@ export function DepositXntDialog() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant="default"
-          disabled={!isMember}
-          onClick={(e) => {
-            if (!wallet.publicKey) {
-              e.preventDefault();
-              walletModal.setVisible(true);
-              return;
-            }
-            setIsOpen(true);
-          }}
-        >
-          Stake
-        </Button>
-      </DialogTrigger>
+      <DisabledReason reason={initiateReason}>
+        <DialogTrigger asChild>
+          <Button
+            variant="default"
+            disabled={!canInitiate}
+            onClick={(e) => {
+              if (!wallet.publicKey) {
+                e.preventDefault();
+                walletModal.setVisible(true);
+                return;
+              }
+              setIsOpen(true);
+            }}
+          >
+            Stake
+          </Button>
+        </DialogTrigger>
+      </DisabledReason>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Stake {nativeSymbol}</DialogTitle>

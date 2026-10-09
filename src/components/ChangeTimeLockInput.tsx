@@ -10,8 +10,11 @@ import { toast } from 'sonner';
 import { useMultisig } from '../hooks/useServices';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
 import { toastSteps } from '../lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '../lib/transaction/proposalInstructions';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMultisigData } from '../hooks/useMultisigData';
+import { useProposePermissions } from '../hooks/useProposePermissions';
+import { DisabledReason } from './DisabledReason';
 import { TIME_LOCK_UNITS, formatDuration, parseTimeLockInput } from '@/lib/timeLock';
 import type { TimeLockUnit } from '@/lib/timeLock';
 
@@ -27,6 +30,7 @@ const ChangeTimeLockInput = ({ multisigPda, transactionIndex }: ChangeTimeLockIn
   const wallet = useWallet();
   const walletModal = useWalletModal();
   const queryClient = useQueryClient();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
   const { connection, programId } = useMultisigData();
 
   const parsed = value ? parseTimeLockInput(value, unit) : null;
@@ -52,26 +56,20 @@ const ChangeTimeLockInput = ({ multisigPda, transactionIndex }: ChangeTimeLockIn
       rentPayer: wallet.publicKey,
       programId: program,
     });
-    const proposalIx = multisig.instructions.proposalCreate({
+    const proposalIxs = withProposal(setTimeLockIx, {
       multisigPda: new PublicKey(multisigPda),
       creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: bigIntTransactionIndex,
-      rentPayer: wallet.publicKey,
-      programId: program,
-    });
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda: new PublicKey(multisigPda),
-      member: wallet.publicKey,
       transactionIndex: bigIntTransactionIndex,
       programId: program,
+      approve: canVote,
     });
 
-    await signSendAndConfirmV0(connection, wallet, [setTimeLockIx, proposalIx, approveIx], {
+    await signSendAndConfirmV0(connection, wallet, proposalIxs, {
       label: 'ChangeTimeLockInput',
       onStep: toastSteps(),
     });
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await queryClient.invalidateQueries({ queryKey: ['multisig'] });
   };
 
   return (
@@ -108,19 +106,21 @@ const ChangeTimeLockInput = ({ multisigPda, transactionIndex }: ChangeTimeLockIn
           approval.
         </p>
       </div>
-      <Button
-        onClick={() =>
-          toast.promise(changeTimeLock, {
-            id: 'transaction',
-            loading: 'Loading...',
-            success: 'Time lock change proposed.',
-            error: (e) => `Failed to propose: ${e}`,
-          })
-        }
-        disabled={newTimeLock === null || newTimeLock === currentTimeLock}
-      >
-        Change Time Lock
-      </Button>
+      <DisabledReason reason={initiateReason}>
+        <Button
+          onClick={() =>
+            toast.promise(changeTimeLock, {
+              id: 'transaction',
+              loading: 'Loading...',
+              success: proposedMessage('Time lock change proposed.', canVote),
+              error: (e) => `Failed to propose: ${e}`,
+            })
+          }
+          disabled={!canInitiate || newTimeLock === null || newTimeLock === currentTimeLock}
+        >
+          Change Time Lock
+        </Button>
+      </DisabledReason>
     </div>
   );
 };

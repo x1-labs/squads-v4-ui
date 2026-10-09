@@ -6,13 +6,15 @@ import * as multisig from '@sqds/multisig';
 import { PublicKey } from '@solana/web3.js';
 import { toast } from 'sonner';
 import { useMultisig } from '@/hooks/useServices';
-import { useAccess } from '@/hooks/useAccess';
+import { useProposePermissions } from '@/hooks/useProposePermissions';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
 import { toastSteps } from '../lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '../lib/transaction/proposalInstructions';
 import { useQueryClient } from '@tanstack/react-query';
 import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
+import { DisabledReason } from './DisabledReason';
 import {
   Dialog,
   DialogContent,
@@ -54,7 +56,7 @@ const EditMemberPermissions = ({
   const bigIntTransactionIndex = BigInt(transactionIndex);
   const { connection } = useMultisigData();
   const queryClient = useQueryClient();
-  const hasAccess = useAccess();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
 
   const handlePermissionToggle = (permission: number) => {
     setPermissions((prev) => prev ^ permission); // XOR to toggle the bit
@@ -94,44 +96,34 @@ const EditMemberPermissions = ({
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
 
-    const proposalIx = multisig.instructions.proposalCreate({
+    const proposalIxs = withProposal(changeMemberPermissionsIx, {
       multisigPda: new PublicKey(multisigPda),
       creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: bigIntTransactionIndex,
-      rentPayer: wallet.publicKey,
-      programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-    });
-
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda: new PublicKey(multisigPda),
-      member: wallet.publicKey,
       transactionIndex: bigIntTransactionIndex,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+      approve: canVote,
     });
 
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
-    await signSendAndConfirmV0(
-      connection,
-      wallet,
-      [changeMemberPermissionsIx, proposalIx, approveIx],
-      {
-        label: 'EditMemberPermissions',
-        onStep: toastSteps(),
-      }
-    );
+    await signSendAndConfirmV0(connection, wallet, proposalIxs, {
+      label: 'EditMemberPermissions',
+      onStep: toastSteps(),
+    });
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await queryClient.invalidateQueries({ queryKey: ['multisig'] });
     setIsOpen(false);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" disabled={!hasAccess}>
-          <Settings className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
+      <DisabledReason reason={initiateReason}>
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm" disabled={!canInitiate}>
+            <Settings className="h-4 w-4" />
+          </Button>
+        </DialogTrigger>
+      </DisabledReason>
       <DialogContent className="max-h-[90vh] max-w-[95vw] overflow-y-auto sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Edit Member Permissions</DialogTitle>
@@ -192,7 +184,7 @@ const EditMemberPermissions = ({
               toast.promise(updatePermissions, {
                 id: 'transaction',
                 loading: 'Loading...',
-                success: 'Permission update proposed.',
+                success: proposedMessage('Permission update proposed.', canVote),
                 error: (e) => `Failed to propose: ${e}`,
               })
             }

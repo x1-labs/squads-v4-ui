@@ -360,9 +360,9 @@ export default function TransactionDetailsPage() {
               {showApprove && (
                 <SplitButton
                   items={[{
-                    label: hasUserApproved ? 'Already Approved' : isInBatchApproval(Number(transactionIndex)) ? 'In Batch' : 'Batch Approval',
+                    label: !canVote ? 'Batch Approval (needs Vote permission)' : hasUserApproved ? 'Already Approved' : isInBatchApproval(Number(transactionIndex)) ? 'In Batch' : 'Batch Approval',
                     onClick: handleAddToBatch,
-                    disabled: hasUserApproved || isInBatchApproval(Number(transactionIndex)),
+                    disabled: !canVote || hasUserApproved || isInBatchApproval(Number(transactionIndex)),
                   }]}
                 >
                   <ApproveButton

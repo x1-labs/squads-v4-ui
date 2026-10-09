@@ -12,7 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useMultisigData } from '@/hooks/useMultisigData';
-import { useAccess } from '@/hooks/useAccess';
+import { useProposePermissions } from '@/hooks/useProposePermissions';
+import { DisabledReason } from '@/components/DisabledReason';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useQueryClient } from '@tanstack/react-query';
@@ -22,6 +23,7 @@ import { StakeAccountInfo as StakeAccountData } from '@/lib/staking/validatorSta
 import { toast } from 'sonner';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { toastSteps } from '@/lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '@/lib/transaction/proposalInstructions';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import { RefreshCw } from 'lucide-react';
 import { StakeAccountDisplay } from './StakeAccountDisplay';
@@ -53,7 +55,7 @@ export function RedelegateStakeDialog({
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { connection, programId, multisigAddress } = useMultisigData();
-  const isMember = useAccess();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
   const wallet = useWallet();
   const walletModal = useWalletModal();
   const queryClient = useQueryClient();
@@ -139,39 +141,27 @@ export function RedelegateStakeDialog({
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
       });
 
-      const proposalIx = multisig.instructions.proposalCreate({
+      const proposalIxs = withProposal(multisigTransactionIx, {
         multisigPda: new PublicKey(multisigAddress!),
         creator: wallet.publicKey,
-        isDraft: false,
-        transactionIndex: transactionIndexBN,
-        rentPayer: wallet.publicKey,
-        programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-      });
-
-      const approveIx = multisig.instructions.proposalApprove({
-        multisigPda: new PublicKey(multisigAddress!),
-        member: wallet.publicKey,
         transactionIndex: transactionIndexBN,
         programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+        approve: canVote,
       });
 
       // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
       // until confirmed or expired. Throws with a message that says whether it landed.
-      await signSendAndConfirmV0(
-        connection,
-        wallet,
-        [multisigTransactionIx, proposalIx, approveIx],
-        {
-          label: 'RedelegateStakeDialog',
-          onStep: toastSteps(),
-        }
-      );
+      await signSendAndConfirmV0(connection, wallet, proposalIxs, {
+        label: 'RedelegateStakeDialog',
+        onStep: toastSteps(),
+      });
 
-      toast.success('Stake re-delegated successfully!', { id: 'transaction' });
+      toast.success(proposedMessage('Re-delegation proposed.', canVote), { id: 'transaction' });
       setOpen(false);
       setValidatorVoteAccount('');
       setMemo('');
       await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      await queryClient.invalidateQueries({ queryKey: ['multisig'] });
       await queryClient.invalidateQueries({ queryKey: ['stakeAccounts'] });
     } catch (err: any) {
       console.error('Error re-delegating stake:', err);
@@ -185,26 +175,28 @@ export function RedelegateStakeDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {externalIsOpen === undefined && (
-        <DialogTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9"
-            disabled={!isMember}
-            onClick={(e) => {
-              if (!wallet.publicKey) {
-                e.preventDefault();
-                walletModal.setVisible(true);
-                return;
-              } else {
-                setOpen(true);
-              }
-            }}
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Re-delegate
-          </Button>
-        </DialogTrigger>
+        <DisabledReason reason={initiateReason}>
+          <DialogTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              disabled={!canInitiate}
+              onClick={(e) => {
+                if (!wallet.publicKey) {
+                  e.preventDefault();
+                  walletModal.setVisible(true);
+                  return;
+                } else {
+                  setOpen(true);
+                }
+              }}
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Re-delegate
+            </Button>
+          </DialogTrigger>
+        </DisabledReason>
       )}
       <DialogContent className="max-w-md">
         <DialogHeader>
@@ -235,6 +227,7 @@ export function RedelegateStakeDialog({
             />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
+          {initiateReason && <p className="text-sm text-destructive">{initiateReason}</p>}
         </div>
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={() => setOpen(false)} disabled={isSubmitting}>
@@ -242,7 +235,9 @@ export function RedelegateStakeDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={isSubmitting || !selectedStakeAccount || !validatorVoteAccount}
+            disabled={
+              isSubmitting || !canInitiate || !selectedStakeAccount || !validatorVoteAccount
+            }
           >
             {isSubmitting ? 'Re-delegating...' : 'Re-delegate'}
           </Button>

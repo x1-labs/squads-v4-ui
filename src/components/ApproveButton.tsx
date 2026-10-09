@@ -6,9 +6,12 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
+import { useCanVote } from '@/hooks/useAccess';
 import { useQueryClient } from '@tanstack/react-query';
 import { describeSendError, signSendAndConfirm } from '../lib/transaction/signSendAndConfirm';
 import { toastSteps } from '../lib/transaction/toastSteps';
+import { NEEDS_VOTE } from '../lib/transaction/proposalInstructions';
+import { DisabledReason } from './DisabledReason';
 
 type ApproveButtonProps = {
   multisigPda: string;
@@ -29,6 +32,7 @@ const ApproveButton = ({
   const isKindValid = validKinds.includes(proposalStatus || 'None');
   const { connection } = useMultisigData();
   const queryClient = useQueryClient();
+  const canVote = useCanVote();
 
   const approveProposal = async () => {
     console.log('[ApproveButton] Starting approval process', {
@@ -117,40 +121,42 @@ const ApproveButton = ({
     }
   };
   return (
-    <Button
-      disabled={isKindValid}
-      onClick={() =>
-        toast.promise(approveProposal, {
-          id: 'transaction',
-          loading: 'Preparing approval...',
-          success: (result) => {
-            // Handle the success result properly
-            if (result?.signature) {
-              console.log('Approval successful with signature:', result.signature);
-              return 'Proposal approved successfully!';
-            }
-            return 'Proposal approved.';
-          },
-          error: (error) => {
-            // Extract error message properly
-            const errorMessage = error?.message || error?.toString() || 'Failed to approve';
+    <DisabledReason reason={canVote ? undefined : NEEDS_VOTE}>
+      <Button
+        disabled={isKindValid || !canVote}
+        onClick={() =>
+          toast.promise(approveProposal, {
+            id: 'transaction',
+            loading: 'Preparing approval...',
+            success: (result) => {
+              // Handle the success result properly
+              if (result?.signature) {
+                console.log('Approval successful with signature:', result.signature);
+                return 'Proposal approved successfully!';
+              }
+              return 'Proposal approved.';
+            },
+            error: (error) => {
+              // Extract error message properly
+              const errorMessage = error?.message || error?.toString() || 'Failed to approve';
 
-            // Log full error for debugging
-            console.error('Full approval error:', error);
+              // Log full error for debugging
+              console.error('Full approval error:', error);
 
-            // Return formatted error message
-            if (errorMessage.length > 200) {
-              return errorMessage.substring(0, 200) + '...';
-            }
-            return errorMessage;
-          },
-        })
-      }
-      className="h-8 px-3 text-sm"
-      variant="default"
-    >
-      Approve
-    </Button>
+              // Return formatted error message
+              if (errorMessage.length > 200) {
+                return errorMessage.substring(0, 200) + '...';
+              }
+              return errorMessage;
+            },
+          })
+        }
+        className="h-8 px-3 text-sm"
+        variant="default"
+      >
+        Approve
+      </Button>
+    </DisabledReason>
   );
 };
 

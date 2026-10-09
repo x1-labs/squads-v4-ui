@@ -23,9 +23,11 @@ import { toast } from 'sonner';
 import { useMultisigData } from '@/hooks/useMultisigData';
 import { useNativeSymbol } from '@/hooks/useNativeSymbol';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAccess } from '@/hooks/useAccess';
+import { useProposePermissions } from '@/hooks/useProposePermissions';
+import { DisabledReason } from '@/components/DisabledReason';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { toastSteps } from '@/lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '@/lib/transaction/proposalInstructions';
 import { addMemoToInstructions } from '@/lib/utils/memoInstruction';
 import {
   createWithdrawStakeInstruction,
@@ -76,7 +78,7 @@ export function WithdrawStakeDialog({
   const { connection, programId, multisigAddress } = useMultisigData();
   const nativeSymbol = useNativeSymbol();
   const queryClient = useQueryClient();
-  const isMember = useAccess();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
 
   // All stake accounts can potentially have withdrawals
   // Active accounts can withdraw excess, inactive can withdraw all
@@ -244,25 +246,17 @@ export function WithdrawStakeDialog({
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
 
-    const proposalIx = multisig.instructions.proposalCreate({
+    const proposalIxs = withProposal(multisigTransactionIx, {
       multisigPda: new PublicKey(multisigAddress),
       creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: transactionIndexBN,
-      rentPayer: wallet.publicKey,
-      programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-    });
-
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda: new PublicKey(multisigAddress),
-      member: wallet.publicKey,
       transactionIndex: transactionIndexBN,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+      approve: canVote,
     });
 
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
-    await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+    await signSendAndConfirmV0(connection, wallet, proposalIxs, {
       label: 'WithdrawStakeDialog',
       onStep: toastSteps(),
     });
@@ -272,29 +266,32 @@ export function WithdrawStakeDialog({
     setMemo('');
     closeDialog();
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await queryClient.invalidateQueries({ queryKey: ['multisig'] });
     await queryClient.invalidateQueries({ queryKey: ['stakeAccounts'] });
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {externalIsOpen === undefined && (
-        <DialogTrigger asChild>
-          <Button
-            variant="outline"
-            disabled={!isMember || stakeAccounts.length === 0}
-            onClick={(e) => {
-              if (!wallet.publicKey) {
-                e.preventDefault();
-                walletModal.setVisible(true);
-                return;
-              } else {
-                setIsOpen(true);
-              }
-            }}
-          >
-            Withdraw
-          </Button>
-        </DialogTrigger>
+        <DisabledReason reason={initiateReason}>
+          <DialogTrigger asChild>
+            <Button
+              variant="outline"
+              disabled={!canInitiate || stakeAccounts.length === 0}
+              onClick={(e) => {
+                if (!wallet.publicKey) {
+                  e.preventDefault();
+                  walletModal.setVisible(true);
+                  return;
+                } else {
+                  setIsOpen(true);
+                }
+              }}
+            >
+              Withdraw
+            </Button>
+          </DialogTrigger>
+        </DisabledReason>
       )}
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
@@ -491,17 +488,18 @@ export function WithdrawStakeDialog({
             )}
           </div>
 
+          {initiateReason && <p className="text-xs text-red-500">{initiateReason}</p>}
           {/* Submit Button */}
           <Button
             onClick={() =>
               toast.promise(withdrawStake, {
                 id: 'transaction',
                 loading: 'Creating withdraw transaction...',
-                success: 'Withdraw proposed.',
+                success: proposedMessage('Withdraw proposed.', canVote),
                 error: (e) => `Failed to propose: ${e}`,
               })
             }
-            disabled={!selectedAccountInfo || !isAmountValid}
+            disabled={!canInitiate || !selectedAccountInfo || !isAmountValid}
             className="w-full"
             size="lg"
           >

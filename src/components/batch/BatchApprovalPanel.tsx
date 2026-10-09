@@ -7,9 +7,10 @@ import { useMultisigData } from '@/hooks/useMultisigData';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAccess } from '@/hooks/useAccess';
+import { useAccess, useCanVote } from '@/hooks/useAccess';
 import { toast } from 'sonner';
 import { submitBatchApprovals, ApprovalItem } from '@/lib/transaction/batchApprovals';
+import { NEEDS_VOTE } from '@/lib/transaction/proposalInstructions';
 import { PublicKey } from '@solana/web3.js';
 import * as multisig from '@sqds/multisig';
 import {
@@ -37,6 +38,7 @@ export function BatchApprovalPanel() {
   const walletModal = useWalletModal();
   const queryClient = useQueryClient();
   const isMember = useAccess();
+  const canVote = useCanVote();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
 
@@ -214,11 +216,13 @@ export function BatchApprovalPanel() {
           </div>
         )}
 
+        {isMember && !canVote && <p className="text-xs text-red-500">{NEEDS_VOTE}</p>}
+
         {/* Submit button */}
         <Button
           className="w-full"
           onClick={handleSubmit}
-          disabled={isSubmitting || !isMember || itemCount === 0}
+          disabled={isSubmitting || !canVote || itemCount === 0}
         >
           {isSubmitting ? (
             <>

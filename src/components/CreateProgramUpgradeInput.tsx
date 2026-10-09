@@ -17,9 +17,12 @@ import { toast } from 'sonner';
 import { isPublickey } from '@/lib/isPublickey';
 import { SimplifiedProgramInfo } from '../hooks/useProgram';
 import { useMultisigData } from '../hooks/useMultisigData';
+import { useProposePermissions } from '../hooks/useProposePermissions';
+import { DisabledReason } from './DisabledReason';
 import { useQueryClient } from '@tanstack/react-query';
 import { signSendAndConfirmV0 } from '../lib/transaction/signSendAndConfirm';
 import { toastSteps } from '../lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '../lib/transaction/proposalInstructions';
 
 type CreateProgramUpgradeInputProps = {
   programInfos: SimplifiedProgramInfo;
@@ -31,6 +34,7 @@ const CreateProgramUpgradeInput = ({
   transactionIndex,
 }: CreateProgramUpgradeInputProps) => {
   const queryClient = useQueryClient();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
   const wallet = useWallet();
   const walletModal = useWalletModal();
 
@@ -190,28 +194,22 @@ const CreateProgramUpgradeInput = ({
       vaultIndex: vaultIndex,
       programId,
     });
-    const proposalIx = multisig.instructions.proposalCreate({
+    const proposalIxs = withProposal(multisigTransactionIx, {
       multisigPda,
       creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: bigIntTransactionIndex,
-      rentPayer: wallet.publicKey,
-      programId,
-    });
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda,
-      member: wallet.publicKey,
       transactionIndex: bigIntTransactionIndex,
       programId,
+      approve: canVote,
     });
 
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
-    await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+    await signSendAndConfirmV0(connection, wallet, proposalIxs, {
       label: 'CreateProgramUpgradeInput',
       onStep: toastSteps(),
     });
     await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    await queryClient.invalidateQueries({ queryKey: ['multisig'] });
   };
   return (
     <div>
@@ -235,28 +233,31 @@ const CreateProgramUpgradeInput = ({
           </div>
         </div>
       )}
-      <Button
-        onClick={() =>
-          toast.promise(changeUpgradeAuth, {
-            id: 'transaction',
-            loading: 'Loading...',
-            success: 'Upgrade authority change proposed.',
-            error: (e) => `Failed to propose: ${e}`,
-          })
-        }
-        disabled={
-          !programId ||
-          !isPublickey(bufferAddress) ||
-          !isPublickey(spillAddress) ||
-          !isPublickey(programInfos.programAddress) ||
-          !isPublickey(programInfos.authority) ||
-          !isPublickey(programInfos.programDataAddress) ||
-          !!bufferWarning ||
-          checkingBuffer
-        }
-      >
-        Create upgrade
-      </Button>
+      <DisabledReason reason={initiateReason}>
+        <Button
+          onClick={() =>
+            toast.promise(changeUpgradeAuth, {
+              id: 'transaction',
+              loading: 'Loading...',
+              success: proposedMessage('Upgrade authority change proposed.', canVote),
+              error: (e) => `Failed to propose: ${e}`,
+            })
+          }
+          disabled={
+            !canInitiate ||
+            !programId ||
+            !isPublickey(bufferAddress) ||
+            !isPublickey(spillAddress) ||
+            !isPublickey(programInfos.programAddress) ||
+            !isPublickey(programInfos.authority) ||
+            !isPublickey(programInfos.programDataAddress) ||
+            !!bufferWarning ||
+            checkingBuffer
+          }
+        >
+          Create upgrade
+        </Button>
+      </DisabledReason>
     </div>
   );
 };

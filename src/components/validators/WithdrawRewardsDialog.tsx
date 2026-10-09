@@ -23,6 +23,9 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { signSendAndConfirmV0 } from '@/lib/transaction/signSendAndConfirm';
 import { toastSteps } from '@/lib/transaction/toastSteps';
+import { proposedMessage, withProposal } from '@/lib/transaction/proposalInstructions';
+import { useProposePermissions } from '@/hooks/useProposePermissions';
+import { DisabledReason } from '@/components/DisabledReason';
 
 interface WithdrawRewardsDialogProps {
   validator: ValidatorInfo;
@@ -38,6 +41,7 @@ export function WithdrawRewardsDialog({ validator }: WithdrawRewardsDialogProps)
   const { data: squad } = useMultisig();
   const wallet = useWallet();
   const queryClient = useQueryClient();
+  const { canInitiate, canVote, initiateReason } = useProposePermissions();
 
   const handleSubmit = async () => {
     if (!squad || !multisigVault || !multisigAddress || !wallet.publicKey || !wallet.signTransaction) {
@@ -91,31 +95,26 @@ export function WithdrawRewardsDialog({ validator }: WithdrawRewardsDialogProps)
         programId: multisigProgramId,
       });
 
-      const proposalIx = multisig.instructions.proposalCreate({
+      const proposalIxs = withProposal(multisigTransactionIx, {
         multisigPda: new PublicKey(multisigAddress),
         creator: wallet.publicKey,
-        isDraft: false,
-        transactionIndex: vaultTransactionIndex,
-        rentPayer: wallet.publicKey,
-        programId: multisigProgramId,
-      });
-
-      const approveIx = multisig.instructions.proposalApprove({
-        multisigPda: new PublicKey(multisigAddress),
-        member: wallet.publicKey,
         transactionIndex: vaultTransactionIndex,
         programId: multisigProgramId,
+        approve: canVote,
       });
 
       // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
       // until confirmed or expired. Throws with a message that says whether it landed.
-      await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+      await signSendAndConfirmV0(connection, wallet, proposalIxs, {
         label: 'WithdrawRewards',
         onStep: toastSteps(),
       });
 
-      toast.success('Transaction created successfully', { id: 'transaction' });
+      toast.success(proposedMessage('Transaction created successfully.', canVote), {
+        id: 'transaction',
+      });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['multisig'] });
       queryClient.invalidateQueries({ queryKey: ['squad'] });
       setOpen(false);
     } catch (error) {
@@ -131,12 +130,14 @@ export function WithdrawRewardsDialog({ validator }: WithdrawRewardsDialogProps)
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="w-full sm:w-auto">
-          <Wallet className="h-4 w-4 sm:mr-2" />
-          <span className="sm:inline">Withdraw Rewards</span>
-        </Button>
-      </DialogTrigger>
+      <DisabledReason reason={initiateReason}>
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm" className="w-full sm:w-auto" disabled={!canInitiate}>
+            <Wallet className="h-4 w-4 sm:mr-2" />
+            <span className="sm:inline">Withdraw Rewards</span>
+          </Button>
+        </DialogTrigger>
+      </DisabledReason>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Withdraw Validator Rewards</DialogTitle>

@@ -6,6 +6,7 @@ import { WalletContextState } from '@solana/wallet-adapter-react';
 import { loadLookupTables } from './getAccountsForSimulation';
 import { signSendAndConfirmV0 } from '~/lib/transaction/signSendAndConfirm';
 import { toastSteps } from '~/lib/transaction/toastSteps';
+import { withProposal } from '~/lib/transaction/proposalInstructions';
 
 export const importTransaction = async (
   tx: string,
@@ -13,7 +14,8 @@ export const importTransaction = async (
   multisigPda: string,
   programId: string,
   vaultIndex: number,
-  wallet: WalletContextState
+  wallet: WalletContextState,
+  approve: boolean
 ) => {
   if (!wallet.publicKey) {
     throw 'Please connect your wallet.';
@@ -49,24 +51,17 @@ export const importTransaction = async (
       vaultIndex: vaultIndex,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
     });
-    const proposalIx = multisig.instructions.proposalCreate({
+    const proposalIxs = withProposal(multisigTransactionIx, {
       multisigPda: new PublicKey(multisigPda),
       creator: wallet.publicKey,
-      isDraft: false,
-      transactionIndex: transactionIndexBN,
-      rentPayer: wallet.publicKey,
-      programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
-    });
-    const approveIx = multisig.instructions.proposalApprove({
-      multisigPda: new PublicKey(multisigPda),
-      member: wallet.publicKey,
       transactionIndex: transactionIndexBN,
       programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+      approve,
     });
 
     // Priority fee, sized compute budget, fresh blockhash, sign, then rebroadcast
     // until confirmed or expired. Throws with a message that says whether it landed.
-    await signSendAndConfirmV0(connection, wallet, [multisigTransactionIx, proposalIx, approveIx], {
+    await signSendAndConfirmV0(connection, wallet, proposalIxs, {
       label: 'importTransaction',
       onStep: toastSteps(),
     });
