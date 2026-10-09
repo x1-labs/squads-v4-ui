@@ -80,6 +80,7 @@ export function BatchExecutePanel() {
         queryClient.invalidateQueries({ queryKey: ['transactions'] }),
         queryClient.invalidateQueries({ queryKey: ['multisig'] }),
         queryClient.invalidateQueries({ queryKey: ['proposal'] }),
+        queryClient.invalidateQueries({ queryKey: ['spendingLimits'] }),
       ]);
     } catch (error: any) {
       const msg = error?.message || String(error);

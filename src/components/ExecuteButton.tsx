@@ -19,6 +19,7 @@ import { describeSendError, signSendAndConfirmV0 } from '../lib/transaction/sign
 import { toastSteps } from '../lib/transaction/toastSteps';
 import { useTimeLockStatus } from '@/hooks/useTimeLockStatus';
 import { formatCountdown } from '@/lib/timeLock';
+import { spendingLimitAccountsForActions } from '@/lib/spendingLimits';
 
 /** One execute to send: the instruction plus the lookup tables it needs to fit. */
 type Execute = {
@@ -135,6 +136,7 @@ const ExecuteButton = ({
 
     let txData;
     let txType;
+    let configActions: multisig.types.ConfigAction[] = [];
     try {
       await multisig.accounts.VaultTransaction.fromAccountAddress(
         // @ts-ignore
@@ -144,11 +146,12 @@ const ExecuteButton = ({
       txType = 'vault';
     } catch (error) {
       try {
-        await multisig.accounts.ConfigTransaction.fromAccountAddress(
+        const configTransaction = await multisig.accounts.ConfigTransaction.fromAccountAddress(
           // @ts-ignore
           connection,
           transactionPda
         );
+        configActions = configTransaction.actions;
         txType = 'config';
       } catch (e) {
         txData = await multisig.accounts.Batch.fromAccountAddress(
@@ -180,12 +183,18 @@ const ExecuteButton = ({
         lookupTableAccounts: resp.lookupTableAccounts,
       });
     } else if (txType == 'config') {
+      const program = programId ? new PublicKey(programId) : multisig.PROGRAM_ID;
       const executeIx = multisig.instructions.configTransactionExecute({
         multisigPda: new PublicKey(multisigPda),
         member,
         rentPayer: member,
         transactionIndex: bigIntTransactionIndex,
-        programId: programId ? new PublicKey(programId) : multisig.PROGRAM_ID,
+        spendingLimits: spendingLimitAccountsForActions(
+          configActions,
+          new PublicKey(multisigPda),
+          program
+        ),
+        programId: program,
       });
 
       executes.push({ instructions: [executeIx] });
@@ -273,6 +282,7 @@ const ExecuteButton = ({
       queryClient.invalidateQueries({ queryKey: ['multisig'] }),
       queryClient.invalidateQueries({ queryKey: ['proposal'] }),
       queryClient.invalidateQueries({ queryKey: ['transaction-details'] }),
+      queryClient.invalidateQueries({ queryKey: ['spendingLimits'] }),
     ]);
 
     // Return success result

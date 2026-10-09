@@ -7,6 +7,7 @@ import type {
 } from '@solana/web3.js';
 import type { WalletContextState } from '@solana/wallet-adapter-react';
 import { signSendAndConfirmV0 } from '~/lib/transaction/signSendAndConfirm';
+import { spendingLimitAccountsForActions } from '~/lib/spendingLimits';
 
 export interface ExecuteItem {
   transactionIndex: number;
@@ -56,6 +57,7 @@ export async function submitBatchExecutes(
 
     // Determine transaction type
     let txType: 'vault' | 'config' | 'unknown' = 'unknown';
+    let configActions: multisig.types.ConfigAction[] = [];
     try {
       await multisig.accounts.VaultTransaction.fromAccountAddress(
         connection as any,
@@ -64,10 +66,11 @@ export async function submitBatchExecutes(
       txType = 'vault';
     } catch {
       try {
-        await multisig.accounts.ConfigTransaction.fromAccountAddress(
+        const configTransaction = await multisig.accounts.ConfigTransaction.fromAccountAddress(
           connection as any,
           transactionPda
         );
+        configActions = configTransaction.actions;
         txType = 'config';
       } catch {
         // Skip unknown types
@@ -92,6 +95,7 @@ export async function submitBatchExecutes(
         member,
         rentPayer: member,
         transactionIndex: transactionIndexBN,
+        spendingLimits: spendingLimitAccountsForActions(configActions, multisigPubkey, programId),
         programId,
       });
       instructions.push(executeIx);
