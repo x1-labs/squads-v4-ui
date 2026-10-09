@@ -336,7 +336,9 @@ describe('wallet account mismatch', () => {
     assert.ok(error instanceof WalletAccountMismatchError, String(error));
     assert.ok(error.walletError instanceof WalletSignTransactionError);
     assert.equal(error.disconnected, true);
-    assert.match(error.message, /the page disconnected the wallet/);
+    assert.match(error.message, /the page disconnected it/);
+    // ExecuteButton prefixes up to ~51 characters, and the toasts cut at 200.
+    assert.ok(error.message.length <= 149, `${error.message.length} characters`);
     assert.equal(disconnects.length, 1);
     assert.equal(calls.sends, 0);
     // Every toast style in the app shows the clear text, never "invalid account".

@@ -98,8 +98,8 @@ const WALLET_ACCOUNT_MISMATCH_MESSAGE =
   "Your wallet's active account is not the connected account. Nothing was sent. " +
   'Disconnect and connect again.';
 const WALLET_ACCOUNT_MISMATCH_DISCONNECTED_MESSAGE =
-  "Your wallet's active account is not the connected account, so the page disconnected " +
-  'the wallet. Nothing was sent. Connect again to use the active account.';
+  "Your wallet's active account is not the connected account, so the page disconnected it. " +
+  'Nothing was sent. Connect again to use the active account.';
 
 /**
  * True when the wallet refused to sign because its active account is not the
