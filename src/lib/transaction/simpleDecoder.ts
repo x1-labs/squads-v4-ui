@@ -5,6 +5,8 @@ import { idlManager } from '../idls/idlManager';
 import { IdlFormat, isAnchorCompatible } from '../idls/idlFormats';
 import { InstructionData } from './instructionTypes';
 import { formatInstructionTitle } from '../utils/instructionFormatters';
+import { getNativeSymbol } from '../network';
+import { decodeConfigAction } from './configAction';
 
 export interface DecodedInstruction {
   programId: string;
@@ -1598,7 +1600,8 @@ export class SimpleDecoder {
     programId: PublicKey
   ): DecodedTransaction {
     const actions = configTx.actions || [];
-    const decodedActions = actions.map((action: any) => this.decodeConfigAction(action));
+    const nativeSymbol = getNativeSymbol(this.connection.rpcEndpoint);
+    const decodedActions = actions.map((action: any) => decodeConfigAction(action, nativeSymbol));
 
     return {
       instructions: [
@@ -1617,105 +1620,6 @@ export class SimpleDecoder {
       ],
       signers: [configTx.creator?.toBase58?.() || 'Unknown'],
     };
-  }
-
-  /**
-   * Decode a config action
-   */
-  private decodeConfigAction(action: any): any {
-    if (!action || typeof action !== 'object') {
-      return { type: 'Unknown', data: action };
-    }
-
-    // The action structure in Anchor uses __kind for the discriminator
-    const actionType = action.__kind || action.kind;
-
-    // If we can't find the action type, show the raw data
-    if (!actionType) {
-      console.log('Unknown action structure:', action);
-      return {
-        type: 'Unknown Action',
-        rawData: action,
-      };
-    }
-
-    switch (actionType) {
-      case 'AddMember':
-      case 'addMember':
-        const newMemberKey = action.newMember?.key;
-        return {
-          type: 'Add Member',
-          member: newMemberKey
-            ? typeof newMemberKey.toBase58 === 'function'
-              ? newMemberKey.toBase58()
-              : newMemberKey.toString()
-            : 'Unknown',
-          permissions: {
-            mask: action.newMember?.permissions?.mask || 0,
-            ...(action.newMember?.permissions || {}),
-          },
-        };
-
-      case 'RemoveMember':
-      case 'removeMember':
-        const oldMemberKey = action.oldMember;
-        return {
-          type: 'Remove Member',
-          member: oldMemberKey
-            ? typeof oldMemberKey.toBase58 === 'function'
-              ? oldMemberKey.toBase58()
-              : oldMemberKey.toString()
-            : 'Unknown',
-        };
-
-      case 'ChangeThreshold':
-      case 'changeThreshold':
-        return {
-          type: 'Change Threshold',
-          newThreshold: action.newThreshold || 0,
-        };
-
-      case 'SetTimeLock':
-      case 'setTimeLock':
-        return {
-          type: 'Set Time Lock',
-          timeLock: action.timeLock || 0,
-        };
-
-      case 'AddSpendingLimit':
-      case 'addSpendingLimit':
-        return {
-          type: 'Add Spending Limit',
-          createKey:
-            action.spendingLimit?.createKey?.toBase58?.() || action.spendingLimit?.createKey,
-          vaultIndex: action.spendingLimit?.vaultIndex,
-          mint: action.spendingLimit?.mint?.toBase58?.() || action.spendingLimit?.mint,
-          amount: action.spendingLimit?.amount?.toString?.() || action.spendingLimit?.amount,
-          period: action.spendingLimit?.period,
-          members:
-            action.spendingLimit?.members?.map?.(
-              (m: any) => m?.toBase58?.() || m?.toString?.() || m
-            ) || [],
-          destinations:
-            action.spendingLimit?.destinations?.map?.(
-              (d: any) => d?.toBase58?.() || d?.toString?.() || d
-            ) || [],
-        };
-
-      case 'RemoveSpendingLimit':
-      case 'removeSpendingLimit':
-        return {
-          type: 'Remove Spending Limit',
-          spendingLimitKey: action.spendingLimit?.toBase58?.() || action.spendingLimit,
-        };
-
-      default:
-        // For unknown action types, show all the data
-        return {
-          type: actionType || 'Unknown Action',
-          data: { ...action, __kind: undefined, kind: undefined },
-        };
-    }
   }
 
   /**
