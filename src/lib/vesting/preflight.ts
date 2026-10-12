@@ -6,9 +6,10 @@
  * could not be read (an RPC failure, a missing account) are reported as
  * unverified rather than silently treated as passing.
  *
- * Checks use the chain state as it is now. They do not simulate earlier
- * instructions in the same proposal, which can change the treasury, the vault
- * or a grant before a later instruction runs.
+ * Checks use the chain state as it is now. Of the earlier instructions in the
+ * same proposal, only native transfers and earlier `create_grant`s are counted
+ * (see `priorEffects.ts`); anything else that changes the treasury, the vault
+ * or a grant before a later instruction runs is not.
  *
  * Guards (vesting `feat/v2`): every instruction checks the treasury PDA seeds;
  * every admin instruction is `has_one = admin`; activate_claims, create_grant,

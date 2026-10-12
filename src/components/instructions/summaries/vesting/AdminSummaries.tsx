@@ -13,6 +13,7 @@ import {
   emptyPreflight,
 } from '@/lib/vesting/preflight';
 import { describeSchedule, scheduleName } from '@/lib/vesting/values';
+import { netTransferTo, priorGrants } from '@/lib/vesting/priorEffects';
 import {
   DetailBlock,
   Field,
@@ -186,6 +187,7 @@ export const VestingTransferAdminSummary: React.FC<InstructionSummaryProps> = ({
 export const VestingActivateClaimsSummary: React.FC<InstructionSummaryProps> = ({
   instruction,
   connection,
+  priorInstructions = [],
 }) => {
   const nativeSymbol = useNativeSymbol();
   const { treasury, loading: treasuryLoading } = useVestingTreasury(instruction, connection);
@@ -196,9 +198,14 @@ export const VestingActivateClaimsSummary: React.FC<InstructionSummaryProps> = (
   const { rent, loading: rentLoading } = useZeroDataRent(connection);
   const loading = treasuryLoading || balanceLoading || rentLoading;
 
+  // Earlier instructions in this proposal run first: top-ups into the vault and
+  // grants created before activation.
+  const vaultTopUp = vault ? netTransferTo(priorInstructions, vault) : null;
+  const balanceBefore = balance !== null && vaultTopUp !== null ? balance + vaultTopUp : null;
+  const earlierGrants = priorGrants(priorInstructions, instruction.programId).total;
   const required =
-    facts?.outstanding !== null && facts?.outstanding !== undefined && rent !== null
-      ? facts.outstanding + rent
+    facts?.outstanding != null && earlierGrants !== null && rent !== null
+      ? facts.outstanding + earlierGrants + rent
       : null;
 
   const preflight = emptyPreflight();
@@ -221,7 +228,7 @@ export const VestingActivateClaimsSummary: React.FC<InstructionSummaryProps> = (
     accountByName(instruction, 'liquid_vault', 2),
     getLiquidVaultPda(instruction.programId).toBase58()
   );
-  checkCoverage(preflight, balance, required, 'everything owed plus rent');
+  checkCoverage(preflight, balanceBefore, required, 'everything owed plus rent');
   const headline = preflightHeadline(preflight, loading, {
     subtitle: 'Opens claiming for every grant. This is one-way: claims cannot be turned off again',
     tone: 'green',
@@ -251,6 +258,14 @@ export const VestingActivateClaimsSummary: React.FC<InstructionSummaryProps> = (
               : undefined
           }
         />
+        {vaultTopUp !== null && vaultTopUp !== BigInt(0) && (
+          <NativeAmountField
+            label="Vault balance when this runs"
+            lamports={balanceBefore}
+            symbol={nativeSymbol}
+            hint="Includes transfers into the vault by earlier instructions in this proposal"
+          />
+        )}
         {vault && <AddressWithButtons address={vault} label="Liquid vault" />}
       </DetailBlock>
     </SummaryShell>

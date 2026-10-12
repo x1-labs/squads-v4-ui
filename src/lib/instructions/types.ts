@@ -8,6 +8,8 @@ import { DecodedInstruction } from '@/lib/transaction/simpleDecoder';
 export interface InstructionSummaryProps {
   instruction: DecodedInstruction;
   connection: Connection;
+  /** Instructions that run before this one in the same transaction, in order. */
+  priorInstructions?: DecodedInstruction[];
 }
 
 /**
