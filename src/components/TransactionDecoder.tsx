@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { getDecoderInstance } from '../lib/transaction/decoderInstance';
-import {
-  DecodedTransaction,
-  DecodedInstruction,
-} from '../lib/transaction/simpleDecoder';
+import { DecodedTransaction, DecodedInstruction } from '../lib/transaction/simpleDecoder';
 import * as multisig from '@sqds/multisig';
 import { formatInstructionValue } from '../lib/utils/formatters';
 import { registry } from '../lib/registry';
@@ -71,7 +68,10 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
     setExpandedInstructions(newExpanded);
   };
 
-  const getInstructionSummary = (instruction: DecodedInstruction): React.ReactNode | null => {
+  const getInstructionSummary = (
+    instruction: DecodedInstruction,
+    priorInstructions: DecodedInstruction[]
+  ): React.ReactNode | null => {
     // Look up the summary component in the registry
     const SummaryComponent = registry.getInstructionSummary(
       instruction.programId,
@@ -79,7 +79,13 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
     );
 
     if (SummaryComponent) {
-      return <SummaryComponent instruction={instruction} connection={connection} />;
+      return (
+        <SummaryComponent
+          instruction={instruction}
+          connection={connection}
+          priorInstructions={priorInstructions}
+        />
+      );
     }
 
     return null;
@@ -87,7 +93,10 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
 
   const renderInstruction = (instruction: DecodedInstruction, index: number) => {
     const isExpanded = expandedInstructions.has(index);
-    const instructionSummary = getInstructionSummary(instruction);
+    const instructionSummary = getInstructionSummary(
+      instruction,
+      decodedTx?.instructions.slice(0, index) ?? []
+    );
 
     return (
       <div key={index} className="mb-4 rounded-lg border border-border bg-muted/50 p-3 sm:p-4">

@@ -25,6 +25,7 @@ import {
   toBigInt,
 } from '@/lib/vesting/values';
 import { GRANT_ACCOUNT_SIZE, VestingGrantAccount } from '@/lib/vesting/accounts';
+import { netTransferTo, priorGrants } from '@/lib/vesting/priorEffects';
 import {
   DetailBlock,
   Field,
@@ -87,6 +88,7 @@ function grantPdaFor(programId: string, grantId: bigint | null): string | undefi
 export const VestingCreateGrantSummary: React.FC<InstructionSummaryProps> = ({
   instruction,
   connection,
+  priorInstructions = [],
 }) => {
   const nativeSymbol = useNativeSymbol();
   const { treasury, loading: treasuryLoading } = useVestingTreasury(instruction, connection);
@@ -134,6 +136,22 @@ export const VestingCreateGrantSummary: React.FC<InstructionSummaryProps> = ({
     payerLoading ||
     grantRentLoading;
 
+  // Earlier instructions in this proposal run first: top-ups into the vault,
+  // and earlier grants that add to what is owed and spend the admin's lamports.
+  const vaultAddress = vaultAccount ?? facts?.liquidVault;
+  const earlierGrants = priorGrants(priorInstructions, instruction.programId);
+  const vaultTopUp = vaultAddress ? netTransferTo(priorInstructions, vaultAddress) : null;
+  const balanceBefore = balance !== null && vaultTopUp !== null ? balance + vaultTopUp : null;
+  const outstandingBefore =
+    facts?.outstanding != null && earlierGrants.total !== null
+      ? facts.outstanding + earlierGrants.total
+      : null;
+  const payerChange = signer ? netTransferTo(priorInstructions, signer) : null;
+  const payerBefore =
+    payerBalance !== null && payerChange !== null && grantRent !== null
+      ? payerBalance + payerChange - BigInt(earlierGrants.count) * grantRent
+      : null;
+
   const preflight = emptyPreflight();
   checkTreasuryAccount(
     preflight,
@@ -163,7 +181,7 @@ export const VestingCreateGrantSummary: React.FC<InstructionSummaryProps> = ({
   checkU64(preflight, grantTotal, 'Principal plus yield');
   checkU64(
     preflight,
-    facts?.outstanding != null && grantTotal !== null ? facts.outstanding + grantTotal : null,
+    outstandingBefore !== null && grantTotal !== null ? outstandingBefore + grantTotal : null,
     'Total outstanding after this grant'
   );
   if (!expectedGrant) {
@@ -179,11 +197,11 @@ export const VestingCreateGrantSummary: React.FC<InstructionSummaryProps> = ({
     checkAccountFree(preflight, grantExists, `Grant #${grantId?.toString()}`);
   }
   if (signer) {
-    if (payerBalance === null || grantRent === null) {
+    if (payerBefore === null || grantRent === null) {
       preflight.unverified.push(
         'Admin balance could not be read — rent for the new grant account not verified'
       );
-    } else if (payerBalance < grantRent) {
+    } else if (payerBefore < grantRent) {
       preflight.rejections.push({
         error: 'InsufficientFundsForRent',
         reason: `The admin cannot pay the grant account's rent (${grantRent.toLocaleString()} lamports)`,
@@ -198,10 +216,10 @@ export const VestingCreateGrantSummary: React.FC<InstructionSummaryProps> = ({
   );
   if (needsCoverage) {
     const required =
-      facts?.outstanding != null && grantTotal !== null && rent !== null
-        ? facts.outstanding + grantTotal + rent
+      outstandingBefore !== null && grantTotal !== null && rent !== null
+        ? outstandingBefore + grantTotal + rent
         : null;
-    checkCoverage(preflight, balance, required, 'everything owed plus this grant plus rent');
+    checkCoverage(preflight, balanceBefore, required, 'everything owed plus this grant plus rent');
   }
 
   const headline = preflightHeadline(preflight, loading, {
@@ -241,6 +259,22 @@ export const VestingCreateGrantSummary: React.FC<InstructionSummaryProps> = ({
             lamports={balance}
             symbol={nativeSymbol}
             hint="Claims are active, so the vault must already hold owed + this grant + rent"
+          />
+        )}
+        {needsCoverage && vaultTopUp !== null && vaultTopUp !== BigInt(0) && (
+          <NativeAmountField
+            label="Vault balance when this runs"
+            lamports={balanceBefore}
+            symbol={nativeSymbol}
+            hint={`Includes ${formatNativeAmount(vaultTopUp, nativeSymbol)} transferred in by earlier instructions`}
+          />
+        )}
+        {needsCoverage && earlierGrants.count > 0 && (
+          <NativeAmountField
+            label="Owed when this runs"
+            lamports={outstandingBefore}
+            symbol={nativeSymbol}
+            hint={`Includes ${earlierGrants.count} earlier grant${earlierGrants.count === 1 ? '' : 's'} in this proposal`}
           />
         )}
       </DetailBlock>

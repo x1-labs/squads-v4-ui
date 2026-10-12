@@ -27,7 +27,9 @@ import {
   willFail,
   type TreasuryFacts,
 } from './preflight.ts';
+import { SYSTEM_PROGRAM_ID, netTransferTo, priorGrants } from './priorEffects.ts';
 import { detectIdlFormat, isAnchorCompatible } from '../idls/idlFormats.ts';
+import type { DecodedInstruction } from '../transaction/simpleDecoder.ts';
 
 // Anchor ships CJS; Node's ESM loader can't see `BN` as a named export.
 const { BN, BorshInstructionCoder } = anchor;
@@ -335,5 +337,109 @@ describe('vesting preflight', () => {
     const right = emptyPreflight();
     checkVaultAccount(right, treasury(), vault, vault);
     assert.equal(willFail(right), false);
+  });
+});
+
+describe('vesting effects of earlier instructions', () => {
+  const programId = VESTING_PROGRAM_IDS.mainnetMonthly;
+  const vault = getLiquidVaultPda(programId).toBase58();
+  const admin = Keypair.generate().publicKey.toBase58();
+  const account = (pubkey: string) => ({ pubkey, isSigner: false, isWritable: true });
+  const transfer = (from: string, to: string, lamports: bigint | string): DecodedInstruction => ({
+    programId: SYSTEM_PROGRAM_ID,
+    programName: 'System Program',
+    instructionName: 'Transfer',
+    accounts: [account(from), account(to)],
+    args: { lamports: lamports.toString() },
+  });
+  const createGrant = (principal: bigint, yieldTotal: bigint): DecodedInstruction => ({
+    programId,
+    programName: 'Vesting',
+    instructionName: 'CreateGrant',
+    accounts: [],
+    args: {
+      principal_total: new BN(principal.toString()),
+      yield_total: new BN(yieldTotal.toString()),
+    },
+  });
+
+  test('nets transfers into and out of an address and ignores others', () => {
+    const other = Keypair.generate().publicKey.toBase58();
+    const prior = [
+      transfer(admin, vault, BigInt(500)),
+      transfer(vault, other, BigInt(200)),
+      transfer(admin, other, BigInt(9_999)),
+    ];
+    assert.equal(netTransferTo(prior, vault), BigInt(300));
+    assert.equal(netTransferTo(prior, admin), BigInt(-10_499));
+    assert.equal(netTransferTo([], vault), BigInt(0));
+  });
+
+  test('an unreadable transfer touching the address leaves it unknown', () => {
+    assert.equal(netTransferTo([transfer(admin, vault, 'garbage')], vault), null);
+    const other = Keypair.generate().publicKey.toBase58();
+    assert.equal(netTransferTo([transfer(admin, other, 'garbage')], vault), BigInt(0));
+  });
+
+  test('sums earlier create_grants on the same deployment only', () => {
+    const elsewhere = {
+      ...createGrant(BigInt(7), BigInt(7)),
+      programId: VESTING_PROGRAM_IDS.testnetLinear,
+    };
+    const grants = priorGrants(
+      [createGrant(BigInt(10), BigInt(1)), elsewhere, createGrant(BigInt(20), BigInt(2))],
+      programId
+    );
+    assert.deepEqual(grants, { count: 2, total: BigInt(33) });
+    const unreadable = priorGrants([{ ...createGrant(BigInt(1), BigInt(1)), args: {} }], programId);
+    assert.deepEqual(unreadable, { count: 1, total: null });
+  });
+
+  // X1 Labs vote #182 (late-grant batch 2) against mainnet state on 2026-10-12:
+  // a top-up into the vault followed by four create_grants.
+  const RENT_ZERO_DATA = BigInt(890_880);
+  const VAULT_BALANCE = BigInt('17995512181890886');
+  const OUTSTANDING = BigInt('17995512180000007');
+  const BATCH = [
+    [BigInt('166667000000000'), BigInt('11431020000000')],
+    [BigInt('100000000000000'), BigInt('6661290000000')],
+    [BigInt('50000000000000'), BigInt('3341610000000')],
+    [BigInt('495000000000000'), BigInt('32539300000000')],
+  ] as const;
+  const coverage = (instructions: DecodedInstruction[]) =>
+    instructions.flatMap((ix, index) => {
+      if (ix.programId !== programId) return [];
+      const prior = instructions.slice(0, index);
+      const topUp = netTransferTo(prior, vault)!;
+      const owed = OUTSTANDING + priorGrants(prior, programId).total!;
+      const grant =
+        BigInt(ix.args.principal_total.toString()) + BigInt(ix.args.yield_total.toString());
+      const result = emptyPreflight();
+      checkCoverage(result, VAULT_BALANCE + topUp, owed + grant + RENT_ZERO_DATA, 'grant');
+      return [willFail(result)];
+    });
+
+  test('a top-up earlier in the proposal funds the grants after it', () => {
+    const grants = BATCH.map(([p, y]) => createGrant(p, y));
+    assert.deepEqual(coverage([transfer(admin, vault, BigInt('865640221000000')), ...grants]), [
+      false,
+      false,
+      false,
+      false,
+    ]);
+    // Without the top-up every grant is short, as the program reports (6009).
+    assert.deepEqual(coverage(grants), [true, true, true, true]);
+  });
+
+  test('earlier grants count against the top-up', () => {
+    const grants = BATCH.map(([p, y]) => createGrant(p, y));
+    // Enough for the first grant only: the rest must still be flagged.
+    const firstOnly = BATCH[0][0] + BATCH[0][1];
+    assert.deepEqual(coverage([transfer(admin, vault, firstOnly), ...grants]), [
+      false,
+      true,
+      true,
+      true,
+    ]);
   });
 });
