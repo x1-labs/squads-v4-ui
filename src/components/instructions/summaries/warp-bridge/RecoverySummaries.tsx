@@ -181,7 +181,6 @@ export const BridgeSetRecoveryModeSummary: React.FC<InstructionSummaryProps> = (
       <DetailBlock>
         <Field
           label="Mode"
-          hint={next.description}
           value={
             changed ? (
               <ValueChange
@@ -284,7 +283,7 @@ export const BridgeCancelInboundSummary: React.FC<InstructionSummaryProps> = ({
         <Field
           label="Amount"
           value={amount}
-          hint="Gross amount from the original source transfer"
+          hint="Net amount recorded in the source outgoing message, after fees — what the recipient would have received"
         />
         {sender && <AddressWithButtons address={sender} label="Sender" />}
         {sourceMint && <AddressWithButtons address={sourceMint} label="Source mint" />}
