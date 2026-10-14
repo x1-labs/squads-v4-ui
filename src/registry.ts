@@ -47,6 +47,17 @@ import {
   BridgeInitializeGuardianSetV2Summary,
   BridgePostSignaturesSummary,
   BridgeCloseSignatureSetSummary,
+  BridgeSetTokenPauseSummary,
+  BridgeSetTokenLimitsSummary,
+  BridgeInitializeRecoveryPolicySummary,
+  BridgeSetRecoveryModeSummary,
+  BridgeCancelInboundSummary,
+  BridgePostCancellationSignaturesSummary,
+  BridgeReverseOutgoingSummary,
+  BridgeSetManualReviewSummary,
+  BridgeSetDelayedReleaseMaturitySummary,
+  BridgeReleaseDelayedInboundSummary,
+  BridgeSettleDelayedSummary,
 } from './components/instructions/summaries/warp-bridge';
 import {
   DelegationUpdateConfigSummary,
@@ -480,6 +491,14 @@ registry.register({
       summary: BridgeTransferMintAuthoritySummary,
       tags: { label: 'Transfer Mint Auth', color: 'red', variant: 'subtle' },
     },
+    set_token_pause: {
+      summary: BridgeSetTokenPauseSummary,
+      tags: { label: 'Pause/Resume Token', color: 'red', variant: 'subtle' },
+    },
+    set_token_limits: {
+      summary: BridgeSetTokenLimitsSummary,
+      tags: { label: 'Set Token Limits', color: 'amber', variant: 'subtle' },
+    },
 
     // Guardians and staged consensus
     set_guardians_v2: {
@@ -538,6 +557,46 @@ registry.register({
     transfer_admin: {
       summary: BridgeTransferAdminSummary,
       tags: { label: 'Transfer Admin', color: 'red', variant: 'subtle' },
+    },
+
+    // Manual review and delayed release
+    set_manual_review: {
+      summary: BridgeSetManualReviewSummary,
+      tags: { label: 'Manual Review', color: 'amber', variant: 'subtle' },
+    },
+    set_delayed_release_maturity: {
+      summary: BridgeSetDelayedReleaseMaturitySummary,
+      tags: { label: 'Set Release Time', color: 'amber', variant: 'subtle' },
+    },
+    release_delayed_inbound: {
+      summary: BridgeReleaseDelayedInboundSummary,
+      tags: { label: 'Release Held Transfer', color: 'green', variant: 'subtle' },
+    },
+    settle_delayed: {
+      summary: BridgeSettleDelayedSummary,
+      tags: { label: 'Settle Held Transfer', color: 'blue', variant: 'subtle' },
+    },
+
+    // Incident recovery (root only, irreversible)
+    initialize_recovery_policy: {
+      summary: BridgeInitializeRecoveryPolicySummary,
+      tags: { label: 'Init Recovery Policy', color: 'indigo', variant: 'subtle' },
+    },
+    set_recovery_mode: {
+      summary: BridgeSetRecoveryModeSummary,
+      tags: { label: 'Set Recovery Mode', color: 'red', variant: 'subtle' },
+    },
+    cancel_inbound: {
+      summary: BridgeCancelInboundSummary,
+      tags: { label: 'Cancel Inbound', color: 'red', variant: 'subtle' },
+    },
+    post_cancellation_signatures: {
+      summary: BridgePostCancellationSignaturesSummary,
+      tags: { label: 'Post Cancellation Sigs', color: 'indigo', variant: 'subtle' },
+    },
+    reverse_outgoing: {
+      summary: BridgeReverseOutgoingSummary,
+      tags: { label: 'Reverse Outgoing', color: 'red', variant: 'subtle' },
     },
 
     // Account migrations

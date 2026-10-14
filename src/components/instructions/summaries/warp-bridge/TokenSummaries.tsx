@@ -494,3 +494,144 @@ export const BridgeMigrateTokenRegistrySummary: React.FC<InstructionSummaryProps
     </SummaryShell>
   );
 };
+
+/**
+ * `set_token_pause` — pauses or resumes one token on this chain. A paused token
+ * cannot be bridged out, delivered in, or claimed here; other tokens keep
+ * running.
+ */
+export const BridgeSetTokenPauseSummary: React.FC<InstructionSummaryProps> = ({
+  instruction,
+  connection,
+}) => {
+  const { localMint, symbol, decimals, registry, loading } = useBridgeToken(
+    instruction,
+    connection
+  );
+  const authority = accountByName(instruction, 'authority', 2);
+
+  const pausing = instruction.args?.paused === true;
+  const changed = registry !== null && registry.paused !== pausing;
+  const name = symbol ?? 'this token';
+
+  return (
+    <SummaryShell
+      icon={pausing ? '⏸️' : '▶️'}
+      title={pausing ? `Pause ${symbol ?? 'Token'}` : `Resume ${symbol ?? 'Token'}`}
+      subtitle={
+        !loading && registry && !changed
+          ? `${name} is already ${pausing ? 'paused' : 'active'} — this proposal changes nothing`
+          : pausing
+            ? `Stops bridging ${name} in and out of this chain until it is resumed`
+            : `Resumes bridging ${name} in and out of this chain`
+      }
+      tone={!loading && registry && !changed ? 'gray' : pausing ? 'red' : 'green'}
+    >
+      <DetailBlock>
+        <BridgeTokenTarget localMint={localMint} symbol={symbol} decimals={decimals} />
+        <Field
+          label="Bridging"
+          hint="Covers bridge out, delivery in and claims for this token on this chain"
+          value={
+            changed ? (
+              <ValueChange
+                from={registry!.paused ? 'Paused' : 'Active'}
+                to={pausing ? 'Paused' : 'Active'}
+                tone={pausing ? 'red' : 'green'}
+              />
+            ) : pausing ? (
+              'Paused'
+            ) : (
+              'Active'
+            )
+          }
+        />
+        {authority && <AddressWithButtons address={authority} label="Authority" />}
+      </DetailBlock>
+    </SummaryShell>
+  );
+};
+
+/** `set_token_limits` — daily cap and per-transfer bounds for one token. */
+export const BridgeSetTokenLimitsSummary: React.FC<InstructionSummaryProps> = ({
+  instruction,
+  connection,
+}) => {
+  const { localMint, symbol, decimals, registry, loading } = useBridgeToken(
+    instruction,
+    connection
+  );
+  const authority = accountByName(instruction, 'authority', 2);
+
+  const fields = [
+    {
+      key: 'daily_cap',
+      label: 'Daily cap',
+      hint: 'Outbound volume allowed per UTC day; 0 means uncapped',
+      empty: 'No cap',
+    },
+    {
+      key: 'min_amount',
+      label: 'Min per transfer',
+      hint: 'Checked against the amount after fees; 0 means no minimum',
+      empty: 'No minimum',
+    },
+    {
+      key: 'max_amount',
+      label: 'Max per transfer',
+      hint: 'Checked against the amount after fees; 0 means no maximum',
+      empty: 'No maximum',
+    },
+  ] as const;
+
+  const changed = fields.filter(
+    (field) => registry && differs(instruction.args?.[field.key], (registry as any)[field.key])
+  );
+
+  return (
+    <SummaryShell
+      icon="📏"
+      title="Set Token Limits"
+      subtitle={
+        loading
+          ? 'Comparing against the current registry entry…'
+          : !registry
+            ? `Sets the cap and transfer bounds for ${symbol ?? 'this token'} (current entry unavailable)`
+            : changed.length === 0
+              ? 'No effective change — all three limits match the current entry'
+              : `${changed.length} of 3 limits change for ${symbol ?? 'this token'}`
+      }
+      tone={registry && changed.length === 0 ? 'gray' : 'amber'}
+    >
+      <DetailBlock>
+        <BridgeTokenTarget localMint={localMint} symbol={symbol} decimals={decimals} />
+      </DetailBlock>
+      <DetailBlock>
+        {fields.map((field) => {
+          const submitted = instruction.args?.[field.key];
+          const current = registry ? (registry as any)[field.key] : undefined;
+          const format = (value: unknown) => formatLimit(value, decimals, symbol, field.empty);
+          const isChanged = registry && differs(submitted, current);
+          return (
+            <Field
+              key={field.key}
+              label={field.label}
+              hint={field.hint}
+              value={
+                isChanged ? (
+                  <ValueChange from={format(current)} to={format(submitted)} />
+                ) : (
+                  <span className={registry ? 'text-muted-foreground' : ''}>
+                    {format(submitted)}
+                    {registry ? ' (unchanged)' : ''}
+                  </span>
+                )
+              }
+            />
+          );
+        })}
+        {authority && <AddressWithButtons address={authority} label="Authority" />}
+      </DetailBlock>
+    </SummaryShell>
+  );
+};

@@ -204,6 +204,31 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "inbound_cancellation",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  110,
+                  99,
+                  101,
+                  108,
+                  95,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -481,6 +506,31 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "inbound_cancellation",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  110,
+                  99,
+                  101,
+                  108,
+                  95,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -696,6 +746,224 @@
         {
           "name": "amount",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "cancel_inbound",
+      "docs": [
+        "Root: permanently block one unexecuted canonical inbound transfer."
+      ],
+      "discriminator": [
+        67,
+        227,
+        127,
+        249,
+        55,
+        248,
+        51,
+        176
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "recovery_policy",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  118,
+                  101,
+                  114,
+                  121,
+                  95,
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "guardian_set",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100,
+                  105,
+                  97,
+                  110,
+                  95,
+                  115,
+                  101,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "incoming_msg",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  118,
+                  116,
+                  95,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "inbound_cancellation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  110,
+                  99,
+                  101,
+                  108,
+                  95,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "source_seq",
+          "type": "u64"
+        },
+        {
+          "name": "sender",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "source_token_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "source_timestamp",
+          "type": "i64"
+        },
+        {
+          "name": "reason_code",
+          "type": "u8"
+        },
+        {
+          "name": "incident_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
         }
       ]
     },
@@ -1275,6 +1543,83 @@
       "args": []
     },
     {
+      "name": "initialize_recovery_policy",
+      "docs": [
+        "Root: initialize incident recovery in a fail-closed disabled state."
+      ],
+      "discriminator": [
+        81,
+        82,
+        67,
+        210,
+        32,
+        115,
+        156,
+        184
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "recovery_policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  118,
+                  101,
+                  114,
+                  121,
+                  95,
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "initialize_roles",
       "docs": [
         "Initialize the Roles account (admin only)"
@@ -1708,7 +2053,7 @@
         {
           "name": "authority",
           "docs": [
-            "Authority - must be admin or have pauser role"
+            "Authority - must be root, operations governance, or have pauser role"
           ],
           "signer": true
         }
@@ -1721,6 +2066,119 @@
               "name": "PauseReason"
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "post_cancellation_signatures",
+      "docs": [
+        "Stage destination-watcher attestations for a finalized cancellation."
+      ],
+      "discriminator": [
+        157,
+        15,
+        250,
+        201,
+        185,
+        26,
+        63,
+        156
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "guardian_set",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100,
+                  105,
+                  97,
+                  110,
+                  95,
+                  115,
+                  101,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "cancellation_proof",
+          "writable": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "instruction_sysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "source_seq",
+          "type": "u64"
+        },
+        {
+          "name": "destination_program_id",
+          "type": "pubkey"
+        },
+        {
+          "name": "transfer_message_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "reason_code",
+          "type": "u8"
+        },
+        {
+          "name": "incident_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "cancelled_at",
+          "type": "i64"
         }
       ]
     },
@@ -2007,6 +2465,547 @@
       ]
     },
     {
+      "name": "release_delayed_inbound",
+      "docs": [
+        "Operations: atomically release and settle one manual or scheduled inbound delay."
+      ],
+      "discriminator": [
+        237,
+        150,
+        229,
+        194,
+        180,
+        142,
+        193,
+        87
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "roles",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "incoming_msg",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  118,
+                  116,
+                  95,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "recipient",
+          "writable": true
+        },
+        {
+          "name": "recipient_token_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "recipient"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "token_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_mint",
+          "writable": true
+        },
+        {
+          "name": "mint_authority",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "source_seq",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "reverse_outgoing",
+      "docs": [
+        "Root: refund one destination-cancelled outbound transfer on its source chain."
+      ],
+      "discriminator": [
+        189,
+        57,
+        10,
+        234,
+        160,
+        245,
+        137,
+        241
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "recovery_policy",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  118,
+                  101,
+                  114,
+                  121,
+                  95,
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "guardian_set",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  117,
+                  97,
+                  114,
+                  100,
+                  105,
+                  97,
+                  110,
+                  95,
+                  115,
+                  101,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "cancellation_proof",
+          "writable": true
+        },
+        {
+          "name": "token_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "outgoing_msg",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  118,
+                  116,
+                  95,
+                  111,
+                  117,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "outgoing_reversal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  118,
+                  101,
+                  114,
+                  115,
+                  101,
+                  95,
+                  111,
+                  117,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "sender",
+          "writable": true
+        },
+        {
+          "name": "sender_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_mint",
+          "writable": true
+        },
+        {
+          "name": "mint_authority",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "seq",
+          "type": "u64"
+        },
+        {
+          "name": "destination_cancellation",
+          "type": "pubkey"
+        },
+        {
+          "name": "reason_code",
+          "type": "u8"
+        },
+        {
+          "name": "incident_id",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "set_chain_id",
       "docs": [
         "Admin: Set chain ID for this deployment",
@@ -2059,6 +3058,97 @@
       ]
     },
     {
+      "name": "set_delayed_release_maturity",
+      "docs": [
+        "Operations: schedule automatic release, or hold indefinitely with i64::MAX."
+      ],
+      "discriminator": [
+        6,
+        206,
+        196,
+        220,
+        7,
+        57,
+        199,
+        102
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "roles",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "incoming_msg",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  118,
+                  116,
+                  95,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "source_seq",
+          "type": "u64"
+        },
+        {
+          "name": "release_at",
+          "type": "i64"
+        }
+      ]
+    },
+    {
       "name": "set_fees",
       "docs": [
         "Admin: Update SOL fees (legacy)"
@@ -2095,10 +3185,28 @@
         },
         {
           "name": "admin",
-          "signer": true,
-          "relations": [
-            "config"
-          ]
+          "docs": [
+            "Acting authority. The legacy account name is retained for client compatibility."
+          ],
+          "signer": true
+        },
+        {
+          "name": "roles",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -2250,6 +3358,152 @@
       ]
     },
     {
+      "name": "set_manual_review",
+      "docs": [
+        "Enable or disable destination manual review."
+      ],
+      "discriminator": [
+        214,
+        118,
+        143,
+        44,
+        183,
+        23,
+        114,
+        116
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "roles",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "enabled",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "set_recovery_mode",
+      "docs": [
+        "Root: advance or disable the staged incident-recovery policy."
+      ],
+      "discriminator": [
+        200,
+        8,
+        218,
+        109,
+        176,
+        178,
+        50,
+        83
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "recovery_policy",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  99,
+                  111,
+                  118,
+                  101,
+                  114,
+                  121,
+                  95,
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "mode",
+          "type": {
+            "defined": {
+              "name": "RecoveryMode"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "set_role",
       "docs": [
         "Set a role (admin only)"
@@ -2393,10 +3647,28 @@
         },
         {
           "name": "admin",
-          "signer": true,
-          "relations": [
-            "config"
-          ]
+          "docs": [
+            "Acting authority. The legacy account name is retained for client compatibility."
+          ],
+          "signer": true
+        },
+        {
+          "name": "roles",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -2415,6 +3687,212 @@
         {
           "name": "fee_collector_ata",
           "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_token_limits",
+      "docs": [
+        "Operations: set daily and per-transfer limits for an existing token."
+      ],
+      "discriminator": [
+        149,
+        86,
+        177,
+        69,
+        49,
+        176,
+        88,
+        215
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "local_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "roles",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "local_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "daily_cap",
+          "type": "u64"
+        },
+        {
+          "name": "min_amount",
+          "type": "u64"
+        },
+        {
+          "name": "max_amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "set_token_pause",
+      "docs": [
+        "Operations: pause or unpause an existing token."
+      ],
+      "discriminator": [
+        103,
+        164,
+        213,
+        49,
+        35,
+        219,
+        212,
+        77
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "local_mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "roles",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "local_mint",
+          "type": "pubkey"
+        },
+        {
+          "name": "paused",
+          "type": "bool"
         }
       ]
     },
@@ -2608,10 +4086,28 @@
         },
         {
           "name": "admin",
-          "signer": true,
-          "relations": [
-            "config"
-          ]
+          "docs": [
+            "Acting authority. The legacy account name is retained for client compatibility."
+          ],
+          "signer": true
+        },
+        {
+          "name": "roles",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -2626,6 +4122,244 @@
         {
           "name": "whale_delay_seconds",
           "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "settle_delayed",
+      "docs": [
+        "Permissionlessly settle a released or elapsed delayed transfer."
+      ],
+      "discriminator": [
+        161,
+        56,
+        98,
+        239,
+        203,
+        4,
+        168,
+        70
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  95,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "incoming_msg",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  118,
+                  116,
+                  95,
+                  105,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "source_seq"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "recipient",
+          "writable": true
+        },
+        {
+          "name": "recipient_token_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "recipient"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "token_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_mint",
+          "writable": true
+        },
+        {
+          "name": "mint_authority",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "token_registry.local_mint",
+                "account": "TokenRegistryEntry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_token_account",
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "source_seq",
+          "type": "u64"
         }
       ]
     },
@@ -2814,7 +4548,7 @@
     {
       "name": "unpause",
       "docs": [
-        "Unpause the bridge (admin only)"
+        "Unpause the bridge (root or operations governance)"
       ],
       "discriminator": [
         169,
@@ -2848,10 +4582,28 @@
         },
         {
           "name": "admin",
-          "signer": true,
-          "relations": [
-            "config"
-          ]
+          "docs": [
+            "Acting authority. The legacy account name is retained for client compatibility."
+          ],
+          "signer": true
+        },
+        {
+          "name": "roles",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  115
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": []
@@ -2963,6 +4715,19 @@
   ],
   "accounts": [
     {
+      "name": "CancellationProof",
+      "discriminator": [
+        148,
+        167,
+        77,
+        208,
+        97,
+        1,
+        175,
+        211
+      ]
+    },
+    {
       "name": "Config",
       "discriminator": [
         155,
@@ -2989,6 +4754,19 @@
       ]
     },
     {
+      "name": "InboundCancellation",
+      "discriminator": [
+        8,
+        253,
+        11,
+        139,
+        232,
+        51,
+        92,
+        11
+      ]
+    },
+    {
       "name": "IncomingMsg",
       "discriminator": [
         186,
@@ -3012,6 +4790,32 @@
         122,
         253,
         155
+      ]
+    },
+    {
+      "name": "OutgoingReversal",
+      "discriminator": [
+        98,
+        27,
+        190,
+        130,
+        33,
+        239,
+        121,
+        64
+      ]
+    },
+    {
+      "name": "RecoveryPolicy",
+      "discriminator": [
+        211,
+        66,
+        33,
+        54,
+        141,
+        98,
+        18,
+        201
       ]
     },
     {
@@ -3064,6 +4868,99 @@
         152,
         117,
         119
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "DelayedInboundMaturitySet",
+      "discriminator": [
+        138,
+        132,
+        124,
+        40,
+        241,
+        37,
+        226,
+        210
+      ]
+    },
+    {
+      "name": "DelayedInboundReleased",
+      "discriminator": [
+        143,
+        0,
+        82,
+        43,
+        70,
+        46,
+        21,
+        81
+      ]
+    },
+    {
+      "name": "DelayedInboundSettled",
+      "discriminator": [
+        33,
+        173,
+        32,
+        29,
+        181,
+        181,
+        2,
+        218
+      ]
+    },
+    {
+      "name": "InboundCancelledEvent",
+      "discriminator": [
+        70,
+        86,
+        173,
+        156,
+        226,
+        93,
+        6,
+        165
+      ]
+    },
+    {
+      "name": "ManualReviewModeChanged",
+      "discriminator": [
+        212,
+        216,
+        235,
+        124,
+        18,
+        19,
+        97,
+        165
+      ]
+    },
+    {
+      "name": "OutgoingReversedEvent",
+      "discriminator": [
+        67,
+        84,
+        208,
+        29,
+        243,
+        11,
+        50,
+        26
+      ]
+    },
+    {
+      "name": "RecoveryModeChanged",
+      "discriminator": [
+        99,
+        161,
+        222,
+        29,
+        93,
+        62,
+        85,
+        40
       ]
     }
   ],
@@ -3332,9 +5229,240 @@
       "code": 6052,
       "name": "V1BridgeInDisabled",
       "msg": "Legacy v1 bridge_in is disabled"
+    },
+    {
+      "code": 6053,
+      "name": "RecoveryPolicyDisabled",
+      "msg": "Recovery policy is disabled"
+    },
+    {
+      "code": 6054,
+      "name": "RecoveryRequiresPause",
+      "msg": "Destination bridge or token must be paused for recovery"
+    },
+    {
+      "code": 6055,
+      "name": "DestinationAlreadyExecuted",
+      "msg": "Destination transfer has already executed"
+    },
+    {
+      "code": 6056,
+      "name": "InboundCancelled",
+      "msg": "Inbound transfer was permanently cancelled"
+    },
+    {
+      "code": 6057,
+      "name": "InvalidCancellationAccount",
+      "msg": "Invalid cancellation PDA state"
+    },
+    {
+      "code": 6058,
+      "name": "InvalidIncidentId",
+      "msg": "Incident ID must not be empty"
+    },
+    {
+      "code": 6059,
+      "name": "InvalidRecoveryReason",
+      "msg": "Invalid recovery reason code"
+    },
+    {
+      "code": 6060,
+      "name": "ReversalPolicyDisabled",
+      "msg": "Source reversal requires full recovery mode"
+    },
+    {
+      "code": 6061,
+      "name": "InvalidDestinationCancellation",
+      "msg": "Destination cancellation PDA does not match the source sequence"
+    },
+    {
+      "code": 6062,
+      "name": "InvalidCancellationProof",
+      "msg": "Cancellation proof is invalid"
+    },
+    {
+      "code": 6063,
+      "name": "CancellationProofHashMismatch",
+      "msg": "Cancellation proof message hash mismatch"
+    },
+    {
+      "code": 6064,
+      "name": "CancellationProofConsumed",
+      "msg": "Cancellation proof has already been consumed"
+    },
+    {
+      "code": 6065,
+      "name": "InvalidRefundRecipient",
+      "msg": "Refund recipient does not match the original sender"
+    },
+    {
+      "code": 6066,
+      "name": "InvalidReversalOperation",
+      "msg": "Outgoing operation does not match the token registry"
+    },
+    {
+      "code": 6067,
+      "name": "AmountBelowMinimum",
+      "msg": "Gross transfer amount is below the minimum"
+    },
+    {
+      "code": 6068,
+      "name": "AmountAboveMaximum",
+      "msg": "Gross transfer amount is above the maximum"
+    },
+    {
+      "code": 6069,
+      "name": "NetAmountBelowMinimum",
+      "msg": "Net destination amount after fees is below the minimum"
+    },
+    {
+      "code": 6070,
+      "name": "NetAmountAboveMaximum",
+      "msg": "Net destination amount after fees is above the maximum"
+    },
+    {
+      "code": 6071,
+      "name": "UnauthorizedManualReviewModeChange",
+      "msg": "Unauthorized manual-review mode change"
+    },
+    {
+      "code": 6072,
+      "name": "ManualHoldNotReleased",
+      "msg": "Manual hold has not been released"
+    },
+    {
+      "code": 6073,
+      "name": "DelayedTransferAlreadyClaimable",
+      "msg": "Delayed transfer is already claimable"
+    },
+    {
+      "code": 6074,
+      "name": "DelayedTransferAlreadyClaimed",
+      "msg": "Delayed transfer has already been claimed"
+    },
+    {
+      "code": 6075,
+      "name": "InvalidDelayedTransfer",
+      "msg": "Invalid delayed-transfer account"
+    },
+    {
+      "code": 6076,
+      "name": "UnauthorizedDelayedRelease",
+      "msg": "Unauthorized delayed-transfer release"
+    },
+    {
+      "code": 6077,
+      "name": "ManualReviewNotEnabled",
+      "msg": "Manual review must be enabled before a timed delay can be held"
+    },
+    {
+      "code": 6078,
+      "name": "DelayedTransferNotTimed",
+      "msg": "Only a future timed delay can be converted to a manual hold"
+    },
+    {
+      "code": 6079,
+      "name": "InvalidNativeUnwrapAccount",
+      "msg": "Invalid native-coin unwrap account"
     }
   ],
   "types": [
+    {
+      "name": "CancellationProof",
+      "docs": [
+        "Staged guardian quorum proving a destination cancellation finalized.",
+        "PDA includes the complete attestation identity so conflicting certificates",
+        "cannot wedge the canonical proof."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "source_seq",
+            "type": "u64"
+          },
+          {
+            "name": "source_chain_id",
+            "type": "u8"
+          },
+          {
+            "name": "dest_chain_id",
+            "type": "u8"
+          },
+          {
+            "name": "source_program_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "destination_program_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "guardian_set_index",
+            "type": "u32"
+          },
+          {
+            "name": "destination_cancellation",
+            "type": "pubkey"
+          },
+          {
+            "name": "transfer_message_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "reason_code",
+            "type": "u8"
+          },
+          {
+            "name": "incident_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "cancelled_at",
+            "type": "i64"
+          },
+          {
+            "name": "attestation_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "signer_bitmap",
+            "type": "u16"
+          },
+          {
+            "name": "signature_count",
+            "type": "u8"
+          },
+          {
+            "name": "consumed",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "refund_recipient",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
     {
       "name": "Config",
       "docs": [
@@ -3466,6 +5594,20 @@
             "type": "bool"
           },
           {
+            "name": "manual_review_enabled",
+            "docs": [
+              "Hold newly accepted inbound transfers for explicit operations release."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "manual_review_cutoff",
+            "docs": [
+              "Greatest source timestamp that must remain manually held after disable."
+            ],
+            "type": "i64"
+          },
+          {
             "name": "_reserved",
             "docs": [
               "Reserved space for future fields"
@@ -3473,9 +5615,128 @@
             "type": {
               "array": [
                 "u8",
-                14
+                5
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "DelayedInboundMaturitySet",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "source_seq",
+            "type": "u64"
+          },
+          {
+            "name": "token_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "previous_claimable_after",
+            "type": "i64"
+          },
+          {
+            "name": "claimable_after",
+            "type": "i64"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority_tier",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DelayedInboundReleased",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "source_seq",
+            "type": "u64"
+          },
+          {
+            "name": "token_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "previous_claimable_after",
+            "type": "i64"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority_tier",
+            "type": "u8"
+          },
+          {
+            "name": "was_manual",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DelayedInboundSettled",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "source_seq",
+            "type": "u64"
+          },
+          {
+            "name": "token_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "recipient",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "payer",
+            "type": "pubkey"
           }
         ]
       }
@@ -3536,6 +5797,177 @@
                 32
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "InboundCancellation",
+      "docs": [
+        "Permanent destination tombstone blocking one canonical inbound message.",
+        "PDA: seeds = [b\"cancel_in\", source_seq]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "source_seq",
+            "type": "u64"
+          },
+          {
+            "name": "source_chain_id",
+            "type": "u8"
+          },
+          {
+            "name": "dest_chain_id",
+            "type": "u8"
+          },
+          {
+            "name": "guardian_set_index",
+            "type": "u32"
+          },
+          {
+            "name": "sender",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "source_token_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "dest_token_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "source_timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "message_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "cancelled_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "cancelled_at",
+            "type": "i64"
+          },
+          {
+            "name": "reason_code",
+            "type": "u8"
+          },
+          {
+            "name": "incident_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                2
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "InboundCancelledEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "source_seq",
+            "type": "u64"
+          },
+          {
+            "name": "source_chain_id",
+            "type": "u8"
+          },
+          {
+            "name": "dest_chain_id",
+            "type": "u8"
+          },
+          {
+            "name": "sender",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "source_token_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "dest_token_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "source_timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "message_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "reason_code",
+            "type": "u8"
+          },
+          {
+            "name": "incident_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }
@@ -3620,8 +6052,8 @@
           {
             "name": "claimable_after",
             "docs": [
-              "Timestamp after which tokens can be claimed (0 = immediate/already released)",
-              "Used for whale transfers that require delayed claiming"
+              "Automatic-release maturity: 0 = ready, i64::MAX = operator-only.",
+              "`claimed` is the sole source of truth for whether funds were released."
             ],
             "type": "i64"
           },
@@ -3632,6 +6064,38 @@
               "For immediate transfers, this is set to true on bridge_in"
             ],
             "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ManualReviewModeChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "previous_enabled",
+            "type": "bool"
+          },
+          {
+            "name": "enabled",
+            "type": "bool"
+          },
+          {
+            "name": "cutoff",
+            "type": "i64"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority_tier",
+            "type": "u8"
+          },
+          {
+            "name": "chain_id",
+            "type": "u8"
           }
         ]
       }
@@ -3705,6 +6169,128 @@
       }
     },
     {
+      "name": "OutgoingReversal",
+      "docs": [
+        "Permanent source-chain record that an outbound transfer was refunded.",
+        "PDA: seeds = [b\"reverse_out\", seq]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "seq",
+            "type": "u64"
+          },
+          {
+            "name": "outgoing_msg",
+            "type": "pubkey"
+          },
+          {
+            "name": "sender",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "operation",
+            "type": "u8"
+          },
+          {
+            "name": "destination_cancellation",
+            "type": "pubkey"
+          },
+          {
+            "name": "reversed_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "reversed_at",
+            "type": "i64"
+          },
+          {
+            "name": "reason_code",
+            "type": "u8"
+          },
+          {
+            "name": "incident_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OutgoingReversedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "seq",
+            "type": "u64"
+          },
+          {
+            "name": "outgoing_msg",
+            "type": "pubkey"
+          },
+          {
+            "name": "sender",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "operation",
+            "type": "u8"
+          },
+          {
+            "name": "destination_cancellation",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "reason_code",
+            "type": "u8"
+          },
+          {
+            "name": "incident_id",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "PauseReason",
       "docs": [
         "Reason for bridge pause - used for observability and UX"
@@ -3746,6 +6332,100 @@
       }
     },
     {
+      "name": "RecoveryMode",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Disabled"
+          },
+          {
+            "name": "CancellationOnly"
+          },
+          {
+            "name": "FullRecovery"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RecoveryModeChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "chain_id",
+            "type": "u8"
+          },
+          {
+            "name": "old_mode",
+            "type": {
+              "defined": {
+                "name": "RecoveryMode"
+              }
+            }
+          },
+          {
+            "name": "new_mode",
+            "type": {
+              "defined": {
+                "name": "RecoveryMode"
+              }
+            }
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RecoveryPolicy",
+      "docs": [
+        "Root-controlled activation policy for incident recovery.",
+        "PDA: seeds = [b\"recovery_policy\"]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mode",
+            "type": {
+              "defined": {
+                "name": "RecoveryMode"
+              }
+            }
+          },
+          {
+            "name": "updated_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "updated_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "RoleType",
       "docs": [
         "Role type for set_role instruction"
@@ -3761,6 +6441,9 @@
           },
           {
             "name": "Registrar"
+          },
+          {
+            "name": "OperationsAdmin"
           }
         ]
       }
@@ -3810,6 +6493,15 @@
             "type": "u8"
           },
           {
+            "name": "operations_admin",
+            "docs": [
+              "Medium-security multisig for routine bridge policy changes"
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
             "name": "_reserved",
             "docs": [
               "Reserved space for future roles"
@@ -3817,7 +6509,7 @@
             "type": {
               "array": [
                 "u8",
-                128
+                95
               ]
             }
           }
@@ -3968,14 +6660,14 @@
           {
             "name": "daily_cap",
             "docs": [
-              "Daily cap in token units (0 = no cap)"
+              "Source-side outbound daily cap in token units (0 = no cap)"
             ],
             "type": "u64"
           },
           {
             "name": "daily_volume",
             "docs": [
-              "Current daily volume (resets at midnight UTC)"
+              "Current outbound daily volume (resets at midnight UTC)"
             ],
             "type": "u64"
           },

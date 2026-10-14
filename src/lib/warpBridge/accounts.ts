@@ -15,6 +15,7 @@ export const GUARDIAN_SET_SEED = 'guardian_set';
 export const TOKEN_REGISTRY_SEED = 'token_registry';
 export const VAULT_SEED = 'vault';
 export const MINT_AUTHORITY_SEED = 'mint_authority';
+export const RECOVERY_POLICY_SEED = 'recovery_policy';
 
 function toPublicKey(value: string | PublicKey): PublicKey {
   return typeof value === 'string' ? new PublicKey(value) : value;
@@ -45,6 +46,11 @@ export function getTokenRegistryPda(
   localMint: string | PublicKey
 ): PublicKey {
   return derive(programId, [Buffer.from(TOKEN_REGISTRY_SEED), toPublicKey(localMint).toBuffer()]);
+}
+
+/** Singleton `RecoveryPolicy` PDA gating incident cancellations and reversals. */
+export function getRecoveryPolicyPda(programId: string | PublicKey): PublicKey {
+  return derive(programId, [Buffer.from(RECOVERY_POLICY_SEED)]);
 }
 
 /** Per-token `Vault` PDA. */
@@ -84,6 +90,19 @@ export interface BridgeConfigAccount {
   pause_reason: unknown;
   chain_id: number;
   v1_in_disabled: boolean;
+  manual_review_enabled: boolean;
+  manual_review_cutoff: unknown;
+}
+
+/**
+ * Root-controlled switch for incident recovery. The account does not exist
+ * until `initialize_recovery_policy`, which creates it in `Disabled` mode.
+ */
+export interface RecoveryPolicyAccount {
+  mode: unknown;
+  updated_by: PublicKey;
+  updated_at: unknown;
+  bump: number;
 }
 
 /** Delegated roles that may act without full admin rights. */
@@ -194,5 +213,35 @@ export function fetchBridgeVault(
     connection,
     'Vault',
     getBridgeVaultPda(programId, localMint)
+  );
+}
+
+/**
+ * Fetch the `RecoveryPolicy`. Null means it has not been initialized, which the
+ * program treats the same as `Disabled`.
+ */
+export function fetchRecoveryPolicy(
+  connection: Connection,
+  programId: string
+): Promise<RecoveryPolicyAccount | null> {
+  return fetchBridgeAccount<RecoveryPolicyAccount>(
+    connection,
+    'RecoveryPolicy',
+    getRecoveryPolicyPda(programId)
+  );
+}
+
+/**
+ * Fetch a registry entry by its account address, for instructions that pass
+ * the `token_registry` account without naming the mint in their arguments.
+ */
+export function fetchTokenRegistryAt(
+  connection: Connection,
+  address: string
+): Promise<TokenRegistryAccount | null> {
+  return fetchBridgeAccount<TokenRegistryAccount>(
+    connection,
+    'TokenRegistryEntry',
+    new PublicKey(address)
   );
 }

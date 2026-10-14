@@ -5,12 +5,15 @@ import {
   BridgeRolesAccount,
   BridgeVaultAccount,
   GuardianSetAccount,
+  RecoveryPolicyAccount,
   TokenRegistryAccount,
   fetchBridgeConfig,
   fetchBridgeRoles,
   fetchBridgeVault,
   fetchGuardianSet,
+  fetchRecoveryPolicy,
   fetchTokenRegistry,
+  fetchTokenRegistryAt,
 } from '@/lib/warpBridge/accounts';
 import { decodeSymbol } from '@/lib/warpBridge/values';
 import { useProgramAccount } from '../useProgramAccount';
@@ -36,6 +39,17 @@ export function useBridgeRoles(
     fetchBridgeRoles(connection, instruction.programId)
   );
   return { roles: data, loading };
+}
+
+/** Current `RecoveryPolicy`; null until it has been initialized. */
+export function useRecoveryPolicy(
+  instruction: DecodedInstruction,
+  connection: Connection
+): { policy: RecoveryPolicyAccount | null; loading: boolean } {
+  const { data, loading } = useProgramAccount(`recovery-policy:${instruction.programId}`, () =>
+    fetchRecoveryPolicy(connection, instruction.programId)
+  );
+  return { policy: data, loading };
 }
 
 /** Current v2 `GuardianSet`. */
@@ -102,6 +116,32 @@ export function useBridgeToken(
     registry,
     decimals: registry ? registry.decimals : argDecimals,
     symbol: registry ? decodeSymbol(registry.symbol) : argSymbol,
+    loading,
+  };
+}
+
+/**
+ * Resolve the token for instructions that pass only the `token_registry`
+ * account (recovery and delayed-release paths name no mint in their args).
+ */
+export function useBridgeTokenFromRegistryAccount(
+  instruction: DecodedInstruction,
+  connection: Connection
+): BridgeTokenContext & { localMint?: string } {
+  const registryAddress = instruction.accounts?.find(
+    (account) => account.name === 'token_registry'
+  )?.pubkey;
+
+  const { data: registry, loading } = useProgramAccount(
+    registryAddress && `token-registry-at:${instruction.programId}:${registryAddress}`,
+    () => fetchTokenRegistryAt(connection, registryAddress!)
+  );
+
+  return {
+    localMint: registry?.local_mint?.toBase58(),
+    registry,
+    decimals: registry ? registry.decimals : null,
+    symbol: registry ? decodeSymbol(registry.symbol) : null,
     loading,
   };
 }
