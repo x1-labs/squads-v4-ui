@@ -34,7 +34,7 @@ import {
   SummaryShell,
   ValueChange,
   accountByName,
-  preflightHeadline,
+  usePreflightHeadline,
   readPubkeyArg,
 } from './shared';
 import {
@@ -222,7 +222,7 @@ export const VestingCreateGrantSummary: React.FC<InstructionSummaryProps> = ({
     checkCoverage(preflight, balanceBefore, required, 'everything owed plus this grant plus rent');
   }
 
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: `Grant #${grantId?.toString() ?? '?'} for ${
       grantTotal !== null ? formatNativeAmount(grantTotal, nativeSymbol) : '?'
     } (principal + yield)`,
@@ -309,7 +309,7 @@ export const VestingCancelGrantSummary: React.FC<InstructionSummaryProps> = ({
   const principal = grant ? toBigInt(grant.principal_total) : null;
   const yieldTotal = grant ? toBigInt(grant.yield_total) : null;
   const total = principal !== null && yieldTotal !== null ? principal + yieldTotal : null;
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: 'Cancels the whole grant, including any part that has already vested',
     tone: 'red',
   });
@@ -369,7 +369,7 @@ export const VestingReplaceBeneficiarySummary: React.FC<InstructionSummaryProps>
   );
   checkGrantUntouched(preflight, grantFacts(grant));
   const isNoop = Boolean(next && current && next === current);
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: isNoop
       ? 'Already the beneficiary — this proposal changes nothing'
       : 'Redirects all unclaimed principal and yield of this grant to a new address',
@@ -506,7 +506,7 @@ export const VestingClaimSummary: React.FC<InstructionSummaryProps> = ({
       'Grant account could not be read — status and beneficiary not verified'
     );
   }
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: `The beneficiary withdraws ${isYield ? 'fixed yield' : 'vested principal'} from the vault`,
     tone: 'teal',
   });

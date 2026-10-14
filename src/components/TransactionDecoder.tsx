@@ -6,12 +6,15 @@ import * as multisig from '@sqds/multisig';
 import { formatInstructionValue } from '../lib/utils/formatters';
 import { registry } from '../lib/registry';
 import '../registry'; // Ensure registrations are loaded
+import { ProposalStatusProvider } from './instructions/summaries/proposalStatus';
 
 interface TransactionDecoderProps {
   connection: Connection;
   multisigPda: PublicKey;
   transactionIndex: bigint;
   programId?: PublicKey;
+  /** Proposal status (`Active`, `Executed`, …); summaries skip preflight once final. */
+  proposalStatus?: string;
 }
 
 export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
@@ -19,6 +22,7 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
   multisigPda,
   transactionIndex,
   programId = multisig.PROGRAM_ID,
+  proposalStatus,
 }) => {
   const [decodedTx, setDecodedTx] = useState<DecodedTransaction | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,11 +84,13 @@ export const TransactionDecoder: React.FC<TransactionDecoderProps> = ({
 
     if (SummaryComponent) {
       return (
-        <SummaryComponent
-          instruction={instruction}
-          connection={connection}
-          priorInstructions={priorInstructions}
-        />
+        <ProposalStatusProvider status={proposalStatus}>
+          <SummaryComponent
+            instruction={instruction}
+            connection={connection}
+            priorInstructions={priorInstructions}
+          />
+        </ProposalStatusProvider>
       );
     }
 

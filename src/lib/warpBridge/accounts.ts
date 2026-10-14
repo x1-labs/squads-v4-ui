@@ -1,4 +1,5 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, SystemProgram } from '@solana/web3.js';
+import { BorshAccountsCoder } from '@coral-xyz/anchor';
 import warpBridgeIdl from '../idls/warp_bridge.json';
 import { createAnchorAccountFetcher } from '../idls/accountFetcher';
 
@@ -15,6 +16,7 @@ export const GUARDIAN_SET_SEED = 'guardian_set';
 export const TOKEN_REGISTRY_SEED = 'token_registry';
 export const VAULT_SEED = 'vault';
 export const MINT_AUTHORITY_SEED = 'mint_authority';
+export const RECOVERY_POLICY_SEED = 'recovery_policy';
 
 function toPublicKey(value: string | PublicKey): PublicKey {
   return typeof value === 'string' ? new PublicKey(value) : value;
@@ -45,6 +47,11 @@ export function getTokenRegistryPda(
   localMint: string | PublicKey
 ): PublicKey {
   return derive(programId, [Buffer.from(TOKEN_REGISTRY_SEED), toPublicKey(localMint).toBuffer()]);
+}
+
+/** Singleton `RecoveryPolicy` PDA gating incident cancellations and reversals. */
+export function getRecoveryPolicyPda(programId: string | PublicKey): PublicKey {
+  return derive(programId, [Buffer.from(RECOVERY_POLICY_SEED)]);
 }
 
 /** Per-token `Vault` PDA. */
@@ -84,6 +91,19 @@ export interface BridgeConfigAccount {
   pause_reason: unknown;
   chain_id: number;
   v1_in_disabled: boolean;
+  manual_review_enabled: boolean;
+  manual_review_cutoff: unknown;
+}
+
+/**
+ * Root-controlled switch for incident recovery. The account does not exist
+ * until `initialize_recovery_policy`, which creates it in `Disabled` mode.
+ */
+export interface RecoveryPolicyAccount {
+  mode: unknown;
+  updated_by: PublicKey;
+  updated_at: unknown;
+  bump: number;
 }
 
 /** Delegated roles that may act without full admin rights. */
@@ -92,6 +112,7 @@ export interface BridgeRolesAccount {
   fee_manager: PublicKey | null;
   registrar: PublicKey | null;
   bump: number;
+  operations_admin: PublicKey | null;
 }
 
 /** Staged-consensus guardian set used by the v2 bridge-in path. */
@@ -141,11 +162,11 @@ export function fetchBridgeConfig(
   connection: Connection,
   programId: string
 ): Promise<BridgeConfigAccount | null> {
-  return fetchBridgeAccount<BridgeConfigAccount>(
+  return readBridgeAccount<BridgeConfigAccount>(
     connection,
     'Config',
     getBridgeConfigPda(programId)
-  );
+  ).then(valueOrNull);
 }
 
 /** Fetch the current delegated `Roles`. */
@@ -177,11 +198,11 @@ export function fetchTokenRegistry(
   programId: string,
   localMint: string | PublicKey
 ): Promise<TokenRegistryAccount | null> {
-  return fetchBridgeAccount<TokenRegistryAccount>(
+  return readBridgeAccount<TokenRegistryAccount>(
     connection,
     'TokenRegistryEntry',
     getTokenRegistryPda(programId, localMint)
-  );
+  ).then(valueOrNull);
 }
 
 /** Fetch a token's vault. */
@@ -195,4 +216,126 @@ export function fetchBridgeVault(
     'Vault',
     getBridgeVaultPda(programId, localMint)
   );
+}
+
+/**
+ * Fetch a registry entry by its account address, for instructions that pass
+ * the `token_registry` account without naming the mint in their arguments.
+ */
+export function fetchTokenRegistryAt(
+  connection: Connection,
+  address: string
+): Promise<TokenRegistryAccount | null> {
+  return readBridgeAccount<TokenRegistryAccount>(connection, 'TokenRegistryEntry', address).then(
+    valueOrNull
+  );
+}
+
+/** A read that tells a missing account apart from a failed one. */
+export type ReadResult<T> = { ok: true; value: T | null } | { ok: false };
+
+/** For display reads, where missing and failed both mean "nothing to show". */
+function valueOrNull<T>(result: ReadResult<T>): T | null {
+  return result.ok ? result.value : null;
+}
+
+const READ_TTL_MS = 15_000;
+const readCache = new Map<string, { fetchedAt: number; value: Promise<ReadResult<unknown>> }>();
+let readCoder: BorshAccountsCoder | null | undefined;
+
+/**
+ * Fetch and decode one bridge account for preflight checks. Unlike
+ * `fetchBridgeAccount`, a missing account resolves to `{ ok: true, value: null }`
+ * and a failed read to `{ ok: false }`, so guards can report the latter as
+ * unverified. Pass `accountName: null` to check occupancy only: `true` when the
+ * account is program-owned or holds data, `null` when it is absent or only
+ * prefunded.
+ */
+export function readBridgeAccount<T>(
+  connection: Connection,
+  accountName: string | null,
+  address: string | PublicKey
+): Promise<ReadResult<T>> {
+  const key = `${connection.rpcEndpoint}:${accountName ?? 'exists'}:${address.toString()}`;
+  const cached = readCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt < READ_TTL_MS) {
+    return cached.value as Promise<ReadResult<T>>;
+  }
+  const value: Promise<ReadResult<T>> = connection
+    .getAccountInfo(toPublicKey(address))
+    .then((info): ReadResult<T> => {
+      if (!info) return { ok: true, value: null };
+      // Existence mode: a system-owned, zero-data account is only prefunded,
+      // which `init` and `require_empty_system_pda` both accept.
+      if (accountName === null) {
+        const occupied = !info.owner.equals(SystemProgram.programId) || info.data.length > 0;
+        return { ok: true, value: (occupied ? true : null) as T };
+      }
+      if (readCoder === undefined) {
+        try {
+          readCoder = new BorshAccountsCoder(warpBridgeIdl as any);
+        } catch {
+          readCoder = null;
+        }
+      }
+      if (!readCoder) return { ok: false };
+      return { ok: true, value: readCoder.decode<T>(accountName, info.data) };
+    })
+    .catch((error) => {
+      console.warn(`Failed to read warp bridge ${accountName ?? 'account'} at ${address}:`, error);
+      readCache.delete(key);
+      return { ok: false as const };
+    });
+  readCache.set(key, { fetchedAt: Date.now(), value });
+  return value;
+}
+
+/** A delivered transfer's receipt, `evt_in` PDA keyed by source sequence. */
+export interface IncomingMsgAccount {
+  source_seq: unknown;
+  sender: number[];
+  token_mint: PublicKey;
+  processed: boolean;
+  claimed: boolean;
+  claimable_after: unknown;
+}
+
+function seqSeed(seq: bigint): Buffer {
+  const bytes = Buffer.alloc(8);
+  bytes.writeBigUInt64LE(seq);
+  return bytes;
+}
+
+/** `evt_in` PDA: the delivery receipt for an inbound source sequence. */
+export function getIncomingMsgPda(programId: string | PublicKey, sourceSeq: bigint): PublicKey {
+  return derive(programId, [Buffer.from('evt_in'), seqSeed(sourceSeq)]);
+}
+
+/** `cancel_in` PDA: the tombstone for a canceled inbound sequence. */
+export function getInboundCancellationPda(
+  programId: string | PublicKey,
+  sourceSeq: bigint
+): PublicKey {
+  return derive(programId, [Buffer.from('cancel_in'), seqSeed(sourceSeq)]);
+}
+
+/** `reverse_out` PDA: the record of a reversed outbound sequence. */
+export function getOutgoingReversalPda(programId: string | PublicKey, seq: bigint): PublicKey {
+  return derive(programId, [Buffer.from('reverse_out'), seqSeed(seq)]);
+}
+
+/** `evt_out` PDA: the outbound message for a sequence. */
+export function getOutgoingMsgPda(programId: string | PublicKey, seq: bigint): PublicKey {
+  return derive(programId, [Buffer.from('evt_out'), seqSeed(seq)]);
+}
+
+/** A guardian-attested destination cancellation, consumed by `reverse_outgoing`. */
+export interface CancellationProofAccount {
+  source_seq: unknown;
+  guardian_set_index: number;
+  destination_cancellation: PublicKey;
+  reason_code: number;
+  incident_id: number[];
+  signature_count: number;
+  consumed: boolean;
 }

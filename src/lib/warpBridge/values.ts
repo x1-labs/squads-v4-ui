@@ -150,7 +150,11 @@ export function formatPauseReason(value: unknown): string {
  */
 export const ROLE_TYPES: Record<
   string,
-  { label: string; description: string; field: 'pauser' | 'fee_manager' | 'registrar' }
+  {
+    label: string;
+    description: string;
+    field: 'pauser' | 'fee_manager' | 'registrar' | 'operations_admin';
+  }
 > = {
   Pauser: {
     label: 'Pauser',
@@ -167,14 +171,79 @@ export const ROLE_TYPES: Record<
     description: 'May register new tokens for bridging',
     field: 'registrar',
   },
+  OperationsAdmin: {
+    label: 'Operations admin',
+    description:
+      'May pause and resume tokens, set token limits, change manual review and release held transfers; cannot run incident recovery',
+    field: 'operations_admin',
+  },
 };
 
 export function describeRole(value: unknown): {
   label: string;
   description?: string;
-  field?: 'pauser' | 'fee_manager' | 'registrar';
+  field?: 'pauser' | 'fee_manager' | 'registrar' | 'operations_admin';
 } {
   const variant = enumVariantName(value);
   if (!variant) return { label: 'Unknown role' };
   return ROLE_TYPES[variant] ?? { label: variant };
+}
+
+/**
+ * Human labels for the `RecoveryMode` enum. The mode is ordered: each step
+ * enables more of the incident-recovery surface.
+ */
+export const RECOVERY_MODES: Record<string, { label: string; description: string }> = {
+  Disabled: {
+    label: 'Disabled',
+    description: 'No cancellations or reversals can be executed',
+  },
+  CancellationOnly: {
+    label: 'Cancellation only',
+    description:
+      'Root may tombstone undelivered inbound transfers on this chain; source-side reversals stay blocked',
+  },
+  FullRecovery: {
+    label: 'Full recovery',
+    description:
+      'Root may cancel inbound transfers and reverse canceled outbound transfers back to their senders',
+  },
+};
+
+export function describeRecoveryMode(value: unknown): { label: string; description?: string } {
+  const variant = enumVariantName(value);
+  if (!variant) return { label: '—' };
+  return RECOVERY_MODES[variant] ?? { label: variant };
+}
+
+/** A 32-byte identifier (incident ID, message hash) as lowercase hex. */
+export function formatBytes32(value: unknown): string | null {
+  if (!Array.isArray(value) && !(value instanceof Uint8Array)) return null;
+  const bytes = Array.from(value as ArrayLike<number>);
+  if (bytes.length !== 32 || bytes.some((byte) => typeof byte !== 'number')) return null;
+  return bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** A unix timestamp in seconds as an ISO-8601 UTC string. */
+export function formatUnixTime(seconds: unknown): string {
+  const n = toNumber(seconds);
+  if (n === null) return '—';
+  if (n === 0) return 'Not set';
+  const date = new Date(n * 1000);
+  return Number.isNaN(date.getTime()) ? String(n) : date.toISOString().replace('.000Z', 'Z');
+}
+
+/**
+ * Decode the route a bridge sequence number encodes. Current sequences carry
+ * the source and destination chain IDs in their top byte as
+ * `(source << 4) | dest`; legacy sequences are slot-based and carry no route.
+ */
+export function describeSequenceRoute(seq: unknown): string | null {
+  const value = toBigInt(seq);
+  if (value === null) return null;
+  const route = Number(value >> BigInt(56));
+  if (route === 0) return null;
+  const source = CHAIN_NAMES[route >> 4];
+  const dest = CHAIN_NAMES[route & 0x0f];
+  return source && dest ? `${source} → ${dest}` : null;
 }

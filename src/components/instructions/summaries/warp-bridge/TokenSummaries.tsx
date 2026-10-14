@@ -16,8 +16,19 @@ import {
   SummaryShell,
   ValueChange,
   accountByName,
+  BridgePreflightBlock,
+  usePreflightHeadline,
 } from './shared';
-import { useBridgeToken, useBridgeVault } from './hooks';
+import { useBridgeFacts, useBridgeToken, useBridgeVault } from './hooks';
+import {
+  PreflightResult,
+  checkAuthority,
+  checkPda,
+  checkTokenLimits,
+  emptyPreflight,
+  resolveRolesSlot,
+} from '@/lib/warpBridge/preflight';
+import { getBridgeRolesPda, getTokenRegistryPda } from '@/lib/warpBridge/accounts';
 
 /** True when a submitted value differs from what is already on chain. */
 function differs(submitted: unknown, current: unknown): boolean {
@@ -491,6 +502,237 @@ export const BridgeMigrateTokenRegistrySummary: React.FC<InstructionSummaryProps
         )}
         {admin && <AddressWithButtons address={admin} label="Admin" />}
       </DetailBlock>
+    </SummaryShell>
+  );
+};
+
+/**
+ * `seeds = [b"token_registry", local_mint]`: the registry passed must be the
+ * PDA for the mint in the arguments, and the entry must exist.
+ */
+function checkTokenRegistryAccount(
+  preflight: PreflightResult,
+  instruction: InstructionSummaryProps['instruction'],
+  localMint: string | undefined,
+  registry: unknown,
+  loading: boolean
+): void {
+  checkPda(
+    preflight,
+    accountByName(instruction, 'token_registry', 1),
+    localMint ? getTokenRegistryPda(instruction.programId, localMint).toBase58() : undefined,
+    'The token registry account'
+  );
+  if (!loading && registry === null) {
+    preflight.unverified.push(
+      'Token registry entry could not be read — it must exist for this instruction to run'
+    );
+  }
+}
+
+/**
+ * `set_token_pause` — pauses or resumes one token on this chain. A paused token
+ * cannot be bridged out, delivered in, or claimed here; other tokens keep
+ * running.
+ */
+export const BridgeSetTokenPauseSummary: React.FC<InstructionSummaryProps> = ({
+  instruction,
+  connection,
+  priorInstructions,
+}) => {
+  const {
+    localMint,
+    symbol,
+    decimals,
+    registry,
+    loading: tokenLoading,
+  } = useBridgeToken(instruction, connection);
+  const registryAccount = accountByName(instruction, 'token_registry', 1);
+  const { facts, loading: factsLoading } = useBridgeFacts(
+    instruction,
+    connection,
+    priorInstructions,
+    registryAccount
+  );
+  const loading = tokenLoading || factsLoading;
+  const authority = accountByName(instruction, 'authority', 2);
+
+  const decoded = typeof instruction.args?.paused === 'boolean';
+  const pausing = instruction.args?.paused === true;
+  // State as earlier instructions in this proposal leave it.
+  const currentPaused = registryAccount ? facts.tokenPaused[registryAccount] : undefined;
+  const changed = decoded && currentPaused !== undefined && currentPaused !== pausing;
+  const known = decoded && currentPaused !== undefined;
+  const name = symbol ?? 'this token';
+
+  const preflight = emptyPreflight();
+  checkTokenRegistryAccount(preflight, instruction, localMint, registry, loading);
+  const roles = resolveRolesSlot(
+    preflight,
+    facts,
+    accountByName(instruction, 'roles', 3),
+    instruction.programId,
+    getBridgeRolesPda(instruction.programId).toBase58()
+  );
+  if (!decoded) {
+    preflight.unverified.push('Whether this pauses or resumes the token could not be decoded');
+  } else {
+    // A pauser may pause a token; only operations or root may resume it.
+    checkAuthority(
+      preflight,
+      facts,
+      authority,
+      pausing ? 'pauser' : 'operations',
+      'Unauthorized',
+      roles
+    );
+  }
+  const headline = usePreflightHeadline(preflight, loading, {
+    subtitle:
+      !loading && known && !changed
+        ? `${name} is already ${pausing ? 'paused' : 'active'} — this proposal changes nothing`
+        : pausing
+          ? `Stops bridging ${name} in and out of this chain until it is resumed`
+          : `Resumes bridging ${name} in and out of this chain`,
+    tone: !loading && known && !changed ? 'gray' : pausing ? 'red' : 'green',
+  });
+
+  return (
+    <SummaryShell
+      icon={pausing ? '⏸️' : '▶️'}
+      title={pausing ? `Pause ${symbol ?? 'Token'}` : `Resume ${symbol ?? 'Token'}`}
+      subtitle={headline.subtitle}
+      tone={headline.tone}
+    >
+      <DetailBlock>
+        <BridgeTokenTarget localMint={localMint} symbol={symbol} decimals={decimals} />
+        <Field
+          label="Bridging"
+          hint="Covers bridge out, delivery in and claims for this token on this chain"
+          value={
+            changed ? (
+              <ValueChange
+                from={currentPaused ? 'Paused' : 'Active'}
+                to={pausing ? 'Paused' : 'Active'}
+                tone={pausing ? 'red' : 'green'}
+              />
+            ) : pausing ? (
+              'Paused'
+            ) : (
+              'Active'
+            )
+          }
+        />
+        {authority && <AddressWithButtons address={authority} label="Authority" />}
+      </DetailBlock>
+      <BridgePreflightBlock preflight={preflight} loading={loading} />
+    </SummaryShell>
+  );
+};
+
+/** `set_token_limits` — daily cap and per-transfer bounds for one token. */
+export const BridgeSetTokenLimitsSummary: React.FC<InstructionSummaryProps> = ({
+  instruction,
+  connection,
+  priorInstructions,
+}) => {
+  const {
+    localMint,
+    symbol,
+    decimals,
+    registry,
+    loading: tokenLoading,
+  } = useBridgeToken(instruction, connection);
+  const { facts, loading: factsLoading } = useBridgeFacts(
+    instruction,
+    connection,
+    priorInstructions
+  );
+  const loading = tokenLoading || factsLoading;
+  const authority = accountByName(instruction, 'authority', 2);
+
+  const fields = [
+    {
+      key: 'daily_cap',
+      label: 'Daily cap',
+      hint: 'Outbound volume allowed per UTC day; 0 means uncapped',
+      empty: 'No cap',
+    },
+    {
+      key: 'min_amount',
+      label: 'Min per transfer',
+      hint: 'Checked against the amount after fees; 0 means no minimum',
+      empty: 'No minimum',
+    },
+    {
+      key: 'max_amount',
+      label: 'Max per transfer',
+      hint: 'Checked against the amount after fees; 0 means no maximum',
+      empty: 'No maximum',
+    },
+  ] as const;
+
+  const changed = fields.filter(
+    (field) => registry && differs(instruction.args?.[field.key], (registry as any)[field.key])
+  );
+
+  const preflight = emptyPreflight();
+  checkTokenRegistryAccount(preflight, instruction, localMint, registry, loading);
+  const roles = resolveRolesSlot(
+    preflight,
+    facts,
+    accountByName(instruction, 'roles', 3),
+    instruction.programId,
+    getBridgeRolesPda(instruction.programId).toBase58()
+  );
+  checkAuthority(preflight, facts, authority, 'operations', 'Unauthorized', roles);
+  checkTokenLimits(preflight, instruction.args?.min_amount, instruction.args?.max_amount);
+  const headline = usePreflightHeadline(preflight, loading, {
+    subtitle: !registry
+      ? `Sets the cap and transfer bounds for ${symbol ?? 'this token'} (current entry unavailable)`
+      : changed.length === 0
+        ? 'No effective change — all three limits match the current on-chain entry'
+        : `${changed.length} of 3 limits change for ${symbol ?? 'this token'}`,
+    tone: registry && changed.length === 0 ? 'gray' : 'amber',
+  });
+
+  return (
+    <SummaryShell
+      icon="📏"
+      title="Set Token Limits"
+      subtitle={loading ? 'Comparing against the current registry entry…' : headline.subtitle}
+      tone={headline.tone}
+    >
+      <DetailBlock>
+        <BridgeTokenTarget localMint={localMint} symbol={symbol} decimals={decimals} />
+      </DetailBlock>
+      <DetailBlock>
+        {fields.map((field) => {
+          const submitted = instruction.args?.[field.key];
+          const current = registry ? (registry as any)[field.key] : undefined;
+          const format = (value: unknown) => formatLimit(value, decimals, symbol, field.empty);
+          const isChanged = registry && differs(submitted, current);
+          return (
+            <Field
+              key={field.key}
+              label={field.label}
+              hint={field.hint}
+              value={
+                isChanged ? (
+                  <ValueChange from={format(current)} to={format(submitted)} />
+                ) : (
+                  <span className={registry ? 'text-muted-foreground' : ''}>
+                    {format(submitted)}
+                    {registry ? ' (unchanged)' : ''}
+                  </span>
+                )
+              }
+            />
+          );
+        })}
+        {authority && <AddressWithButtons address={authority} label="Authority" />}
+      </DetailBlock>
+      <BridgePreflightBlock preflight={preflight} loading={loading} />
     </SummaryShell>
   );
 };

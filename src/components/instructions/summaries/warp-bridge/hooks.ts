@@ -5,13 +5,30 @@ import {
   BridgeRolesAccount,
   BridgeVaultAccount,
   GuardianSetAccount,
+  RecoveryPolicyAccount,
   TokenRegistryAccount,
   fetchBridgeConfig,
   fetchBridgeRoles,
   fetchBridgeVault,
   fetchGuardianSet,
   fetchTokenRegistry,
+  fetchTokenRegistryAt,
+  IncomingMsgAccount,
+  getBridgeConfigPda,
+  getBridgeRolesPda,
+  getIncomingMsgPda,
+  getRecoveryPolicyPda,
+  readBridgeAccount,
 } from '@/lib/warpBridge/accounts';
+import {
+  BridgeFacts,
+  IncomingFacts,
+  RecoveryModeName,
+  applyPriorEffects,
+  applyPriorIncomingEffects,
+  unknownFacts,
+} from '@/lib/warpBridge/preflight';
+import { enumVariantName, formatCounterparty, toBigInt } from '@/lib/warpBridge/values';
 import { decodeSymbol } from '@/lib/warpBridge/values';
 import { useProgramAccount } from '../useProgramAccount';
 import { readPubkeyArg } from '../shared';
@@ -102,6 +119,165 @@ export function useBridgeToken(
     registry,
     decimals: registry ? registry.decimals : argDecimals,
     symbol: registry ? decodeSymbol(registry.symbol) : argSymbol,
+    loading,
+  };
+}
+
+/**
+ * Resolve the token for instructions that pass only the `token_registry`
+ * account (recovery and delayed-release paths name no mint in their args).
+ */
+export function useBridgeTokenFromRegistryAccount(
+  instruction: DecodedInstruction,
+  connection: Connection
+): BridgeTokenContext & { localMint?: string } {
+  const registryAddress = instruction.accounts?.find(
+    (account) => account.name === 'token_registry'
+  )?.pubkey;
+
+  const { data: registry, loading } = useProgramAccount(
+    registryAddress && `token-registry-at:${instruction.programId}:${registryAddress}`,
+    () => fetchTokenRegistryAt(connection, registryAddress!)
+  );
+
+  return {
+    localMint: registry?.local_mint?.toBase58(),
+    registry,
+    decimals: registry ? registry.decimals : null,
+    symbol: registry ? decodeSymbol(registry.symbol) : null,
+    loading,
+  };
+}
+
+/**
+ * Chain state for preflight checks, with earlier instructions in the proposal
+ * applied. Values that could not be read stay `undefined` so guards report
+ * them as unverified.
+ */
+export function useBridgeFacts(
+  instruction: DecodedInstruction,
+  connection: Connection,
+  priorInstructions: DecodedInstruction[] | undefined,
+  registryAddress?: string,
+  /** Skip reads a summary does not use (both default to true). */
+  needs: { roles?: boolean; recoveryPolicy?: boolean } = {}
+): { facts: BridgeFacts; loading: boolean } {
+  const programId = instruction.programId;
+  const readRoles = needs.roles !== false;
+  const readPolicy = needs.recoveryPolicy !== false;
+  const { data, loading } = useProgramAccount(
+    `bridge-facts:${connection.rpcEndpoint}:${programId}:${registryAddress ?? ''}:${readRoles}:${readPolicy}`,
+    async () => {
+      const skipped = Promise.resolve({ ok: false as const });
+      const [config, roles, policy, registry] = await Promise.all([
+        readBridgeAccount<BridgeConfigAccount>(connection, 'Config', getBridgeConfigPda(programId)),
+        readRoles
+          ? readBridgeAccount<BridgeRolesAccount>(connection, 'Roles', getBridgeRolesPda(programId))
+          : skipped,
+        readPolicy
+          ? readBridgeAccount<RecoveryPolicyAccount>(
+              connection,
+              'RecoveryPolicy',
+              getRecoveryPolicyPda(programId)
+            )
+          : skipped,
+        registryAddress
+          ? readBridgeAccount<TokenRegistryAccount>(
+              connection,
+              'TokenRegistryEntry',
+              registryAddress
+            )
+          : Promise.resolve(null),
+      ]);
+      const facts = unknownFacts();
+      if (config.ok && config.value) {
+        facts.admin = config.value.admin.toBase58();
+        facts.configPaused = config.value.paused;
+        facts.chainId = config.value.chain_id;
+        facts.manualReviewEnabled = config.value.manual_review_enabled;
+        facts.manualReviewCutoff = toBigInt(config.value.manual_review_cutoff) ?? undefined;
+      }
+      if (roles.ok) {
+        facts.roles = roles.value
+          ? {
+              operationsAdmin: roles.value.operations_admin?.toBase58() ?? null,
+              pauser: roles.value.pauser?.toBase58() ?? null,
+            }
+          : null;
+      }
+      if (policy.ok) {
+        facts.recoveryMode = policy.value
+          ? ((enumVariantName(policy.value.mode) as RecoveryModeName | null) ?? undefined)
+          : null;
+      }
+      if (registryAddress && registry && 'ok' in registry && registry.ok && registry.value) {
+        facts.tokenPaused[registryAddress] = registry.value.paused;
+      }
+      return facts;
+    }
+  );
+  return {
+    facts: applyPriorEffects(data ?? unknownFacts(), priorInstructions, programId),
+    loading,
+  };
+}
+
+/**
+ * Whether an account is occupied (program-owned or holding data): `false` when
+ * absent or only prefunded, `undefined` while loading or when the read failed.
+ */
+export function useBridgeAccountExists(
+  connection: Connection,
+  address: string | undefined
+): { exists: boolean | undefined; loading: boolean } {
+  const { data, loading } = useProgramAccount(
+    address && `bridge-exists:${connection.rpcEndpoint}:${address}`,
+    () =>
+      readBridgeAccount<boolean>(connection, null, address!).then((result) =>
+        result.ok ? { exists: result.value === true } : null
+      )
+  );
+  return { exists: data ? data.exists : undefined, loading };
+}
+
+/** The `IncomingMsg` for a source sequence: `null` if absent, `undefined` if unread. */
+export function useIncomingMsg(
+  instruction: DecodedInstruction,
+  connection: Connection,
+  sourceSeq: unknown,
+  priorInstructions?: DecodedInstruction[]
+): { incoming: IncomingFacts | null | undefined; loading: boolean } {
+  // Read the PDA the program derives, not whatever the proposal passes; the
+  // summary checks the passed account against it separately.
+  const seq = toBigInt(sourceSeq);
+  const address =
+    seq !== null ? getIncomingMsgPda(instruction.programId, seq).toBase58() : undefined;
+  const { data, loading } = useProgramAccount(
+    address && `bridge-incoming:${connection.rpcEndpoint}:${address}`,
+    () =>
+      readBridgeAccount<IncomingMsgAccount>(connection, 'IncomingMsg', address!).then((result) =>
+        result.ok
+          ? {
+              value: result.value
+                ? {
+                    processed: result.value.processed,
+                    claimed: result.value.claimed,
+                    claimableAfter: toBigInt(result.value.claimable_after),
+                    sender: formatCounterparty(result.value.sender),
+                    tokenMint: result.value.token_mint?.toBase58() ?? null,
+                  }
+                : null,
+            }
+          : null
+      )
+  );
+  return {
+    incoming: applyPriorIncomingEffects(
+      data ? data.value : undefined,
+      priorInstructions,
+      instruction.programId,
+      sourceSeq
+    ),
     loading,
   };
 }
