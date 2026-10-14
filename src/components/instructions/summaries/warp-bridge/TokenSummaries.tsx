@@ -17,7 +17,7 @@ import {
   ValueChange,
   accountByName,
   BridgePreflightBlock,
-  preflightHeadline,
+  usePreflightHeadline,
 } from './shared';
 import { useBridgeFacts, useBridgeToken, useBridgeVault } from './hooks';
 import {
@@ -557,11 +557,12 @@ export const BridgeSetTokenPauseSummary: React.FC<InstructionSummaryProps> = ({
   const loading = tokenLoading || factsLoading;
   const authority = accountByName(instruction, 'authority', 2);
 
+  const decoded = typeof instruction.args?.paused === 'boolean';
   const pausing = instruction.args?.paused === true;
   // State as earlier instructions in this proposal leave it.
   const currentPaused = registryAccount ? facts.tokenPaused[registryAccount] : undefined;
-  const changed = currentPaused !== undefined && currentPaused !== pausing;
-  const known = currentPaused !== undefined;
+  const changed = decoded && currentPaused !== undefined && currentPaused !== pausing;
+  const known = decoded && currentPaused !== undefined;
   const name = symbol ?? 'this token';
 
   const preflight = emptyPreflight();
@@ -573,16 +574,20 @@ export const BridgeSetTokenPauseSummary: React.FC<InstructionSummaryProps> = ({
     instruction.programId,
     getBridgeRolesPda(instruction.programId).toBase58()
   );
-  // A pauser may pause a token; only operations or root may resume it.
-  checkAuthority(
-    preflight,
-    facts,
-    authority,
-    pausing ? 'pauser' : 'operations',
-    'Unauthorized',
-    roles
-  );
-  const headline = preflightHeadline(preflight, loading, {
+  if (!decoded) {
+    preflight.unverified.push('Whether this pauses or resumes the token could not be decoded');
+  } else {
+    // A pauser may pause a token; only operations or root may resume it.
+    checkAuthority(
+      preflight,
+      facts,
+      authority,
+      pausing ? 'pauser' : 'operations',
+      'Unauthorized',
+      roles
+    );
+  }
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle:
       !loading && known && !changed
         ? `${name} is already ${pausing ? 'paused' : 'active'} — this proposal changes nothing`
@@ -682,7 +687,7 @@ export const BridgeSetTokenLimitsSummary: React.FC<InstructionSummaryProps> = ({
   );
   checkAuthority(preflight, facts, authority, 'operations', 'Unauthorized', roles);
   checkTokenLimits(preflight, instruction.args?.min_amount, instruction.args?.max_amount);
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: !registry
       ? `Sets the cap and transfer bounds for ${symbol ?? 'this token'} (current entry unavailable)`
       : changed.length === 0

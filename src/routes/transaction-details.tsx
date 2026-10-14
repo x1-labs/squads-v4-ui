@@ -477,6 +477,7 @@ export default function TransactionDetailsPage() {
             multisigPda={multisigPda}
             transactionIndex={transactionIndex}
             programId={programId}
+            proposalStatus={proposal ? proposalStatus : undefined}
           />
         </div>
       )}

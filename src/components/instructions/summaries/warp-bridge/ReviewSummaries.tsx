@@ -24,14 +24,9 @@ import {
   SummaryShell,
   ValueChange,
   accountByName,
-  preflightHeadline,
+  usePreflightHeadline,
 } from './shared';
-import {
-  useBridgeConfig,
-  useBridgeFacts,
-  useBridgeTokenFromRegistryAccount,
-  useIncomingMsg,
-} from './hooks';
+import { useBridgeFacts, useBridgeTokenFromRegistryAccount, useIncomingMsg } from './hooks';
 
 /**
  * Manual review holds inbound transfers instead of paying them out on
@@ -65,12 +60,13 @@ export const BridgeSetManualReviewSummary: React.FC<InstructionSummaryProps> = (
   priorInstructions,
 }) => {
   const { facts, loading } = useBridgeFacts(instruction, connection, priorInstructions);
-  const { config } = useBridgeConfig(instruction, connection);
   const authority = accountByName(instruction, 'authority', 2);
 
+  const decoded = typeof instruction.args?.enabled === 'boolean';
   const enabled = instruction.args?.enabled === true;
   const current = facts.manualReviewEnabled;
-  const changed = current !== undefined && current !== enabled;
+  const changed = decoded && current !== undefined && current !== enabled;
+  const unchanged = decoded && current !== undefined && !changed;
 
   const preflight = emptyPreflight();
   const roles = resolveRolesSlot(
@@ -80,30 +76,38 @@ export const BridgeSetManualReviewSummary: React.FC<InstructionSummaryProps> = (
     instruction.programId,
     getBridgeRolesPda(instruction.programId).toBase58()
   );
-  // Enabling is an incident brake a pauser may pull; turning it off needs operations.
-  checkAuthority(
-    preflight,
-    facts,
-    authority,
-    enabled ? 'pauser' : 'operations',
-    'UnauthorizedManualReviewModeChange',
-    roles
-  );
+  if (!decoded) {
+    // The required tier depends on the direction, so it cannot be checked.
+    preflight.unverified.push('Whether this enables or disables review could not be decoded');
+  } else {
+    // Enabling is an incident brake a pauser may pull; turning it off needs operations.
+    checkAuthority(
+      preflight,
+      facts,
+      authority,
+      enabled ? 'pauser' : 'operations',
+      'UnauthorizedManualReviewModeChange',
+      roles
+    );
+  }
 
-  const headline = preflightHeadline(preflight, loading, {
-    subtitle:
-      current !== undefined && !changed
+  const headline = usePreflightHeadline(preflight, loading, {
+    subtitle: !decoded
+      ? 'Changes manual review on this chain (direction could not be decoded)'
+      : unchanged
         ? `Manual review is already ${enabled ? 'enabled' : 'disabled'} — this proposal changes nothing`
         : enabled
           ? 'Holds every inbound transfer on this chain until an operator releases it or sets a release time'
           : `Transfers sent more than ${MANUAL_REVIEW_CLOCK_SKEW_SECONDS / 60} minutes after execution (and after any later existing cutoff) pay out on delivery again; earlier ones stay held`,
-    tone: current !== undefined && !changed ? 'gray' : enabled ? 'amber' : 'green',
+    tone: !decoded ? 'amber' : unchanged ? 'gray' : enabled ? 'amber' : 'green',
   });
 
   return (
     <SummaryShell
-      icon={enabled ? '🔎' : '✅'}
-      title={enabled ? 'Enable Manual Review' : 'Disable Manual Review'}
+      icon={!decoded ? '🔎' : enabled ? '🔎' : '✅'}
+      title={
+        !decoded ? 'Set Manual Review' : enabled ? 'Enable Manual Review' : 'Disable Manual Review'
+      }
       subtitle={headline.subtitle}
       tone={headline.tone}
     >
@@ -124,10 +128,10 @@ export const BridgeSetManualReviewSummary: React.FC<InstructionSummaryProps> = (
             )
           }
         />
-        {config && (
+        {facts.manualReviewCutoff !== undefined && (
           <Field
             label="Current cutoff"
-            value={formatUnixTime(config.manual_review_cutoff)}
+            value={formatUnixTime(facts.manualReviewCutoff.toString())}
             hint={`Transfers sent at or before this time stay held even with review off; disabling moves it to at least execution time + ${MANUAL_REVIEW_CLOCK_SKEW_SECONDS} seconds`}
           />
         )}
@@ -152,7 +156,8 @@ export const BridgeSetDelayedReleaseMaturitySummary: React.FC<InstructionSummary
   const { incoming, loading: incomingLoading } = useIncomingMsg(
     instruction,
     connection,
-    instruction.args?.source_seq
+    instruction.args?.source_seq,
+    priorInstructions
   );
   const loading = factsLoading || incomingLoading;
   const authority = accountByName(instruction, 'authority', 3);
@@ -183,7 +188,7 @@ export const BridgeSetDelayedReleaseMaturitySummary: React.FC<InstructionSummary
     reject(preflight, 'InvalidDelay', 'The release time is negative');
   }
 
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: describeReleaseAt(instruction.args?.release_at),
     tone: 'amber',
   });
@@ -233,7 +238,8 @@ export const BridgeReleaseDelayedInboundSummary: React.FC<InstructionSummaryProp
   const { incoming, loading: incomingLoading } = useIncomingMsg(
     instruction,
     connection,
-    instruction.args?.source_seq
+    instruction.args?.source_seq,
+    priorInstructions
   );
   const {
     localMint,
@@ -277,7 +283,7 @@ export const BridgeReleaseDelayedInboundSummary: React.FC<InstructionSummaryProp
   );
   preflight.unverified.push(PAYOUT_NOT_MIRRORED);
 
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: 'Pays out a held transfer now, ahead of any release time',
     tone: 'green',
   });
@@ -312,12 +318,14 @@ export const BridgeSettleDelayedSummary: React.FC<InstructionSummaryProps> = ({
     instruction,
     connection,
     priorInstructions,
-    registryAddress
+    registryAddress,
+    { roles: false, recoveryPolicy: false }
   );
   const { incoming, loading: incomingLoading } = useIncomingMsg(
     instruction,
     connection,
-    instruction.args?.source_seq
+    instruction.args?.source_seq,
+    priorInstructions
   );
   const {
     localMint,
@@ -352,7 +360,7 @@ export const BridgeSettleDelayedSummary: React.FC<InstructionSummaryProps> = ({
   );
   preflight.unverified.push(PAYOUT_NOT_MIRRORED);
 
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: 'Pays out a held transfer whose release time has passed',
     tone: 'blue',
   });

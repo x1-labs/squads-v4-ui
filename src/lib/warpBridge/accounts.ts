@@ -162,11 +162,11 @@ export function fetchBridgeConfig(
   connection: Connection,
   programId: string
 ): Promise<BridgeConfigAccount | null> {
-  return fetchBridgeAccount<BridgeConfigAccount>(
+  return readBridgeAccount<BridgeConfigAccount>(
     connection,
     'Config',
     getBridgeConfigPda(programId)
-  );
+  ).then(valueOrNull);
 }
 
 /** Fetch the current delegated `Roles`. */
@@ -198,11 +198,11 @@ export function fetchTokenRegistry(
   programId: string,
   localMint: string | PublicKey
 ): Promise<TokenRegistryAccount | null> {
-  return fetchBridgeAccount<TokenRegistryAccount>(
+  return readBridgeAccount<TokenRegistryAccount>(
     connection,
     'TokenRegistryEntry',
     getTokenRegistryPda(programId, localMint)
-  );
+  ).then(valueOrNull);
 }
 
 /** Fetch a token's vault. */
@@ -219,21 +219,6 @@ export function fetchBridgeVault(
 }
 
 /**
- * Fetch the `RecoveryPolicy`. Null means it has not been initialized, which the
- * program treats the same as `Disabled`.
- */
-export function fetchRecoveryPolicy(
-  connection: Connection,
-  programId: string
-): Promise<RecoveryPolicyAccount | null> {
-  return fetchBridgeAccount<RecoveryPolicyAccount>(
-    connection,
-    'RecoveryPolicy',
-    getRecoveryPolicyPda(programId)
-  );
-}
-
-/**
  * Fetch a registry entry by its account address, for instructions that pass
  * the `token_registry` account without naming the mint in their arguments.
  */
@@ -241,15 +226,18 @@ export function fetchTokenRegistryAt(
   connection: Connection,
   address: string
 ): Promise<TokenRegistryAccount | null> {
-  return fetchBridgeAccount<TokenRegistryAccount>(
-    connection,
-    'TokenRegistryEntry',
-    new PublicKey(address)
+  return readBridgeAccount<TokenRegistryAccount>(connection, 'TokenRegistryEntry', address).then(
+    valueOrNull
   );
 }
 
 /** A read that tells a missing account apart from a failed one. */
 export type ReadResult<T> = { ok: true; value: T | null } | { ok: false };
+
+/** For display reads, where missing and failed both mean "nothing to show". */
+function valueOrNull<T>(result: ReadResult<T>): T | null {
+  return result.ok ? result.value : null;
+}
 
 const READ_TTL_MS = 15_000;
 const readCache = new Map<string, { fetchedAt: number; value: Promise<ReadResult<unknown>> }>();
@@ -323,7 +311,7 @@ export function getIncomingMsgPda(programId: string | PublicKey, sourceSeq: bigi
   return derive(programId, [Buffer.from('evt_in'), seqSeed(sourceSeq)]);
 }
 
-/** `cancel_in` PDA: the tombstone for a cancelled inbound sequence. */
+/** `cancel_in` PDA: the tombstone for a canceled inbound sequence. */
 export function getInboundCancellationPda(
   programId: string | PublicKey,
   sourceSeq: bigint

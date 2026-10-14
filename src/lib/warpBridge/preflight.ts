@@ -11,16 +11,20 @@
  *
  * Earlier instructions in the same proposal are applied first (see
  * `applyPriorEffects`), because #188-style proposals create the recovery
- * policy, pause the token and set the mode before cancelling.
+ * policy, pause the token and set the mode before canceling.
  *
  * Source: x1-labs/warp-bridge 05319af — instructions/auth.rs, admin.rs,
  * destination_recovery.rs, source_recovery.rs, post_cancellation_signatures.rs,
  * manual_review.rs and claim.rs.
  */
-import { PublicKey } from '@solana/web3.js';
 import type { DecodedInstruction } from '../transaction/simpleDecoder';
+import { accountByName, readPubkeyArg } from '../instructions/args';
 import { enumVariantName, toBigInt, toNumber } from '../utils/anchorValues';
 import { formatBytes32 } from './values';
+import type { PreflightResult } from '../preflight';
+
+export { emptyPreflight, willFail } from '../preflight';
+export type { PreflightResult, Rejection } from '../preflight';
 
 /** Anchor errors that fire before a handler body runs. */
 export const ANCHOR_ERRORS = {
@@ -65,23 +69,6 @@ export const MANUAL_REVIEW_PENDING = BigInt('9223372036854775807');
 /** Disabling manual review moves the cutoff to at least now + this (config.rs). */
 export const MANUAL_REVIEW_CLOCK_SKEW_SECONDS = 120;
 
-export interface Rejection {
-  error: string;
-  code?: number;
-  reason: string;
-}
-
-export interface PreflightResult {
-  rejections: Rejection[];
-  unverified: string[];
-}
-
-export const emptyPreflight = (): PreflightResult => ({ rejections: [], unverified: [] });
-
-export function willFail(result: PreflightResult): boolean {
-  return result.rejections.length > 0;
-}
-
 export function reject(result: PreflightResult, error: string, reason: string): void {
   const code = BRIDGE_ERRORS[error] ?? ANCHOR_ERRORS[error as keyof typeof ANCHOR_ERRORS];
   result.rejections.push({ error, code, reason });
@@ -104,6 +91,7 @@ export interface BridgeFacts {
   configPaused: boolean | undefined;
   chainId: number | undefined;
   manualReviewEnabled: boolean | undefined;
+  manualReviewCutoff: bigint | undefined;
   /** `Roles`; `null` when the account does not exist. */
   roles: Read<RolesFacts>;
   /** Recovery mode; `null` when the policy account does not exist. */
@@ -117,22 +105,11 @@ export const unknownFacts = (): BridgeFacts => ({
   configPaused: undefined,
   chainId: undefined,
   manualReviewEnabled: undefined,
+  manualReviewCutoff: undefined,
   roles: undefined,
   recoveryMode: undefined,
   tokenPaused: {},
 });
-
-/** A decoded pubkey argument as base58, or undefined. */
-export function pubkeyString(value: unknown): string | undefined {
-  if (!value) return undefined;
-  if (value instanceof PublicKey) return value.toBase58();
-  if (typeof value === 'string') return value;
-  try {
-    return new PublicKey(value as any).toBase58();
-  } catch {
-    return undefined;
-  }
-}
 
 /** A decoded bool argument, or undefined when it is not a bool. */
 function boolArg(value: unknown): boolean | undefined {
@@ -149,10 +126,6 @@ export function instructionIs(ix: DecodedInstruction, programId: string, name: s
     ix.instructionName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() ===
       name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
   );
-}
-
-function account(ix: DecodedInstruction, name: string): string | undefined {
-  return ix.accounts?.find((entry) => entry.name === name)?.pubkey;
 }
 
 /**
@@ -181,11 +154,11 @@ export function applyPriorEffects(
       const mode = enumVariantName(ix.args?.mode);
       next.recoveryMode = (mode as RecoveryModeName | null) ?? undefined;
     } else if (is('set_token_pause')) {
-      const registry = account(ix, 'token_registry');
+      const registry = accountByName(ix, 'token_registry');
       if (registry) next.tokenPaused[registry] = boolArg(ix.args?.paused);
     } else if (is('update_token_registry')) {
       // `paused: Option<bool>` — None leaves the pause state as it is.
-      const registry = account(ix, 'token_registry');
+      const registry = accountByName(ix, 'token_registry');
       const paused = ix.args?.paused;
       if (registry && paused !== null && paused !== undefined) {
         next.tokenPaused[registry] = boolArg(paused);
@@ -198,14 +171,15 @@ export function applyPriorEffects(
       next.manualReviewEnabled = boolArg(ix.args?.enabled);
     } else if (is('transfer_admin')) {
       // Takes effect immediately (admin.rs `transfer_admin`).
-      next.admin = pubkeyString(ix.args?.new_admin);
+      next.admin = readPubkeyArg(ix.args?.new_admin);
     } else if (is('set_chain_id')) {
       next.chainId = toNumber(ix.args?.chain_id) ?? undefined;
     } else if (is('initialize_roles')) {
       next.roles = { operationsAdmin: null, pauser: null };
     } else if (is('set_role')) {
       const role = enumVariantName(ix.args?.role_type);
-      const holder = ix.args?.pubkey === null ? null : (pubkeyString(ix.args?.pubkey) ?? undefined);
+      const holder =
+        ix.args?.pubkey === null ? null : (readPubkeyArg(ix.args?.pubkey) ?? undefined);
       if (!next.roles || holder === undefined) {
         if (role === 'Pauser' || role === 'OperationsAdmin') next.roles = undefined;
         continue;
@@ -340,7 +314,7 @@ export function checkRecoveryMode(
     reject(
       result,
       'RecoveryPolicyDisabled',
-      `Recovery mode is ${mode}; cancelling needs Cancellation only or Full recovery`
+      `Recovery mode is ${mode}; canceling needs Cancellation only or Full recovery`
     );
   }
   if (action === 'reverse' && mode !== 'FullRecovery') {
@@ -668,4 +642,77 @@ export function checkCancellationProof(
       'The reason code or incident ID does not match the proof'
     );
   }
+}
+
+/**
+ * Apply earlier instructions in the proposal that act on the same inbound
+ * sequence: `set_delayed_release_maturity` moves `claimable_after`, and
+ * `release_delayed_inbound` / `settle_delayed` pay it out. A value that cannot
+ * be decoded makes the affected field unknown.
+ */
+export function applyPriorIncomingEffects(
+  incoming: Read<IncomingFacts>,
+  prior: DecodedInstruction[] | undefined,
+  programId: string,
+  sourceSeq: unknown
+): Read<IncomingFacts> {
+  const seq = toBigInt(sourceSeq);
+  if (!incoming || seq === null) return incoming;
+  let next: IncomingFacts = { ...incoming };
+  for (const ix of prior ?? []) {
+    if (ix.programId !== programId || toBigInt(ix.args?.source_seq) !== seq) continue;
+    if (instructionIs(ix, programId, 'set_delayed_release_maturity')) {
+      next = { ...next, claimableAfter: toBigInt(ix.args?.release_at) };
+    } else if (
+      instructionIs(ix, programId, 'release_delayed_inbound') ||
+      instructionIs(ix, programId, 'settle_delayed')
+    ) {
+      next = { ...next, claimed: true };
+    }
+  }
+  return next;
+}
+
+/**
+ * An earlier `post_cancellation_signatures` for the same sequence creates the
+ * proof a later `reverse_outgoing` consumes, so the proof cannot be read from
+ * chain yet. Its incident fields must still match.
+ */
+export function findPriorProofPost(
+  prior: DecodedInstruction[] | undefined,
+  programId: string,
+  seq: unknown
+): DecodedInstruction | undefined {
+  const value = toBigInt(seq);
+  if (value === null) return undefined;
+  return (prior ?? []).find(
+    (ix) =>
+      instructionIs(ix, programId, 'post_cancellation_signatures') &&
+      toBigInt(ix.args?.source_seq) === value
+  );
+}
+
+export function checkPriorProofPost(
+  result: PreflightResult,
+  post: DecodedInstruction,
+  expected: { reasonCode: unknown; incidentId: unknown }
+): void {
+  const reason = toBigInt(expected.reasonCode);
+  const postedReason = toBigInt(post.args?.reason_code);
+  const incident = formatBytes32(expected.incidentId);
+  const postedIncident = formatBytes32(post.args?.incident_id);
+  if (reason === null || postedReason === null || !incident || !postedIncident) {
+    result.unverified.push(
+      'Reason code and incident ID could not be compared with the proof posted earlier'
+    );
+  } else if (reason !== postedReason || incident !== postedIncident) {
+    reject(
+      result,
+      'InvalidCancellationProof',
+      'The reason code or incident ID differs from the proof posted earlier in this proposal'
+    );
+  }
+  result.unverified.push(
+    'The proof is posted by an earlier instruction in this proposal; its guardian signatures, threshold and address are not simulated'
+  );
 }

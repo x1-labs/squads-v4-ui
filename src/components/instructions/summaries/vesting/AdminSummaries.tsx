@@ -21,7 +21,7 @@ import {
   PreflightBlock,
   SummaryShell,
   accountByName,
-  preflightHeadline,
+  usePreflightHeadline,
   readPubkeyArg,
 } from './shared';
 import {
@@ -52,7 +52,7 @@ export const VestingInitializeTreasurySummary: React.FC<InstructionSummaryProps>
   );
   checkAccountFree(preflight, exists, 'This deployment’s treasury');
   checkVaultAccount(preflight, null, vault, getLiquidVaultPda(instruction.programId).toBase58());
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle:
       'Creates the treasury, fixes its principal schedule for good, and makes the signer admin',
     tone: 'purple',
@@ -96,7 +96,7 @@ export const VestingPauseSummary: React.FC<InstructionSummaryProps> = ({
   );
   checkAdminGuards(preflight, treasuryFacts(treasury), admin, false);
   const isNoop = Boolean(treasury && treasury.paused === pausing);
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: isNoop
       ? `Already ${pausing ? 'paused' : 'unpaused'} — this proposal changes nothing`
       : pausing
@@ -149,7 +149,7 @@ export const VestingTransferAdminSummary: React.FC<InstructionSummaryProps> = ({
   );
   checkAdminGuards(preflight, treasuryFacts(treasury), signer, false);
   const isNoop = Boolean(newAdmin && currentAdmin && newAdmin === currentAdmin);
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: isNoop
       ? 'Already the admin — this proposal changes nothing'
       : 'Immediately hands full admin control of the vesting treasury to a new key',
@@ -229,7 +229,7 @@ export const VestingActivateClaimsSummary: React.FC<InstructionSummaryProps> = (
     getLiquidVaultPda(instruction.programId).toBase58()
   );
   checkCoverage(preflight, balanceBefore, required, 'everything owed plus rent');
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: 'Opens claiming for every grant. This is one-way: claims cannot be turned off again',
     tone: 'green',
   });

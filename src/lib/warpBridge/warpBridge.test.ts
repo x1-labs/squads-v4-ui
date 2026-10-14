@@ -196,7 +196,7 @@ describe('warp bridge preflight', async () => {
     );
   });
 
-  test('an already delivered transfer cannot be cancelled', () => {
+  test('an already delivered transfer cannot be canceled', () => {
     const result = emptyPreflight();
     checkAccountFree(result, true, 'A delivery receipt', 'DestinationAlreadyExecuted');
     assert.equal(result.rejections[0].error, 'DestinationAlreadyExecuted');
@@ -422,4 +422,83 @@ test('an unreadable Roles PDA in the roles slot is unverified even for root', as
   resolveRolesSlot(result, unknownFacts(), ROLES_PDA, PROGRAM, ROLES_PDA);
   assert.equal(willFail(result), false);
   assert.equal(result.unverified.length, 1);
+});
+
+describe('reviewer round 2 (PR #43)', async () => {
+  const {
+    applyPriorIncomingEffects,
+    checkPriorProofPost,
+    checkSettleable,
+    emptyPreflight,
+    findPriorProofPost,
+    unknownFacts,
+    willFail,
+    MANUAL_REVIEW_PENDING,
+  } = await import('./preflight.ts');
+  const { isFinalProposalStatus } = await import('../preflight.ts');
+  const PROGRAM = '6JbPTuxVuoTgyQeXFb9MH8C8nUY8NBbLP1Lu4B13JfMD';
+  const ix = (instructionName: string, args: Record<string, unknown>) =>
+    ({ programId: PROGRAM, instructionName, args, accounts: [] }) as any;
+  const held = {
+    processed: true,
+    claimed: false,
+    claimableAfter: MANUAL_REVIEW_PENDING,
+    sender: null,
+    tokenMint: null,
+  };
+  const reviewOff = { ...unknownFacts(), manualReviewEnabled: false };
+
+  test('an earlier release time makes a held transfer settleable', () => {
+    const incoming = applyPriorIncomingEffects(
+      held,
+      [ix('SetDelayedReleaseMaturity', { source_seq: '7', release_at: 0 })],
+      PROGRAM,
+      '7'
+    );
+    const result = emptyPreflight();
+    checkSettleable(result, reviewOff, incoming, 1_000);
+    assert.equal(willFail(result), false);
+  });
+
+  test('releasing the same transfer twice rejects the second', () => {
+    const incoming = applyPriorIncomingEffects(
+      { ...held, claimableAfter: BigInt(0) },
+      [ix('ReleaseDelayedInbound', { source_seq: '7' })],
+      PROGRAM,
+      '7'
+    );
+    assert.equal(incoming?.claimed, true);
+    const other = applyPriorIncomingEffects(
+      { ...held, claimableAfter: BigInt(0) },
+      [ix('ReleaseDelayedInbound', { source_seq: '8' })],
+      PROGRAM,
+      '7'
+    );
+    assert.equal(other?.claimed, false);
+  });
+
+  test('a proof posted earlier is used instead of reading chain state', () => {
+    const incident = new Array(32).fill(5);
+    const prior = [
+      ix('PostCancellationSignatures', { source_seq: '9', reason_code: 0, incident_id: incident }),
+    ];
+    const post = findPriorProofPost(prior, PROGRAM, '9');
+    assert.ok(post);
+    const ok = emptyPreflight();
+    checkPriorProofPost(ok, post, { reasonCode: 0, incidentId: incident });
+    assert.equal(willFail(ok), false);
+    const mismatch = emptyPreflight();
+    checkPriorProofPost(mismatch, post, { reasonCode: 1, incidentId: incident });
+    assert.equal(mismatch.rejections[0].error, 'InvalidCancellationProof');
+    assert.equal(findPriorProofPost(prior, PROGRAM, '10'), undefined);
+  });
+
+  test('preflight is skipped once a proposal can no longer execute', () => {
+    for (const status of ['Executed', 'Executing', 'Cancelled', 'Rejected']) {
+      assert.equal(isFinalProposalStatus(status), true, status);
+    }
+    for (const status of ['Active', 'Approved', 'Draft', undefined]) {
+      assert.equal(isFinalProposalStatus(status), false, String(status));
+    }
+  });
 });

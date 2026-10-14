@@ -1,7 +1,8 @@
 import React from 'react';
 import { formatNativeAmount, formatTokenAmount } from '@/lib/utils/formatters';
 import { NativeSymbol } from '@/lib/network';
-import { PreflightResult, willFail } from '@/lib/vesting/preflight';
+import { PreflightResult, isFinalProposalStatus, willFail } from '@/lib/preflight';
+import { useProposalStatus } from '../proposalStatus';
 import { toBigInt } from '@/lib/vesting/values';
 import { Field, Tone } from '../shared';
 
@@ -35,12 +36,13 @@ export const NativeAmountField: React.FC<{
  * reject is red; checks that could not run turn it amber; no-ops stay gray
  * (callers pass that as `normal`).
  */
-export function preflightHeadline(
+export function usePreflightHeadline(
   preflight: PreflightResult,
   loading: boolean,
   normal: { subtitle: string; tone: Tone }
 ): { subtitle: string; tone: Tone } {
-  if (loading) return normal;
+  const status = useProposalStatus();
+  if (loading || isFinalProposalStatus(status)) return normal;
   if (willFail(preflight)) {
     return {
       subtitle: 'The program would reject this proposal as the chain stands now — see why below',
@@ -63,6 +65,15 @@ export const PreflightBlock: React.FC<{
   /** Replaces the default footnote about how earlier instructions are treated. */
   note?: string;
 }> = ({ preflight, loading, note }) => {
+  const status = useProposalStatus();
+  if (isFinalProposalStatus(status)) {
+    return (
+      <div className="text-xs text-muted-foreground">
+        Proposal is {status === 'Cancelled' ? 'canceled' : status?.toLowerCase()} — preflight checks
+        apply only to proposals that can still execute.
+      </div>
+    );
+  }
   if (loading) {
     return <div className="text-xs text-muted-foreground">Checking against on-chain state…</div>;
   }

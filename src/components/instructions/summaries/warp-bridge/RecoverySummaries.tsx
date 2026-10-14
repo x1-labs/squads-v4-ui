@@ -3,6 +3,8 @@ import { InstructionSummaryProps } from '@/lib/instructions/types';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 import {
   CancellationProofAccount,
+  getBridgeConfigPda,
+  getGuardianSetPda,
   getInboundCancellationPda,
   getIncomingMsgPda,
   getOutgoingMsgPda,
@@ -11,7 +13,7 @@ import {
   readBridgeAccount,
 } from '@/lib/warpBridge/accounts';
 import {
-  ANCHOR_ERRORS,
+  PreflightResult,
   ProofFacts,
   checkAccountFree,
   checkCancellationProof,
@@ -19,6 +21,8 @@ import {
   checkInboundRoute,
   checkOutboundRoute,
   checkPda,
+  checkPriorProofPost,
+  findPriorProofPost,
   instructionIs,
   reject,
   checkRecoveryMode,
@@ -27,6 +31,7 @@ import {
   emptyPreflight,
 } from '@/lib/warpBridge/preflight';
 import {
+  RECOVERY_MODES,
   describeRecoveryMode,
   describeSequenceRoute,
   enumVariantName,
@@ -47,7 +52,7 @@ import {
   accountByName,
   readPubkeyArg,
   BridgePreflightBlock,
-  preflightHeadline,
+  usePreflightHeadline,
 } from './shared';
 import {
   useBridgeAccountExists,
@@ -59,7 +64,7 @@ import {
 /**
  * Incident recovery is the one part of the bridge that rewrites transfer
  * outcomes: a cancellation permanently blocks delivery of an inbound transfer,
- * and a reversal returns a cancelled outbound transfer to its sender. Both are
+ * and a reversal returns a canceled outbound transfer to its sender. Both are
  * root-only, need the bridge or the token paused, and cannot be undone.
  *
  * Guards are mirrored in `@/lib/warpBridge/preflight`, with earlier
@@ -85,6 +90,32 @@ const IncidentFields: React.FC<{ reasonCode: unknown; incidentId: unknown }> = (
   </>
 );
 
+function checkRecoverySlots(
+  preflight: PreflightResult,
+  instruction: InstructionSummaryProps['instruction'],
+  indices: { config: number; policy: number; guardianSet: number }
+): void {
+  const programId = instruction.programId;
+  checkPda(
+    preflight,
+    accountByName(instruction, 'config', indices.config),
+    getBridgeConfigPda(programId).toBase58(),
+    'The config account'
+  );
+  checkPda(
+    preflight,
+    accountByName(instruction, 'recovery_policy', indices.policy),
+    getRecoveryPolicyPda(programId).toBase58(),
+    'The recovery policy account'
+  );
+  checkPda(
+    preflight,
+    accountByName(instruction, 'guardian_set', indices.guardianSet),
+    getGuardianSetPda(programId).toBase58(),
+    'The guardian set account'
+  );
+}
+
 /** `initialize_recovery_policy` — creates the recovery switch in `Disabled` mode. */
 export const BridgeInitializeRecoveryPolicySummary: React.FC<InstructionSummaryProps> = ({
   instruction,
@@ -107,7 +138,7 @@ export const BridgeInitializeRecoveryPolicySummary: React.FC<InstructionSummaryP
   checkPda(preflight, suppliedPolicy, policyAccount, 'The recovery policy account');
   checkAccountFree(preflight, exists, 'The recovery policy');
 
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: 'Creates the incident-recovery switch, starting in Disabled mode',
     tone: 'indigo',
   });
@@ -123,7 +154,7 @@ export const BridgeInitializeRecoveryPolicySummary: React.FC<InstructionSummaryP
         <Field
           label="Initial mode"
           value="Disabled"
-          hint="Nothing can be cancelled or reversed until root changes the mode"
+          hint="Nothing can be canceled or reversed until root changes the mode"
         />
         <AddressWithButtons address={policyAccount} label="Policy" />
         {admin && <AddressWithButtons address={admin} label="Root" />}
@@ -144,12 +175,14 @@ export const BridgeSetRecoveryModeSummary: React.FC<InstructionSummaryProps> = (
 
   const next = describeRecoveryMode(instruction.args?.mode);
   const nextVariant = enumVariantName(instruction.args?.mode);
+  const decoded = nextVariant !== null && nextVariant in RECOVERY_MODES;
   const currentVariant = facts.recoveryMode;
-  const known = currentVariant !== undefined && currentVariant !== null;
+  const known = decoded && currentVariant !== undefined && currentVariant !== null;
   const changed = known && currentVariant !== nextVariant;
-  const enabling = nextVariant !== 'Disabled';
+  const enabling = decoded && nextVariant !== 'Disabled';
 
   const preflight = emptyPreflight();
+  if (!decoded) preflight.unverified.push('The new recovery mode could not be decoded');
   checkRootHasOne(preflight, facts, admin);
   checkPda(
     preflight,
@@ -163,18 +196,26 @@ export const BridgeSetRecoveryModeSummary: React.FC<InstructionSummaryProps> = (
     reject(preflight, 'AccountNotInitialized', 'The recovery policy has not been initialized');
   }
 
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle:
       known && !changed
         ? `Recovery is already ${next.label.toLowerCase()} — this proposal changes nothing`
-        : (next.description ?? 'Changes the incident-recovery mode'),
-    tone: known && !changed ? 'gray' : enabling ? 'red' : 'green',
+        : !decoded
+          ? 'Changes the incident-recovery mode (new mode could not be decoded)'
+          : (next.description ?? 'Changes the incident-recovery mode'),
+    tone: known && !changed ? 'gray' : !decoded ? 'amber' : enabling ? 'red' : 'green',
   });
 
   return (
     <SummaryShell
       icon={enabling ? '🧯' : '🔒'}
-      title={enabling ? `Enable Recovery: ${next.label}` : 'Disable Recovery'}
+      title={
+        !decoded
+          ? 'Set Recovery Mode'
+          : enabling
+            ? `Enable Recovery: ${next.label}`
+            : 'Disable Recovery'
+      }
       subtitle={headline.subtitle}
       tone={headline.tone}
     >
@@ -248,6 +289,7 @@ export const BridgeCancelInboundSummary: React.FC<InstructionSummaryProps> = ({
 
   const preflight = emptyPreflight();
   checkRootHasOne(preflight, facts, admin);
+  checkRecoverySlots(preflight, instruction, { config: 0, policy: 1, guardianSet: 2 });
   checkRecoveryMode(preflight, facts, 'cancel');
   checkRecoveryPause(preflight, facts, registryAddress);
   checkIncident(preflight, instruction.args?.reason_code, instruction.args?.incident_id);
@@ -265,7 +307,7 @@ export const BridgeCancelInboundSummary: React.FC<InstructionSummaryProps> = ({
     'Sender, mint, amount and timestamp are not checked against the source transfer. Delivery is blocked by sequence either way, but the recorded message hash feeds the refund attestation — compare them with the source transaction'
   );
 
-  const headline = preflightHeadline(preflight, loading, {
+  const headline = usePreflightHeadline(preflight, loading, {
     subtitle: `Permanently blocks delivery of ${amount}${route ? ` (${route})` : ''} — irreversible`,
     tone: 'red',
   });
@@ -352,8 +394,8 @@ export const BridgePostCancellationSignaturesSummary: React.FC<InstructionSummar
     'Not mirrored: the guardian Ed25519 signatures in this transaction, the threshold and "no new signatures" checks, the cancellation proof address (derived from the guardian set index and these arguments), and consistency with an existing proof (consumed, hash, guardian set)'
   );
 
-  const headline = preflightHeadline(preflight, loading, {
-    subtitle: 'Records guardian attestations that the destination chain cancelled this transfer',
+  const headline = usePreflightHeadline(preflight, loading, {
+    subtitle: 'Records guardian attestations that the destination chain canceled this transfer',
     tone: 'indigo',
   });
 
@@ -367,7 +409,7 @@ export const BridgePostCancellationSignaturesSummary: React.FC<InstructionSummar
       <DetailBlock>
         <Field label="Source sequence" value={seq?.toString() ?? '—'} />
         {route && <Field label="Route" value={route} />}
-        <Field label="Cancelled at" value={formatUnixTime(instruction.args?.cancelled_at)} />
+        <Field label="Canceled at" value={formatUnixTime(instruction.args?.cancelled_at)} />
         <Field
           label="Message hash"
           value={<span className="break-all text-xs">{messageHash ?? '—'}</span>}
@@ -392,7 +434,7 @@ export const BridgePostCancellationSignaturesSummary: React.FC<InstructionSummar
 };
 
 /**
- * `reverse_outgoing` — returns a cancelled outbound transfer to its sender on
+ * `reverse_outgoing` — returns a canceled outbound transfer to its sender on
  * this (source) chain, consuming the guardian-attested cancellation proof.
  */
 export const BridgeReverseOutgoingSummary: React.FC<InstructionSummaryProps> = ({
@@ -469,25 +511,38 @@ export const BridgeReverseOutgoingSummary: React.FC<InstructionSummaryProps> = (
 
   const preflight = emptyPreflight();
   checkRootHasOne(preflight, facts, admin);
+  checkRecoverySlots(preflight, instruction, { config: 0, policy: 1, guardianSet: 2 });
   checkRecoveryMode(preflight, facts, 'reverse');
   checkRecoveryPause(preflight, facts, registryAddress);
   checkIncident(preflight, instruction.args?.reason_code, instruction.args?.incident_id);
-  checkCancellationProof(
-    preflight,
-    proofRead ? proofRead.value : undefined,
-    {
-      seq: instruction.args?.seq,
-      destinationCancellation,
+  const priorPost = findPriorProofPost(
+    priorInstructions,
+    instruction.programId,
+    instruction.args?.seq
+  );
+  if (priorPost) {
+    checkPriorProofPost(preflight, priorPost, {
       reasonCode: instruction.args?.reason_code,
       incidentId: instruction.args?.incident_id,
-    },
-    guardianSet
-      ? {
-          index: toNumber(guardianSet.guardian_set_index),
-          threshold: toNumber(guardianSet.threshold),
-        }
-      : undefined
-  );
+    });
+  } else {
+    checkCancellationProof(
+      preflight,
+      proofRead ? proofRead.value : undefined,
+      {
+        seq: instruction.args?.seq,
+        destinationCancellation,
+        reasonCode: instruction.args?.reason_code,
+        incidentId: instruction.args?.incident_id,
+      },
+      guardianSet
+        ? {
+            index: toNumber(guardianSet.guardian_set_index),
+            threshold: toNumber(guardianSet.threshold),
+          }
+        : undefined
+    );
+  }
   checkOutboundRoute(preflight, facts, instruction.args?.seq);
   checkPda(preflight, outgoingMsg, expectedOutgoing, 'The outgoing message account');
   if (outgoingExists === false) {
@@ -514,8 +569,8 @@ export const BridgeReverseOutgoingSummary: React.FC<InstructionSummaryProps> = (
     'Not mirrored: the attestation hash and proof address, the proof’s source program and chain IDs, the destination cancellation PDA under the destination program, the token registry and mint matching the outgoing message, the refund account owner, the native/wrapped operation, a zero amount, and the vault balance'
   );
 
-  const headline = preflightHeadline(preflight, loading, {
-    subtitle: `Returns a cancelled ${symbol ?? 'token'} transfer to its sender — irreversible`,
+  const headline = usePreflightHeadline(preflight, loading, {
+    subtitle: `Returns a canceled ${symbol ?? 'token'} transfer to its sender — irreversible`,
     tone: 'red',
   });
 

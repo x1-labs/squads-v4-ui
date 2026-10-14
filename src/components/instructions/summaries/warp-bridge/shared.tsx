@@ -6,7 +6,7 @@ import { PreflightBlock } from '../vesting/shared';
 import type { PreflightResult } from '@/lib/warpBridge/preflight';
 
 export * from '../shared';
-export { preflightHeadline } from '../vesting/shared';
+export { usePreflightHeadline } from '../vesting/shared';
 
 /**
  * Preflight findings for a bridge summary. Bridge summaries apply the state

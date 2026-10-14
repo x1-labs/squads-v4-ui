@@ -18,6 +18,11 @@
  * transfer_admin work while paused.
  */
 
+import type { PreflightResult } from '../preflight';
+
+export { emptyPreflight, willFail } from '../preflight';
+export type { PreflightResult, Rejection } from '../preflight';
+
 /** Error codes from the vesting IDL (`errors`). */
 export const VESTING_ERRORS = {
   Unauthorized: 6000,
@@ -45,20 +50,6 @@ export const U64_MAX = BigInt('18446744073709551615');
 
 export type VestingErrorName = keyof typeof VESTING_ERRORS;
 export type AnchorErrorName = keyof typeof ANCHOR_ERRORS;
-
-export interface Rejection {
-  /** Program or Anchor error name, or a runtime failure label. */
-  error: string;
-  code?: number;
-  reason: string;
-}
-
-export interface PreflightResult {
-  rejections: Rejection[];
-  unverified: string[];
-}
-
-export const emptyPreflight = (): PreflightResult => ({ rejections: [], unverified: [] });
 
 export function reject(result: PreflightResult, error: VestingErrorName, reason: string): void {
   result.rejections.push({ error, code: VESTING_ERRORS[error], reason });
@@ -192,8 +183,4 @@ export function checkAccountFree(
   } else if (exists) {
     result.rejections.push({ error: 'AccountAlreadyInUse', reason: `${what} already exists` });
   }
-}
-
-export function willFail(result: PreflightResult): boolean {
-  return result.rejections.length > 0;
 }

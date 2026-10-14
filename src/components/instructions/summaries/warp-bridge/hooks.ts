@@ -11,10 +11,8 @@ import {
   fetchBridgeRoles,
   fetchBridgeVault,
   fetchGuardianSet,
-  fetchRecoveryPolicy,
   fetchTokenRegistry,
   fetchTokenRegistryAt,
-  BridgeConfigAccount as ConfigForFacts,
   IncomingMsgAccount,
   getBridgeConfigPda,
   getBridgeRolesPda,
@@ -27,6 +25,7 @@ import {
   IncomingFacts,
   RecoveryModeName,
   applyPriorEffects,
+  applyPriorIncomingEffects,
   unknownFacts,
 } from '@/lib/warpBridge/preflight';
 import { enumVariantName, formatCounterparty, toBigInt } from '@/lib/warpBridge/values';
@@ -54,17 +53,6 @@ export function useBridgeRoles(
     fetchBridgeRoles(connection, instruction.programId)
   );
   return { roles: data, loading };
-}
-
-/** Current `RecoveryPolicy`; null until it has been initialized. */
-export function useRecoveryPolicy(
-  instruction: DecodedInstruction,
-  connection: Connection
-): { policy: RecoveryPolicyAccount | null; loading: boolean } {
-  const { data, loading } = useProgramAccount(`recovery-policy:${instruction.programId}`, () =>
-    fetchRecoveryPolicy(connection, instruction.programId)
-  );
-  return { policy: data, loading };
 }
 
 /** Current v2 `GuardianSet`. */
@@ -170,20 +158,29 @@ export function useBridgeFacts(
   instruction: DecodedInstruction,
   connection: Connection,
   priorInstructions: DecodedInstruction[] | undefined,
-  registryAddress?: string
+  registryAddress?: string,
+  /** Skip reads a summary does not use (both default to true). */
+  needs: { roles?: boolean; recoveryPolicy?: boolean } = {}
 ): { facts: BridgeFacts; loading: boolean } {
   const programId = instruction.programId;
+  const readRoles = needs.roles !== false;
+  const readPolicy = needs.recoveryPolicy !== false;
   const { data, loading } = useProgramAccount(
-    `bridge-facts:${connection.rpcEndpoint}:${programId}:${registryAddress ?? ''}`,
+    `bridge-facts:${connection.rpcEndpoint}:${programId}:${registryAddress ?? ''}:${readRoles}:${readPolicy}`,
     async () => {
+      const skipped = Promise.resolve({ ok: false as const });
       const [config, roles, policy, registry] = await Promise.all([
-        readBridgeAccount<ConfigForFacts>(connection, 'Config', getBridgeConfigPda(programId)),
-        readBridgeAccount<BridgeRolesAccount>(connection, 'Roles', getBridgeRolesPda(programId)),
-        readBridgeAccount<RecoveryPolicyAccount>(
-          connection,
-          'RecoveryPolicy',
-          getRecoveryPolicyPda(programId)
-        ),
+        readBridgeAccount<BridgeConfigAccount>(connection, 'Config', getBridgeConfigPda(programId)),
+        readRoles
+          ? readBridgeAccount<BridgeRolesAccount>(connection, 'Roles', getBridgeRolesPda(programId))
+          : skipped,
+        readPolicy
+          ? readBridgeAccount<RecoveryPolicyAccount>(
+              connection,
+              'RecoveryPolicy',
+              getRecoveryPolicyPda(programId)
+            )
+          : skipped,
         registryAddress
           ? readBridgeAccount<TokenRegistryAccount>(
               connection,
@@ -198,6 +195,7 @@ export function useBridgeFacts(
         facts.configPaused = config.value.paused;
         facts.chainId = config.value.chain_id;
         facts.manualReviewEnabled = config.value.manual_review_enabled;
+        facts.manualReviewCutoff = toBigInt(config.value.manual_review_cutoff) ?? undefined;
       }
       if (roles.ok) {
         facts.roles = roles.value
@@ -212,7 +210,7 @@ export function useBridgeFacts(
           ? ((enumVariantName(policy.value.mode) as RecoveryModeName | null) ?? undefined)
           : null;
       }
-      if (registryAddress && registry && registry.ok && registry.value) {
+      if (registryAddress && registry && 'ok' in registry && registry.ok && registry.value) {
         facts.tokenPaused[registryAddress] = registry.value.paused;
       }
       return facts;
@@ -246,7 +244,8 @@ export function useBridgeAccountExists(
 export function useIncomingMsg(
   instruction: DecodedInstruction,
   connection: Connection,
-  sourceSeq: unknown
+  sourceSeq: unknown,
+  priorInstructions?: DecodedInstruction[]
 ): { incoming: IncomingFacts | null | undefined; loading: boolean } {
   // Read the PDA the program derives, not whatever the proposal passes; the
   // summary checks the passed account against it separately.
@@ -272,5 +271,13 @@ export function useIncomingMsg(
           : null
       )
   );
-  return { incoming: data ? data.value : undefined, loading };
+  return {
+    incoming: applyPriorIncomingEffects(
+      data ? data.value : undefined,
+      priorInstructions,
+      instruction.programId,
+      sourceSeq
+    ),
+    loading,
+  };
 }

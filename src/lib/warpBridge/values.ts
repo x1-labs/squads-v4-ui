@@ -206,7 +206,7 @@ export const RECOVERY_MODES: Record<string, { label: string; description: string
   FullRecovery: {
     label: 'Full recovery',
     description:
-      'Root may cancel inbound transfers and reverse cancelled outbound transfers back to their senders',
+      'Root may cancel inbound transfers and reverse canceled outbound transfers back to their senders',
   },
 };
 
