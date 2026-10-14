@@ -150,7 +150,11 @@ export function formatPauseReason(value: unknown): string {
  */
 export const ROLE_TYPES: Record<
   string,
-  { label: string; description: string; field: 'pauser' | 'fee_manager' | 'registrar' }
+  {
+    label: string;
+    description: string;
+    field: 'pauser' | 'fee_manager' | 'registrar' | 'operations_admin';
+  }
 > = {
   Pauser: {
     label: 'Pauser',
@@ -167,12 +171,18 @@ export const ROLE_TYPES: Record<
     description: 'May register new tokens for bridging',
     field: 'registrar',
   },
+  OperationsAdmin: {
+    label: 'Operations admin',
+    description:
+      'May pause and resume tokens, set token limits, change manual review and release held transfers; cannot run incident recovery',
+    field: 'operations_admin',
+  },
 };
 
 export function describeRole(value: unknown): {
   label: string;
   description?: string;
-  field?: 'pauser' | 'fee_manager' | 'registrar';
+  field?: 'pauser' | 'fee_manager' | 'registrar' | 'operations_admin';
 } {
   const variant = enumVariantName(value);
   if (!variant) return { label: 'Unknown role' };

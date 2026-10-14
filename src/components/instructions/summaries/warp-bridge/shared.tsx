@@ -2,7 +2,27 @@ import React from 'react';
 import { AddressWithButtons } from '@/components/AddressWithButtons';
 import { Field } from '../shared';
 
+import { PreflightBlock } from '../vesting/shared';
+import type { PreflightResult } from '@/lib/warpBridge/preflight';
+
 export * from '../shared';
+export { preflightHeadline } from '../vesting/shared';
+
+/**
+ * Preflight findings for a bridge summary. Bridge summaries apply the state
+ * changes of earlier bridge instructions in the proposal (pauses, recovery
+ * mode, roles, admin, chain ID) before checking.
+ */
+export const BridgePreflightBlock: React.FC<{ preflight: PreflightResult; loading: boolean }> = ({
+  preflight,
+  loading,
+}) => (
+  <PreflightBlock
+    preflight={preflight}
+    loading={loading}
+    note="Checked against the current on-chain state, after applying these earlier bridge instructions in this proposal: bridge and token pauses, recovery policy and mode, manual review, roles, admin transfer and chain ID. Other instructions (for example guardian rotations or token deregistration) are not simulated."
+  />
+);
 
 /**
  * Identifies the token a bridge instruction acts on: its registry symbol, the

@@ -57,10 +57,12 @@ export function preflightHeadline(
 }
 
 /** Lists why the program would reject the proposal, and which checks could not run. */
-export const PreflightBlock: React.FC<{ preflight: PreflightResult; loading: boolean }> = ({
-  preflight,
-  loading,
-}) => {
+export const PreflightBlock: React.FC<{
+  preflight: PreflightResult;
+  loading: boolean;
+  /** Replaces the default footnote about how earlier instructions are treated. */
+  note?: string;
+}> = ({ preflight, loading, note }) => {
   if (loading) {
     return <div className="text-xs text-muted-foreground">Checking against on-chain state…</div>;
   }
@@ -80,8 +82,8 @@ export const PreflightBlock: React.FC<{ preflight: PreflightResult; loading: boo
         <Field key={`unverified-${i}`} label="Not verified" value="—" hint={message} tone="amber" />
       ))}
       <div className="text-xs text-muted-foreground">
-        Checked against the current on-chain state. Earlier instructions in the same proposal are
-        not simulated and may change the outcome.
+        {note ??
+          'Checked against the current on-chain state. Earlier instructions in the same proposal are not simulated and may change the outcome.'}
       </div>
     </div>
   );

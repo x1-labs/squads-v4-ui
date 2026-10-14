@@ -16,8 +16,19 @@ import {
   SummaryShell,
   ValueChange,
   accountByName,
+  BridgePreflightBlock,
+  preflightHeadline,
 } from './shared';
-import { useBridgeToken, useBridgeVault } from './hooks';
+import { useBridgeFacts, useBridgeToken, useBridgeVault } from './hooks';
+import {
+  PreflightResult,
+  checkAuthority,
+  checkPda,
+  checkTokenLimits,
+  emptyPreflight,
+  resolveRolesSlot,
+} from '@/lib/warpBridge/preflight';
+import { getBridgeRolesPda, getTokenRegistryPda } from '@/lib/warpBridge/accounts';
 
 /** True when a submitted value differs from what is already on chain. */
 function differs(submitted: unknown, current: unknown): boolean {
@@ -496,6 +507,30 @@ export const BridgeMigrateTokenRegistrySummary: React.FC<InstructionSummaryProps
 };
 
 /**
+ * `seeds = [b"token_registry", local_mint]`: the registry passed must be the
+ * PDA for the mint in the arguments, and the entry must exist.
+ */
+function checkTokenRegistryAccount(
+  preflight: PreflightResult,
+  instruction: InstructionSummaryProps['instruction'],
+  localMint: string | undefined,
+  registry: unknown,
+  loading: boolean
+): void {
+  checkPda(
+    preflight,
+    accountByName(instruction, 'token_registry', 1),
+    localMint ? getTokenRegistryPda(instruction.programId, localMint).toBase58() : undefined,
+    'The token registry account'
+  );
+  if (!loading && registry === null) {
+    preflight.unverified.push(
+      'Token registry entry could not be read — it must exist for this instruction to run'
+    );
+  }
+}
+
+/**
  * `set_token_pause` — pauses or resumes one token on this chain. A paused token
  * cannot be bridged out, delivered in, or claimed here; other tokens keep
  * running.
@@ -503,29 +538,66 @@ export const BridgeMigrateTokenRegistrySummary: React.FC<InstructionSummaryProps
 export const BridgeSetTokenPauseSummary: React.FC<InstructionSummaryProps> = ({
   instruction,
   connection,
+  priorInstructions,
 }) => {
-  const { localMint, symbol, decimals, registry, loading } = useBridgeToken(
+  const {
+    localMint,
+    symbol,
+    decimals,
+    registry,
+    loading: tokenLoading,
+  } = useBridgeToken(instruction, connection);
+  const registryAccount = accountByName(instruction, 'token_registry', 1);
+  const { facts, loading: factsLoading } = useBridgeFacts(
     instruction,
-    connection
+    connection,
+    priorInstructions,
+    registryAccount
   );
+  const loading = tokenLoading || factsLoading;
   const authority = accountByName(instruction, 'authority', 2);
 
   const pausing = instruction.args?.paused === true;
-  const changed = registry !== null && registry.paused !== pausing;
+  // State as earlier instructions in this proposal leave it.
+  const currentPaused = registryAccount ? facts.tokenPaused[registryAccount] : undefined;
+  const changed = currentPaused !== undefined && currentPaused !== pausing;
+  const known = currentPaused !== undefined;
   const name = symbol ?? 'this token';
+
+  const preflight = emptyPreflight();
+  checkTokenRegistryAccount(preflight, instruction, localMint, registry, loading);
+  const roles = resolveRolesSlot(
+    preflight,
+    facts,
+    accountByName(instruction, 'roles', 3),
+    instruction.programId,
+    getBridgeRolesPda(instruction.programId).toBase58()
+  );
+  // A pauser may pause a token; only operations or root may resume it.
+  checkAuthority(
+    preflight,
+    facts,
+    authority,
+    pausing ? 'pauser' : 'operations',
+    'Unauthorized',
+    roles
+  );
+  const headline = preflightHeadline(preflight, loading, {
+    subtitle:
+      !loading && known && !changed
+        ? `${name} is already ${pausing ? 'paused' : 'active'} — this proposal changes nothing`
+        : pausing
+          ? `Stops bridging ${name} in and out of this chain until it is resumed`
+          : `Resumes bridging ${name} in and out of this chain`,
+    tone: !loading && known && !changed ? 'gray' : pausing ? 'red' : 'green',
+  });
 
   return (
     <SummaryShell
       icon={pausing ? '⏸️' : '▶️'}
       title={pausing ? `Pause ${symbol ?? 'Token'}` : `Resume ${symbol ?? 'Token'}`}
-      subtitle={
-        !loading && registry && !changed
-          ? `${name} is already ${pausing ? 'paused' : 'active'} — this proposal changes nothing`
-          : pausing
-            ? `Stops bridging ${name} in and out of this chain until it is resumed`
-            : `Resumes bridging ${name} in and out of this chain`
-      }
-      tone={!loading && registry && !changed ? 'gray' : pausing ? 'red' : 'green'}
+      subtitle={headline.subtitle}
+      tone={headline.tone}
     >
       <DetailBlock>
         <BridgeTokenTarget localMint={localMint} symbol={symbol} decimals={decimals} />
@@ -535,7 +607,7 @@ export const BridgeSetTokenPauseSummary: React.FC<InstructionSummaryProps> = ({
           value={
             changed ? (
               <ValueChange
-                from={registry!.paused ? 'Paused' : 'Active'}
+                from={currentPaused ? 'Paused' : 'Active'}
                 to={pausing ? 'Paused' : 'Active'}
                 tone={pausing ? 'red' : 'green'}
               />
@@ -548,6 +620,7 @@ export const BridgeSetTokenPauseSummary: React.FC<InstructionSummaryProps> = ({
         />
         {authority && <AddressWithButtons address={authority} label="Authority" />}
       </DetailBlock>
+      <BridgePreflightBlock preflight={preflight} loading={loading} />
     </SummaryShell>
   );
 };
@@ -556,11 +629,21 @@ export const BridgeSetTokenPauseSummary: React.FC<InstructionSummaryProps> = ({
 export const BridgeSetTokenLimitsSummary: React.FC<InstructionSummaryProps> = ({
   instruction,
   connection,
+  priorInstructions,
 }) => {
-  const { localMint, symbol, decimals, registry, loading } = useBridgeToken(
+  const {
+    localMint,
+    symbol,
+    decimals,
+    registry,
+    loading: tokenLoading,
+  } = useBridgeToken(instruction, connection);
+  const { facts, loading: factsLoading } = useBridgeFacts(
     instruction,
-    connection
+    connection,
+    priorInstructions
   );
+  const loading = tokenLoading || factsLoading;
   const authority = accountByName(instruction, 'authority', 2);
 
   const fields = [
@@ -588,20 +671,32 @@ export const BridgeSetTokenLimitsSummary: React.FC<InstructionSummaryProps> = ({
     (field) => registry && differs(instruction.args?.[field.key], (registry as any)[field.key])
   );
 
+  const preflight = emptyPreflight();
+  checkTokenRegistryAccount(preflight, instruction, localMint, registry, loading);
+  const roles = resolveRolesSlot(
+    preflight,
+    facts,
+    accountByName(instruction, 'roles', 3),
+    instruction.programId,
+    getBridgeRolesPda(instruction.programId).toBase58()
+  );
+  checkAuthority(preflight, facts, authority, 'operations', 'Unauthorized', roles);
+  checkTokenLimits(preflight, instruction.args?.min_amount, instruction.args?.max_amount);
+  const headline = preflightHeadline(preflight, loading, {
+    subtitle: !registry
+      ? `Sets the cap and transfer bounds for ${symbol ?? 'this token'} (current entry unavailable)`
+      : changed.length === 0
+        ? 'No effective change — all three limits match the current on-chain entry'
+        : `${changed.length} of 3 limits change for ${symbol ?? 'this token'}`,
+    tone: registry && changed.length === 0 ? 'gray' : 'amber',
+  });
+
   return (
     <SummaryShell
       icon="📏"
       title="Set Token Limits"
-      subtitle={
-        loading
-          ? 'Comparing against the current registry entry…'
-          : !registry
-            ? `Sets the cap and transfer bounds for ${symbol ?? 'this token'} (current entry unavailable)`
-            : changed.length === 0
-              ? 'No effective change — all three limits match the current entry'
-              : `${changed.length} of 3 limits change for ${symbol ?? 'this token'}`
-      }
-      tone={registry && changed.length === 0 ? 'gray' : 'amber'}
+      subtitle={loading ? 'Comparing against the current registry entry…' : headline.subtitle}
+      tone={headline.tone}
     >
       <DetailBlock>
         <BridgeTokenTarget localMint={localMint} symbol={symbol} decimals={decimals} />
@@ -632,6 +727,7 @@ export const BridgeSetTokenLimitsSummary: React.FC<InstructionSummaryProps> = ({
         })}
         {authority && <AddressWithButtons address={authority} label="Authority" />}
       </DetailBlock>
+      <BridgePreflightBlock preflight={preflight} loading={loading} />
     </SummaryShell>
   );
 };
