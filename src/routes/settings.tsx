@@ -3,6 +3,7 @@ import SetRpcUrlInput from '@/components/SetRpcUrlnput';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import SetExplorerInput from '../components/SetExplorerInput';
 import { ThemeSelector } from '@/components/ThemeSelector';
+import DurableNonceSettings from '@/components/DurableNonceSettings';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Suspense } from 'react';
 
@@ -20,6 +21,17 @@ const SettingsPage = () => {
               </CardHeader>
               <CardContent>
                 <ThemeSelector />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Durable Nonce Signing</CardTitle>
+                <CardDescription>
+                  Keep transactions from expiring while you confirm them on a hardware wallet.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <DurableNonceSettings />
               </CardContent>
             </Card>
             <Card>

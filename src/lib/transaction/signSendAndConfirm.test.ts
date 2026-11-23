@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import {
   ComputeBudgetInstruction,
   Keypair,
+  NONCE_ACCOUNT_LENGTH,
   PublicKey,
+  SystemInstruction,
+  SystemProgram,
   Transaction,
   TransactionInstruction,
   VersionedTransaction,
@@ -21,6 +24,7 @@ import {
 } from './signSendAndConfirm.ts';
 import type { SendStep, SigningWallet } from './signSendAndConfirm.ts';
 import { formatError } from '../utils/errorHandler.ts';
+import { forgetSpentNonces, nonceAccountAddress } from './durableNonce.ts';
 import bs58 from 'bs58';
 
 const keypair = Keypair.generate();
@@ -49,21 +53,35 @@ function fakeConnection({
     | { err: unknown; logs: string[]; unitsConsumed?: number }
     | (() => never),
   blockHeight = (() => 100) as () => number,
+  /** The wallet's nonce account value per read, or null for no nonce account. */
+  nonce = (() => null) as () => string | null,
 } = {}) {
-  const calls = { simulations: 0, sends: 0 };
+  const calls = { simulations: 0, sends: 0, blockhashes: 0, probes: [] as unknown[] };
   const connection = {
     rpcEndpoint: 'http://rpc.test',
     getRecentPrioritizationFees: async () =>
       fees.map((prioritizationFee) => ({ prioritizationFee })),
-    simulateTransaction: async () => {
+    simulateTransaction: async (probe: unknown) => {
       calls.simulations += 1;
+      calls.probes.push(probe);
       const value = typeof simulation === 'function' ? simulation() : simulation;
       return { value };
     },
-    getLatestBlockhash: async () => ({
-      blockhash: PublicKey.default.toBase58(),
-      lastValidBlockHeight: 999,
-    }),
+    getLatestBlockhash: async () => {
+      calls.blockhashes += 1;
+      return { blockhash: PublicKey.default.toBase58(), lastValidBlockHeight: 999 };
+    },
+    getAccountInfo: async () => {
+      const value = nonce();
+      return value === null ? null : nonceAccountInfo(value, keypair.publicKey);
+    },
+    getAccountInfoAndContext: async () => {
+      const value = nonce();
+      return {
+        context: { slot: 4242 },
+        value: value === null ? null : nonceAccountInfo(value, keypair.publicKey),
+      };
+    },
     sendRawTransaction: async () => {
       calls.sends += 1;
       return 'SIGabc';
@@ -72,6 +90,19 @@ function fakeConnection({
     getBlockHeight: async () => blockHeight(),
   };
   return { calls, connection: connection as unknown as Connection };
+}
+
+const NONCE_A = bs58.encode(Buffer.alloc(32, 1));
+const NONCE_B = bs58.encode(Buffer.alloc(32, 2));
+
+/** An initialized system-program nonce account holding `nonce`, controlled by `authority`. */
+function nonceAccountInfo(nonce: string, authority: PublicKey) {
+  const data = Buffer.alloc(NONCE_ACCOUNT_LENGTH);
+  data.writeUInt32LE(1, 0); // version: current
+  data.writeUInt32LE(1, 4); // state: initialized
+  authority.toBuffer().copy(data, 8);
+  Buffer.from(bs58.decode(nonce)).copy(data, 40);
+  return { data, owner: SystemProgram.programId, lamports: 1_447_680, executable: false };
 }
 
 /** Drive a promise to settlement under mocked timers, one second per tick. */
@@ -449,6 +480,7 @@ describe('wallet watchdog', () => {
     const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], { label: 't' }));
     assert.ok(error instanceof WalletSignatureTimeoutError, String(error));
     assert.match(error.message, /Nothing was sent/);
+    assert.match(error.message, /durable nonce signing in Settings/, 'points at the fix');
     assert.equal(calls.sends, 0);
   });
 
@@ -475,5 +507,175 @@ describe('wallet watchdog', () => {
     const signature = await run(signSendAndConfirm(connection, wallet, [ix()], { label: 't' }));
     assert.equal(signature, signatureOf(signed[0]));
     assert.equal(calls.sends, 1);
+  });
+});
+
+/**
+ * Instruction data size that fits a legacy transaction with a blockhash
+ * (1222 bytes) but not with the nonce advance's 106 extra bytes (1328).
+ */
+const FITS_ONLY_WITHOUT_NONCE = 1_000;
+
+describe('durable nonce', () => {
+  beforeEach(() => {
+    forgetSpentNonces();
+    mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  });
+  afterEach(() => mock.timers.reset());
+
+  /** A nonce source that answers `values` in order, repeating the last. */
+  const sequence = (...values: string[]) => {
+    let reads = 0;
+    return () => values[Math.min(reads++, values.length - 1)];
+  };
+
+  test('back-to-back sends never re-sign a nonce a lagging node still reports', async () => {
+    // Read 1 serves send 1. Read 2 comes from a node that has not seen send 1
+    // land and still says NONCE_A; read 3 has caught up.
+    const { connection } = fakeConnection({ nonce: sequence(NONCE_A, NONCE_A, NONCE_B) });
+    const { wallet, signed } = fakeWallet();
+    await run(signSendAndConfirm(connection, wallet, [ix()], options));
+    await run(signSendAndConfirm(connection, wallet, [ix()], options));
+    assert.equal((signed[0] as Transaction).recentBlockhash, NONCE_A);
+    assert.equal((signed[1] as Transaction).recentBlockhash, NONCE_B);
+  });
+
+  test('a node that never catches up costs the nonce, not the send: it falls back to a blockhash', async () => {
+    const { connection, calls } = fakeConnection({ nonce: () => NONCE_A });
+    const { wallet, signed } = fakeWallet();
+    await run(signSendAndConfirm(connection, wallet, [ix()], options));
+    await run(signSendAndConfirm(connection, wallet, [ix()], options));
+    assert.equal((signed[0] as Transaction).recentBlockhash, NONCE_A);
+    assert.equal((signed[1] as Transaction).recentBlockhash, PublicKey.default.toBase58());
+    assert.equal(calls.blockhashes, 1);
+  });
+
+  /** Decode the instruction a legacy transaction starts with as a nonce advance. */
+  const advanceOf = (instruction: TransactionInstruction) => {
+    assert.ok(instruction.programId.equals(SystemProgram.programId));
+    assert.equal(SystemInstruction.decodeInstructionType(instruction), 'AdvanceNonceAccount');
+    return SystemInstruction.decodeNonceAdvance(instruction);
+  };
+
+  test('signs against the nonce, with its advance first and no blockhash fetched', async () => {
+    const { connection, calls } = fakeConnection({ nonce: () => NONCE_A });
+    const { wallet, signed } = fakeWallet();
+    const signature = await run(signSendAndConfirm(connection, wallet, [ix()], options));
+    const transaction = signed[0] as Transaction;
+    assert.equal(signature, signatureOf(transaction));
+    assert.equal(transaction.recentBlockhash, NONCE_A);
+    const advance = advanceOf(transaction.instructions[0]);
+    assert.ok(advance.noncePubkey.equals(await nonceAccountAddress(keypair.publicKey)));
+    assert.ok(advance.authorizedPubkey.equals(keypair.publicKey));
+    assert.equal(
+      ComputeBudgetInstruction.decodeInstructionType(transaction.instructions[1]),
+      'SetComputeUnitLimit',
+      'the budget follows the advance'
+    );
+    assert.equal(transaction.instructions.length, 4);
+    assert.equal(calls.blockhashes, 0);
+    // The simulation that sized compute included the advance too.
+    advanceOf((calls.probes[0] as Transaction).instructions[0]);
+  });
+
+  test('v0: the advance is the first compiled instruction and the nonce is the blockhash', async () => {
+    const { connection, calls } = fakeConnection({ nonce: () => NONCE_A });
+    const { wallet, signed } = fakeWallet();
+    await run(signSendAndConfirmV0(connection, wallet, [ix()], options));
+    const { message } = signed[0] as VersionedTransaction;
+    assert.equal(message.recentBlockhash, NONCE_A);
+    const first = message.compiledInstructions[0];
+    assert.ok(message.staticAccountKeys[first.programIdIndex].equals(SystemProgram.programId));
+    assert.equal(Buffer.from(first.data).readUInt32LE(0), 4, 'AdvanceNonceAccount');
+    assert.equal(calls.blockhashes, 0);
+  });
+
+  test('a slow wallet is waited for long past a blockhash window', async () => {
+    // Block height is far past any blockhash limit; the nonce has not moved.
+    const { calls, connection } = fakeConnection({
+      nonce: () => NONCE_A,
+      blockHeight: () => 1_000_000,
+    });
+    const { wallet, signed } = fakeWallet();
+    const slowSign = wallet.signTransaction!;
+    wallet.signTransaction = (transaction) =>
+      new Promise((resolve) => setTimeout(() => resolve(slowSign(transaction)), 90_000));
+    const signature = await run(signSendAndConfirm(connection, wallet, [ix()], { label: 't' }));
+    assert.equal(signature, signatureOf(signed[0]));
+    assert.equal(calls.sends, 1);
+  });
+
+  test('a nonce used elsewhere while the wallet is open abandons the wait, and nothing is sent', async () => {
+    const start = Date.now();
+    const { calls, connection } = fakeConnection({
+      nonce: () => (Date.now() - start > 20_000 ? NONCE_B : NONCE_A),
+    });
+    const wallet: SigningWallet = {
+      publicKey: keypair.publicKey,
+      signTransaction: () => new Promise(() => {}),
+    };
+    const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], { label: 't' }));
+    assert.ok(error instanceof WalletSignatureTimeoutError, String(error));
+    assert.equal((error as WalletSignatureTimeoutError).reason, 'nonce-used');
+    assert.equal(calls.sends, 0);
+  });
+
+  test('a wallet that never answers is still abandoned eventually', async () => {
+    const { calls, connection } = fakeConnection({ nonce: () => NONCE_A });
+    const wallet: SigningWallet = {
+      publicKey: keypair.publicKey,
+      signTransaction: () => new Promise(() => {}),
+    };
+    const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], { label: 't' }));
+    assert.ok(error instanceof WalletSignatureTimeoutError, String(error));
+    assert.equal((error as WalletSignatureTimeoutError).reason, 'too-long');
+    assert.equal(calls.sends, 0);
+  });
+
+  test('useDurableNonce: false signs with a blockhash even when a nonce exists', async () => {
+    const { connection, calls } = fakeConnection({ nonce: () => NONCE_A });
+    const { wallet, signed } = fakeWallet();
+    await run(
+      signSendAndConfirm(connection, wallet, [ix()], { ...options, useDurableNonce: false })
+    );
+    assert.equal((signed[0] as Transaction).recentBlockhash, PublicKey.default.toBase58());
+    assert.equal(calls.blockhashes, 1);
+  });
+
+  test('falls back to a blockhash when only the nonce advance pushes it over the packet limit', async () => {
+    const { connection, calls } = fakeConnection({ nonce: () => NONCE_A });
+    const { wallet, signed } = fakeWallet();
+    await run(signSendAndConfirm(connection, wallet, [ix(FITS_ONLY_WITHOUT_NONCE)], options));
+    const transaction = signed[0] as Transaction;
+    assert.equal(transaction.recentBlockhash, PublicKey.default.toBase58());
+    assert.equal(transaction.instructions.length, 3, 'no advance');
+    assert.equal(calls.blockhashes, 1);
+  });
+
+  test('a caller-measured budget gets room for the advance', async () => {
+    const { connection } = fakeConnection({ nonce: () => NONCE_A });
+    const { wallet, signed } = fakeWallet();
+    await run(
+      signSendAndConfirm(connection, wallet, [ix()], { ...options, unitsConsumed: 30_000 })
+    );
+    const transaction = signed[0] as Transaction;
+    const { units } = ComputeBudgetInstruction.decodeSetComputeUnitLimit(
+      transaction.instructions[1]
+    );
+    // (30_000 + 300) * 1.2 + 600, against 36_600 without a nonce.
+    assert.equal(units, 36_960);
+  });
+
+  test('an account at the nonce address with another authority is ignored', async () => {
+    const { connection, calls } = fakeConnection();
+    (connection as unknown as { getAccountInfoAndContext: unknown }).getAccountInfoAndContext =
+      async () => ({
+        context: { slot: 1 },
+        value: nonceAccountInfo(NONCE_A, Keypair.generate().publicKey),
+      });
+    const { wallet, signed } = fakeWallet();
+    await run(signSendAndConfirm(connection, wallet, [ix()], options));
+    assert.equal((signed[0] as Transaction).recentBlockhash, PublicKey.default.toBase58());
+    assert.equal(calls.blockhashes, 1);
   });
 });

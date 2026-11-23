@@ -1,5 +1,5 @@
-import { SendTransactionError, VersionedTransaction } from '@solana/web3.js';
-import type { Connection, SignatureStatus, Transaction } from '@solana/web3.js';
+import { NonceAccount, SendTransactionError, VersionedTransaction } from '@solana/web3.js';
+import type { Connection, PublicKey, SignatureStatus, Transaction } from '@solana/web3.js';
 import bs58 from 'bs58';
 
 /** How often to ask the RPC where the signature stands. */
@@ -8,32 +8,65 @@ const POLL_INTERVAL_MS = 1_000;
 /** Re-push the signed bytes every Nth poll while the cluster has not seen them at all. */
 const REBROADCAST_EVERY = 2;
 
-/** Check expiry every Nth poll — block height moves slower than we poll, and this trims the RPC load. */
-const BLOCK_HEIGHT_CHECK_EVERY = 5;
+/** Check expiry every Nth poll — block height and nonces move slower than we poll, and this trims the RPC load. */
+const EXPIRY_CHECK_EVERY = 5;
 
 /**
- * Extra status checks after block height passes the limit, before declaring
- * expiry. Behind a load-balanced RPC the height can come from a node a few slots
- * ahead of the one answering the status query; a transaction that landed in the
- * last block of its window needs a moment to show up there.
+ * Extra status checks after the lifetime ends, before declaring expiry. Behind a
+ * load-balanced RPC the height or nonce can come from a node a few slots ahead
+ * of the one answering the status query; a transaction that landed in the last
+ * block of its window — or that is itself what advanced the nonce — needs a
+ * moment to show up there.
  */
 const EXPIRY_GRACE_POLLS = 3;
 
 /**
- * Backstop on RPC silence. Expiry is normally decided by block height, but if
- * the RPC fails every status and height query we would otherwise loop forever.
- * Measured from the last query that got an answer, not from the send, so a
- * slow-but-working RPC is never cut off mid-flight. Blockhashes live ~60s;
- * twice that with no word from the RPC means the outcome cannot be known here.
+ * Backstop on RPC silence. Expiry is normally decided by block height or the
+ * nonce, but if the RPC fails every status and expiry query we would otherwise
+ * loop forever. Measured from the last query that got an answer, not from the
+ * send, so a slow-but-working RPC is never cut off mid-flight. Twice the
+ * longest blockhash lifetime (~54s on X1, ~33s on Solana) with no word from the
+ * RPC means the outcome cannot be known here.
  */
 const MAX_RPC_SILENCE_MS = 120_000;
 
 /**
  * Absolute cap, whatever the RPC says. Reached only if status queries answer
  * but the height query never does (or never advances), which would otherwise
- * keep the poll alive indefinitely.
+ * keep the poll alive indefinitely, or if a durable-nonce transaction neither
+ * lands nor has its nonce consumed by anything else.
  */
 const MAX_TOTAL_WAIT_MS = 300_000;
+
+/**
+ * What ends a signed transaction's chance to land.
+ *
+ * - `blockhash`: block height passing `lastValidBlockHeight` (150 blocks after
+ *   the blockhash).
+ * - `nonce`: the durable nonce it carries being advanced. Landing advances it,
+ *   so an advanced nonce with no landed signature means some other transaction
+ *   used it first, and this one never can.
+ */
+export type TransactionLifetime =
+  | { kind: 'blockhash'; lastValidBlockHeight: number }
+  | {
+      kind: 'nonce';
+      nonceAccount: PublicKey;
+      nonce: string;
+      /** Slot `nonce` was read at; every later read must be at least this fresh. */
+      minContextSlot: number;
+    };
+
+/** The lifetime as a loggable object, for send plans and reports. */
+export function describeLifetime(lifetime: TransactionLifetime) {
+  return lifetime.kind === 'blockhash'
+    ? { lifetime: 'blockhash', lastValidBlockHeight: lifetime.lastValidBlockHeight }
+    : {
+        lifetime: 'durable nonce',
+        nonceAccount: lifetime.nonceAccount.toBase58(),
+        nonce: lifetime.nonce,
+      };
+}
 
 export type SendAndConfirmOptions = {
   /** Prefix for this call site's console output, e.g. 'ApproveButton'. */
@@ -56,16 +89,22 @@ export class TransactionExpiredError extends Error {
   constructor(
     public readonly signature: string,
     /** Last status seen before giving up — `null` if the cluster never reported it. */
-    public readonly lastStatus: SignatureStatus | null
+    public readonly lastStatus: SignatureStatus | null,
+    /** Which lifetime ran out. */
+    public readonly lifetime: TransactionLifetime['kind'] = 'blockhash'
   ) {
+    const ended =
+      lifetime === 'nonce'
+        ? 'its durable nonce was used by another transaction'
+        : 'its blockhash expired';
     super(
       lastStatus
         ? // Seen at 'processed' but never 'confirmed'. That block may yet be
           // confirmed by a lagging node's account, or may have been dropped by
           // a fork. Either way we cannot promise it did not happen.
-          `Transaction was processed but not confirmed before its blockhash expired. ` +
+          `Transaction was processed but not confirmed before ${ended}. ` +
             `Check the explorer for signature ${signature} before retrying.`
-        : `Transaction expired without landing — it was never included in a block, so nothing changed on chain. ` +
+        : `Transaction did not land before ${ended} — it was never included in a block, so nothing changed on chain. ` +
             `Safe to retry. Signature: ${signature}`
     );
     this.name = 'TransactionExpiredError';
@@ -110,7 +149,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * poll, which lost transactions in two distinct ways:
  *
  *   1. `maxRetries: 3` caps how many times the *RPC* re-pushes the transaction to
- *      the leader. web3.js otherwise retries until the blockhash expires (~1 min).
+ *      the leader. web3.js otherwise retries until the blockhash expires.
  *      Capped at three, a few dropped packets at leader ingress kill the
  *      transaction permanently and silently — it simply never appears on chain.
  *      We set `maxRetries: 0` and drive rebroadcast ourselves instead, which also
@@ -120,7 +159,10 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  *      expiry means on Solana: a transaction is alive until block height passes
  *      the `lastValidBlockHeight` that came with its blockhash (~150 blocks). A
  *      10s timeout reported "not found or expired" on transactions that still had
- *      ~50 seconds to land, and could not observe `finalized` (~13s minimum) at all.
+ *      most of their window left, and could not observe `finalized` at all.
+ *
+ * A durable-nonce transaction has no block height limit: it stays alive until
+ * its nonce is advanced, so `lifetime` says which of the two to watch.
  *
  * Resolves once the signature reaches `confirmed` — a supermajority has voted on
  * the block, which is the right bar for telling a user their click worked.
@@ -138,7 +180,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export async function sendAndConfirm(
   connection: Connection,
   signedTransaction: Transaction | VersionedTransaction,
-  lastValidBlockHeight: number,
+  lifetime: TransactionLifetime,
   options: SendAndConfirmOptions = {}
 ): Promise<string> {
   const tag = `[${options.label ?? 'sendAndConfirm'}]`;
@@ -171,7 +213,7 @@ export async function sendAndConfirm(
       // (preflight failure, unknown blockhash, ...). It was not forwarded.
       console.error(`${tag} The RPC rejected the send, nothing was submitted:`, error, {
         rpc: describeRpc(connection.rpcEndpoint),
-        lastValidBlockHeight,
+        ...describeLifetime(lifetime),
       });
       throw error;
     }
@@ -184,7 +226,7 @@ export async function sendAndConfirm(
     console.warn(`${tag} The send got no answer; the RPC may still have forwarded it:`, error, {
       rpc: describeRpc(connection.rpcEndpoint),
       signature,
-      lastValidBlockHeight,
+      ...describeLifetime(lifetime),
     });
   }
   console.log(`${tag} Sent, awaiting confirmation. Signature:`, signature);
@@ -196,6 +238,7 @@ export async function sendAndConfirm(
   let lastStatus: SignatureStatus | null = null;
   let lastLoggedStatus = '';
   let lastBlockHeight: number | null = null;
+  let lastNonce: string | null = null;
 
   const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
 
@@ -207,8 +250,10 @@ export async function sendAndConfirm(
     elapsedMs: Date.now() - startedAt,
     polls: poll,
     rebroadcasts,
-    lastValidBlockHeight,
-    lastSeenBlockHeight: lastBlockHeight,
+    ...describeLifetime(lifetime),
+    ...(lifetime.kind === 'blockhash'
+      ? { lastSeenBlockHeight: lastBlockHeight }
+      : { lastSeenNonce: lastNonce }),
     lastStatus,
   });
 
@@ -295,30 +340,25 @@ export async function sendAndConfirm(
     // copy buys nothing but an "already processed" error.
     if (!status && poll % REBROADCAST_EVERY === 0) rebroadcast();
 
-    if (poll % BLOCK_HEIGHT_CHECK_EVERY !== 0) continue;
+    if (poll % EXPIRY_CHECK_EVERY !== 0) continue;
 
-    let blockHeight: number;
+    let alive: boolean;
     try {
-      blockHeight = await connection.getBlockHeight('confirmed');
+      alive = await stillAlive();
     } catch (error) {
-      console.warn(`${tag} Block height check failed, will retry:`, error);
+      console.warn(`${tag} Expiry check failed, will retry:`, error);
       continue;
     }
     lastAnswerAt = Date.now();
-    lastBlockHeight = blockHeight;
-    console.log(
-      `${tag} Block height ${blockHeight} of ${lastValidBlockHeight}, ` +
-        `${Math.max(0, lastValidBlockHeight - blockHeight)} blocks of validity left`
-    );
-    if (blockHeight <= lastValidBlockHeight) continue;
+    if (alive) continue;
 
-    // The blockhash is dead, so this exact transaction can never be included in
+    // The lifetime is over, so this exact transaction can never be included in
     // a new block. It may still have landed in one of the last blocks of its
-    // window, which a lagging status node has not reported yet — give that a
-    // few more polls before calling it.
+    // window (or be what advanced the nonce), which a lagging status node has
+    // not reported yet — give that a few more polls before calling it.
     for (let grace = 0; grace < EXPIRY_GRACE_POLLS; grace++) {
       await sleep(POLL_INTERVAL_MS);
-      // No rebroadcast here, and no backstop check: the blockhash is dead, so
+      // No rebroadcast here, and no backstop check: the lifetime is over, so
       // these polls only ask whether it already landed.
       if (landed(await pollStatus(`Grace status check ${grace + 1}`))) {
         console.log(`${tag} Confirmed on grace poll ${grace + 1} after expiry`, report());
@@ -326,8 +366,61 @@ export async function sendAndConfirm(
       }
     }
 
-    console.error(`${tag} Blockhash expired before the transaction landed:`, report());
-    throw new TransactionExpiredError(signature, lastStatus);
+    console.error(
+      lifetime.kind === 'nonce'
+        ? `${tag} Nonce was advanced but this transaction never landed:`
+        : `${tag} Blockhash expired before the transaction landed:`,
+      report()
+    );
+    throw new TransactionExpiredError(signature, lastStatus, lifetime.kind);
+  }
+
+  /** One expiry check. Throws if the RPC query fails, which says nothing either way. */
+  async function stillAlive(): Promise<boolean> {
+    if (lifetime.kind === 'blockhash') {
+      const blockHeight = await connection.getBlockHeight('confirmed');
+      lastBlockHeight = blockHeight;
+      console.log(
+        `${tag} Block height ${blockHeight} of ${lifetime.lastValidBlockHeight}, ` +
+          `${Math.max(0, lifetime.lastValidBlockHeight - blockHeight)} blocks of validity left`
+      );
+      return blockHeight <= lifetime.lastValidBlockHeight;
+    }
+    const current = await currentNonce(connection, lifetime.nonceAccount, lifetime.minContextSlot);
+    lastNonce = current;
+    if (current === lifetime.nonce) {
+      console.log(`${tag} Nonce still unused after ${elapsed()}, transaction remains valid`);
+      return true;
+    }
+    console.log(`${tag} Nonce advanced after ${elapsed()} (now ${current ?? 'account closed'})`);
+    return false;
+  }
+}
+
+/**
+ * The value a nonce account holds right now, at 'confirmed', or null if the
+ * account is gone or no longer a nonce — either way, nothing signed with the
+ * old value can land.
+ *
+ * `minContextSlot` keeps a lagging node from answering: one still behind the
+ * slot the transaction's nonce was read at would report the previous value,
+ * which is indistinguishable from the nonce having been used. The RPC rejects
+ * the read instead, and callers retry it.
+ */
+export async function currentNonce(
+  connection: Connection,
+  nonceAccount: PublicKey,
+  minContextSlot: number
+): Promise<string | null> {
+  const info = await connection.getAccountInfo(nonceAccount, {
+    commitment: 'confirmed',
+    minContextSlot,
+  });
+  if (!info) return null;
+  try {
+    return NonceAccount.fromAccountData(info.data).nonce;
+  } catch {
+    return null;
   }
 }
 
@@ -336,9 +429,10 @@ export async function sendAndConfirm(
  *
  * Explicitly `confirmed`, never the connection default. An RPC's default
  * commitment is `finalized`, which hands back a blockhash roughly 31 blocks
- * (~12s) old — a fifth of the ~150-block validity window already spent before
- * the wallet has even prompted the user. On a hardware wallet, where approval
- * itself can take 30s, that difference decides whether the transaction lands.
+ * old — a fifth of the ~150-block validity window already spent before the
+ * wallet has even prompted the user. The window itself is only ~33s on Solana
+ * mainnet (~4.5 blocks/s) and ~54s on X1 (~2.7 blocks/s), so a hardware wallet
+ * can miss it regardless; those users want a durable nonce (`durableNonce.ts`).
  */
 export async function getSendableBlockhash(connection: Connection) {
   return connection.getLatestBlockhash('confirmed');
