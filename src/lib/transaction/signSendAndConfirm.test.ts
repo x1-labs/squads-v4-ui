@@ -4,6 +4,7 @@ import {
   ComputeBudgetInstruction,
   Keypair,
   PublicKey,
+  SendTransactionError,
   Transaction,
   TransactionInstruction,
   VersionedTransaction,
@@ -11,8 +12,11 @@ import {
 import type { Connection } from '@solana/web3.js';
 import { WalletSignTransactionError } from '@solana/wallet-adapter-base';
 import {
+  SignedAfterExpiryError,
   SimulationFailedError,
   WalletAccountMismatchError,
+  WalletBlockhashUnknownError,
+  WalletChangedCoSignedTransactionError,
   WalletSignatureTimeoutError,
   describeSendError,
   isWalletAccountMismatch,
@@ -49,8 +53,13 @@ function fakeConnection({
     | { err: unknown; logs: string[]; unitsConsumed?: number }
     | (() => never),
   blockHeight = (() => 100) as () => number,
+  /** Signature status per poll, by poll number (1-based). Defaults to confirmed at once. */
+  status = (() => ({ err: null, confirmationStatus: 'confirmed' })) as (
+    poll: number
+  ) => { err: null; confirmationStatus: string } | null,
+  send = (() => 'SIGabc') as () => string,
 } = {}) {
-  const calls = { simulations: 0, sends: 0 };
+  const calls = { simulations: 0, sends: 0, statusPolls: 0, sent: [] as Uint8Array[] };
   const connection = {
     rpcEndpoint: 'http://rpc.test',
     getRecentPrioritizationFees: async () =>
@@ -64,11 +73,12 @@ function fakeConnection({
       blockhash: PublicKey.default.toBase58(),
       lastValidBlockHeight: 999,
     }),
-    sendRawTransaction: async () => {
+    sendRawTransaction: async (raw: Uint8Array) => {
       calls.sends += 1;
-      return 'SIGabc';
+      calls.sent.push(raw);
+      return send();
     },
-    getSignatureStatuses: async () => ({ value: [{ err: null, confirmationStatus: 'confirmed' }] }),
+    getSignatureStatuses: async () => ({ value: [status(++calls.statusPolls)] }),
     getBlockHeight: async () => blockHeight(),
   };
   return { calls, connection: connection as unknown as Connection };
@@ -436,7 +446,7 @@ describe('wallet watchdog', () => {
   beforeEach(() => mock.timers.enable({ apis: ['setTimeout', 'Date'] }));
   afterEach(() => mock.timers.reset());
 
-  test('a wallet that never answers is abandoned once the blockhash dies, and nothing is sent', async () => {
+  test('a wallet that never answers is abandoned at the cap, not when the blockhash dies', async () => {
     // Height passes lastValidBlockHeight (999) after ~40s of waiting.
     const start = Date.now();
     const { calls, connection } = fakeConnection({
@@ -449,10 +459,11 @@ describe('wallet watchdog', () => {
     const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], { label: 't' }));
     assert.ok(error instanceof WalletSignatureTimeoutError, String(error));
     assert.match(error.message, /Nothing was sent/);
+    assert.ok(Date.now() - start >= 180_000, `gave up after ${Date.now() - start}ms`);
     assert.equal(calls.sends, 0);
   });
 
-  test('a wallet that answers late, after expiry, is not sent either', async () => {
+  test('a wallet that answers late with the original blockhash is not sent', async () => {
     const start = Date.now();
     const { calls, connection } = fakeConnection({
       blockHeight: () => (Date.now() - start > 40_000 ? 1_000 : 900),
@@ -462,7 +473,8 @@ describe('wallet watchdog', () => {
     wallet.signTransaction = (transaction) =>
       new Promise((resolve) => setTimeout(() => resolve(slowSign(transaction)), 90_000));
     const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], { label: 't' }));
-    assert.ok(error instanceof WalletSignatureTimeoutError, String(error));
+    assert.ok(error instanceof SignedAfterExpiryError, String(error));
+    assert.match(error.message, /Nothing was sent/);
     assert.equal(calls.sends, 0);
   });
 
@@ -475,5 +487,116 @@ describe('wallet watchdog', () => {
     const signature = await run(signSendAndConfirm(connection, wallet, [ix()], { label: 't' }));
     assert.equal(signature, signatureOf(signed[0]));
     assert.equal(calls.sends, 1);
+  });
+});
+
+describe('wallet-refreshed blockhash', () => {
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout', 'Date'] }));
+  afterEach(() => mock.timers.reset());
+
+  const REFRESHED = Keypair.generate().publicKey.toBase58();
+
+  /**
+   * A wallet that, like Ledger's provider, takes `delayMs` on the device and
+   * then signs with a fresh blockhash in place of the app's.
+   */
+  function refreshingWallet(delayMs: number) {
+    const signed: (Transaction | VersionedTransaction)[] = [];
+    const wallet: SigningWallet = {
+      publicKey: keypair.publicKey,
+      signTransaction: (transaction) =>
+        new Promise((resolve) =>
+          setTimeout(() => {
+            if (transaction instanceof VersionedTransaction) {
+              transaction.message.recentBlockhash = REFRESHED;
+              transaction.sign([keypair]);
+            } else {
+              transaction.recentBlockhash = REFRESHED;
+              transaction.partialSign(keypair);
+            }
+            signed.push(transaction);
+            resolve(transaction);
+          }, delayMs)
+        ),
+    };
+    return { wallet, signed };
+  }
+
+  /** Height passes the app's lastValidBlockHeight (999) after 40s, then holds at 1,050. */
+  const expiresAt40s = (start: number) => () => (Date.now() - start > 40_000 ? 1_050 : 900);
+
+  test('is sent after the app blockhash expired, and tracked past the old height', async () => {
+    const start = Date.now();
+    // Not confirmed until the 10th poll. Tracked against the app's height
+    // (999), the send would have been called expired after the 8th.
+    const { calls, connection } = fakeConnection({
+      blockHeight: expiresAt40s(start),
+      status: (poll) => (poll < 10 ? null : { err: null, confirmationStatus: 'confirmed' }),
+    });
+    const { wallet, signed } = refreshingWallet(60_000);
+    const signature = await run(signSendAndConfirm(connection, wallet, [ix()], options));
+    assert.equal(signature, signatureOf(signed[0]));
+    assert.equal(Transaction.from(calls.sent[0]).recentBlockhash, REFRESHED);
+  });
+
+  test('works the same for a v0 transaction', async () => {
+    const start = Date.now();
+    const { calls, connection } = fakeConnection({ blockHeight: expiresAt40s(start) });
+    const { wallet, signed } = refreshingWallet(60_000);
+    const signature = await run(signSendAndConfirmV0(connection, wallet, [ix()], options));
+    assert.equal(signature, signatureOf(signed[0]));
+    assert.equal(
+      VersionedTransaction.deserialize(calls.sent[0]).message.recentBlockhash,
+      REFRESHED
+    );
+  });
+
+  test('is refused when other keys already signed, since their signatures no longer match', async () => {
+    const cosigner = Keypair.generate();
+    const needsCosigner = new TransactionInstruction({
+      keys: [{ pubkey: cosigner.publicKey, isSigner: true, isWritable: false }],
+      programId: program,
+      data: Buffer.alloc(8, 1),
+    });
+    const { calls, connection } = fakeConnection();
+    const { wallet } = refreshingWallet(1_000);
+    const error = await rejects(
+      signSendAndConfirm(connection, wallet, [needsCosigner], { ...options, signers: [cosigner] })
+    );
+    assert.ok(error instanceof WalletChangedCoSignedTransactionError, String(error));
+    assert.equal(calls.sends, 0);
+  });
+
+  test('a refreshed blockhash the RPC does not know points at the wallet network', async () => {
+    const { connection } = fakeConnection({
+      send: () => {
+        throw new SendTransactionError({
+          action: 'send',
+          signature: '',
+          transactionMessage: 'Transaction simulation failed: Blockhash not found',
+        });
+      },
+    });
+    const { wallet } = refreshingWallet(1_000);
+    const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], options));
+    assert.ok(error instanceof WalletBlockhashUnknownError, String(error));
+    assert.match(error.message, /same network/);
+    assert.doesNotMatch(describeSendError(error), /expired/i);
+  });
+
+  test('the same rejection on the app blockhash still reads as expired', async () => {
+    const { connection } = fakeConnection({
+      send: () => {
+        throw new SendTransactionError({
+          action: 'send',
+          signature: '',
+          transactionMessage: 'Transaction simulation failed: Blockhash not found',
+        });
+      },
+    });
+    const { wallet } = fakeWallet();
+    const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], options));
+    assert.ok(!(error instanceof WalletBlockhashUnknownError), String(error));
+    assert.equal(describeSendError(error), 'Transaction expired. Please try again.');
   });
 });
