@@ -74,3 +74,12 @@
     @apply bg-background text-foreground;
   }
 }
+
+/*
+ * An open modal dialog sets `pointer-events: none` on <body>, which the toaster
+ * inherits. Toasts can carry buttons (e.g. "Sign again"), so keep them
+ * clickable above a dialog.
+ */
+[data-sonner-toaster] {
+  pointer-events: auto;
+}
