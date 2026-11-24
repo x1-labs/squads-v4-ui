@@ -475,6 +475,11 @@ describe('wallet watchdog', () => {
     const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], { label: 't' }));
     assert.ok(error instanceof SignedAfterExpiryError, String(error));
     assert.match(error.message, /Nothing was sent/);
+    assert.match(
+      `${error}`,
+      /^The transaction expired/,
+      'toasts show the message without the class name'
+    );
     assert.equal(calls.sends, 0);
   });
 

@@ -270,8 +270,19 @@ const REFRESHED_BLOCKHASH_LIFETIME_BLOCKS = 150 + 20;
  */
 const MAX_BLOCKS_PER_MS = 1 / 200;
 
+/**
+ * An error whose message already reads as a sentence for the user. Many
+ * toasts interpolate the error as `${e}`, so `toString` returns only the
+ * message, not the class name in front of it.
+ */
+class UserFacingError extends Error {
+  toString(): string {
+    return this.message;
+  }
+}
+
 /** The wallet never returned a signature. Nothing was sent, so retrying is safe. */
-export class WalletSignatureTimeoutError extends Error {
+export class WalletSignatureTimeoutError extends UserFacingError {
   constructor(public readonly waitedMs: number) {
     super(
       `The wallet did not return a signature within ${Math.round(waitedMs / 1000)}s. ` +
@@ -285,7 +296,7 @@ export class WalletSignatureTimeoutError extends Error {
  * The wallet signed, but only after the blockhash it signed had died, so the
  * transaction could never land. Nothing was sent, so retrying is safe.
  */
-export class SignedAfterExpiryError extends Error {
+export class SignedAfterExpiryError extends UserFacingError {
   constructor(public readonly signMs: number) {
     super(
       `The transaction expired while it waited in the wallet (approved after ` +
@@ -299,7 +310,7 @@ export class SignedAfterExpiryError extends Error {
  * The wallet put in a new blockhash on a transaction that other keys had
  * already signed, which invalidates their signatures. Nothing was sent.
  */
-export class WalletChangedCoSignedTransactionError extends Error {
+export class WalletChangedCoSignedTransactionError extends UserFacingError {
   constructor() {
     super(
       "Your wallet replaced the transaction's blockhash, which invalidates the other " +
@@ -313,7 +324,7 @@ export class WalletChangedCoSignedTransactionError extends Error {
  * The wallet put in a blockhash that the app's RPC has never seen, so it was
  * rejected before sending. Usually the wallet is on a different network.
  */
-export class WalletBlockhashUnknownError extends Error {
+export class WalletBlockhashUnknownError extends UserFacingError {
   constructor(
     public readonly blockhash: string,
     rpc: string
