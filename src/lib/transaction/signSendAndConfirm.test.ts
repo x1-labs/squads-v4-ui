@@ -58,6 +58,13 @@ function fakeConnection({
     poll: number
   ) => { err: null; confirmationStatus: string } | null,
   send = (() => 'SIGabc') as () => string,
+  latest = (() => ({
+    blockhash: PublicKey.default.toBase58(),
+    lastValidBlockHeight: 999,
+  })) as () => {
+    blockhash: string;
+    lastValidBlockHeight: number;
+  },
 } = {}) {
   const calls = { simulations: 0, sends: 0, statusPolls: 0, sent: [] as Uint8Array[] };
   const connection = {
@@ -69,10 +76,7 @@ function fakeConnection({
       const value = typeof simulation === 'function' ? simulation() : simulation;
       return { value };
     },
-    getLatestBlockhash: async () => ({
-      blockhash: PublicKey.default.toBase58(),
-      lastValidBlockHeight: 999,
-    }),
+    getLatestBlockhash: async () => latest(),
     sendRawTransaction: async (raw: Uint8Array) => {
       calls.sends += 1;
       calls.sent.push(raw);
@@ -603,5 +607,111 @@ describe('wallet-refreshed blockhash', () => {
     const error = await rejects(signSendAndConfirm(connection, wallet, [ix()], options));
     assert.ok(!(error instanceof WalletBlockhashUnknownError), String(error));
     assert.equal(describeSendError(error), 'Transaction expired. Please try again.');
+  });
+});
+
+describe('sign again', () => {
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout', 'Date'] }));
+  afterEach(() => mock.timers.reset());
+
+  /**
+   * A chain where height is 900 + one block per 0.4s (X1's pace), and every
+   * blockhash handed out lives 150 blocks from the height it was fetched at.
+   */
+  function movingChain() {
+    const start = Date.now();
+    const height = () => 900 + Math.floor((Date.now() - start) / 400);
+    return fakeConnection({
+      blockHeight: height,
+      latest: () => ({
+        blockhash: Keypair.generate().publicKey.toBase58(),
+        lastValidBlockHeight: height() + 150,
+      }),
+    });
+  }
+
+  /** A wallet whose Nth signature takes `delaysMs[N]`, keeping the blockhash it was given. */
+  function slowThenFastWallet(delaysMs: number[]) {
+    const signed: (Transaction | VersionedTransaction)[] = [];
+    const { wallet } = fakeWallet();
+    const sign = wallet.signTransaction!;
+    wallet.signTransaction = (transaction) => {
+      const delay = delaysMs[Math.min(signed.length, delaysMs.length - 1)];
+      signed.push(transaction);
+      return new Promise((resolve) => setTimeout(() => resolve(sign(transaction)), delay));
+    };
+    return { wallet, signed };
+  }
+
+  /** An onStep that answers "sign again?" with the given answers, in order. */
+  function stepsAnswering(...answers: boolean[]) {
+    const asked: number[] = [];
+    const onStep = Object.assign((_step: SendStep) => {}, {
+      signAgain: async ({ signMs }: { signMs: number }) => {
+        asked.push(signMs);
+        return answers[asked.length - 1] ?? false;
+      },
+    });
+    return { onStep, asked };
+  }
+
+  test('a late signature, then "Sign again", sends the fresh one once', async () => {
+    const { calls, connection } = movingChain();
+    const { wallet, signed } = slowThenFastWallet([90_000, 10_000]);
+    const { onStep, asked } = stepsAnswering(true);
+    const signature = await run(
+      signSendAndConfirm(connection, wallet, [ix()], { ...options, onStep })
+    );
+    assert.equal(asked.length, 1);
+    assert.ok(asked[0] >= 90_000, `asked after ${asked[0]}ms`);
+    assert.equal(signed.length, 2, 'the wallet was asked twice');
+    assert.notEqual(
+      (signed[0] as Transaction).recentBlockhash,
+      (signed[1] as Transaction).recentBlockhash,
+      'the second try carries a fresh blockhash'
+    );
+    assert.equal(calls.sends, 1, 'only the second signature was sent');
+    assert.equal(signature, signatureOf(signed[1]));
+  });
+
+  test('dismissing the prompt sends nothing and reports the expiry', async () => {
+    const { calls, connection } = movingChain();
+    const { wallet, signed } = slowThenFastWallet([90_000]);
+    const { onStep, asked } = stepsAnswering(false);
+    const error = await rejects(
+      signSendAndConfirm(connection, wallet, [ix()], { ...options, onStep })
+    );
+    assert.ok(error instanceof SignedAfterExpiryError, String(error));
+    assert.equal(asked.length, 1);
+    assert.equal(signed.length, 1);
+    assert.equal(calls.sends, 0);
+  });
+
+  test('stops offering after two retries', async () => {
+    const { calls, connection } = movingChain();
+    const { wallet, signed } = slowThenFastWallet([90_000]);
+    const { onStep, asked } = stepsAnswering(true, true, true);
+    const error = await rejects(
+      signSendAndConfirm(connection, wallet, [ix()], { ...options, onStep })
+    );
+    assert.ok(error instanceof SignedAfterExpiryError, String(error));
+    assert.equal(asked.length, 2);
+    assert.equal(signed.length, 3);
+    assert.equal(calls.sends, 0);
+  });
+
+  test('a plain onStep with no prompt fails as before', async () => {
+    const { calls, connection } = movingChain();
+    const { wallet } = slowThenFastWallet([90_000]);
+    const steps: SendStep[] = [];
+    const error = await rejects(
+      signSendAndConfirm(connection, wallet, [ix()], {
+        ...options,
+        onStep: (step) => steps.push(step),
+      })
+    );
+    assert.ok(error instanceof SignedAfterExpiryError, String(error));
+    assert.deepEqual(steps, ['preparing', 'signing']);
+    assert.equal(calls.sends, 0);
   });
 });

@@ -32,6 +32,16 @@ export type SigningWallet = {
 /** Where the pipeline is, for callers that show progress. */
 export type SendStep = 'preparing' | 'signing' | 'confirming';
 
+/**
+ * Progress callback for the pipeline. `signAgain`, when present, is asked
+ * whether to sign again after the wallet returned a signature too late to
+ * send; it resolves true only if the user chose to.
+ */
+export type StepReporter = {
+  (step: SendStep): void;
+  signAgain?: (info: { signMs: number }) => Promise<boolean>;
+};
+
 export type SignSendAndConfirmOptions = {
   /**
    * Accounts the priority fee is priced against. Defaults to every account the
@@ -51,7 +61,7 @@ export type SignSendAndConfirmOptions = {
   /** Prefix for console output, e.g. 'ApproveButton'. */
   label: string;
   /** Progress callback: 'signing' right before the wallet prompt, 'confirming' once signed. */
-  onStep?: (step: SendStep) => void;
+  onStep?: StepReporter;
   /** Appended to the error when the transaction exceeds the packet size, e.g. 'Select fewer proposals.' */
   tooLargeHint?: string;
   /**
@@ -256,6 +266,8 @@ const SIGN_WATCHDOG_LOG_EVERY = 3;
 const SIGN_MAX_WAIT_MS = 180_000;
 /** Stop waiting for the wallet to disconnect after this long, so the error still shows. */
 const DISCONNECT_MAX_WAIT_MS = 3_000;
+/** How many times one send may offer to sign again after an expired signature. */
+const MAX_SIGN_AGAIN = 2;
 /**
  * How long a blockhash the wallet put in is assumed to live, in blocks past the
  * height when the wallet returned it. 150 is the protocol limit; the margin
@@ -549,101 +561,133 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
     ? sizeComputeUnitLimit(unitsConsumed, minUnits)
     : Math.max(minUnits, defaultUnits);
 
-  // Fresh blockhash right before signing, so as little of the validity window
-  // as possible is spent before the wallet prompts. 'confirmed' avoids handing
-  // over one that is already ~31 blocks old.
-  const { blockhash, lastValidBlockHeight } = await getSendableBlockhash(connection);
+  /**
+   * Fetch a fresh blockhash, build the final transaction, and have the wallet
+   * sign it. Throws `SignedAfterExpiryError` if the signature came back after
+   * that blockhash died, which the loop below may answer by signing again.
+   */
+  const buildAndSign = async () => {
+    // Fresh blockhash right before signing, so as little of the validity window
+    // as possible is spent before the wallet prompts. 'confirmed' avoids handing
+    // over one that is already ~31 blocks old.
+    const { blockhash, lastValidBlockHeight } = await getSendableBlockhash(connection);
 
-  // Budget instructions first — a compute budget applies to the whole
-  // transaction regardless of position, but keeping them at the front matches
-  // convention and keeps the decoded instruction list readable.
-  const transaction = shape.build(
-    payer,
-    computeBudgetInstructions({ units, microLamports }),
-    blockhash
-  );
+    // Budget instructions first — a compute budget applies to the whole
+    // transaction regardless of position, but keeping them at the front matches
+    // convention and keeps the decoded instruction list readable.
+    const transaction = shape.build(
+      payer,
+      computeBudgetInstructions({ units, microLamports }),
+      blockhash
+    );
 
-  // Checked after the budget instructions are in, since they count too. Better
-  // a clear error here than a cryptic one from the wallet.
-  const sizeBytes = shape.size(transaction);
-  if (sizeBytes === null || sizeBytes > PACKET_DATA_SIZE) {
-    const measured =
-      sizeBytes === null
-        ? `over ${PACKET_DATA_SIZE} bytes`
-        : `${sizeBytes} bytes, limit ${PACKET_DATA_SIZE}`;
-    throw new Error(`Transaction too large (${measured}). ${options.tooLargeHint ?? ''}`.trim());
-  }
+    // Checked after the budget instructions are in, since they count too. Better
+    // a clear error here than a cryptic one from the wallet.
+    const sizeBytes = shape.size(transaction);
+    if (sizeBytes === null || sizeBytes > PACKET_DATA_SIZE) {
+      const measured =
+        sizeBytes === null
+          ? `over ${PACKET_DATA_SIZE} bytes`
+          : `${sizeBytes} bytes, limit ${PACKET_DATA_SIZE}`;
+      throw new Error(`Transaction too large (${measured}). ${options.tooLargeHint ?? ''}`.trim());
+    }
 
-  // Everything that decides whether this lands, in one line for bug reports.
-  console.log(`${tag} Send plan`, {
-    rpc: describeRpc(connection.rpcEndpoint),
-    instructions: instructions.length,
-    sizeBytes,
-    unitsConsumed,
-    computeUnitLimit: units,
-    priorityFeeMicroLamportsPerCu: microLamports,
-    maxPriorityFeeLamports: Math.ceil((units * microLamports) / 1_000_000),
-    blockhash,
-    lastValidBlockHeight,
-  });
-
-  // Local keypairs sign before the wallet, so the wallet is handed a transaction
-  // that needs only its own signature.
-  if (options.signers?.length) {
-    if (transaction instanceof VersionedTransaction) transaction.sign(options.signers);
-    else transaction.partialSign(...options.signers);
-  }
-
-  // Sign only, then broadcast via the app's connection. The wallet never sends,
-  // so it doesn't need to be pointed at this network's RPC — the app always
-  // submits to the configured endpoint. This also avoids the "Plugin Closed"
-  // errors some wallets throw on send.
-  options.onStep?.('signing');
-  const startSign = Date.now();
-  let signedTransaction: T;
-  try {
-    signedTransaction = await awaitWalletSignature(
-      connection,
-      () => wallet.signTransaction!(transaction),
+    // Everything that decides whether this lands, in one line for bug reports.
+    console.log(`${tag} Send plan`, {
+      rpc: describeRpc(connection.rpcEndpoint),
+      instructions: instructions.length,
+      sizeBytes,
+      unitsConsumed,
+      computeUnitLimit: units,
+      priorityFeeMicroLamportsPerCu: microLamports,
+      maxPriorityFeeLamports: Math.ceil((units * microLamports) / 1_000_000),
+      blockhash,
       lastValidBlockHeight,
+    });
+
+    // Local keypairs sign before the wallet, so the wallet is handed a transaction
+    // that needs only its own signature.
+    if (options.signers?.length) {
+      if (transaction instanceof VersionedTransaction) transaction.sign(options.signers);
+      else transaction.partialSign(...options.signers);
+    }
+
+    // Sign only, then broadcast via the app's connection. The wallet never sends,
+    // so it doesn't need to be pointed at this network's RPC — the app always
+    // submits to the configured endpoint. This also avoids the "Plugin Closed"
+    // errors some wallets throw on send.
+    options.onStep?.('signing');
+    const startSign = Date.now();
+    let signedTransaction: T;
+    try {
+      signedTransaction = await awaitWalletSignature(
+        connection,
+        () => wallet.signTransaction!(transaction),
+        lastValidBlockHeight,
+        tag
+      );
+    } catch (error) {
+      if (!isWalletAccountMismatch(error)) throw error;
+      console.error(
+        `${tag} The wallet refused to sign for ${payer.toBase58()}. Its active account is different.`,
+        error
+      );
+      // The page cannot follow the switch, because the wallet did not announce it.
+      // Disconnect, so the next connect reads the wallet's active account. This is
+      // the same call as the Disconnect button.
+      let disconnected = false;
+      if (wallet.disconnect) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          disconnected = await Promise.race([
+            wallet.disconnect().then(() => true),
+            new Promise<false>((resolve) => {
+              timer = setTimeout(() => resolve(false), DISCONNECT_MAX_WAIT_MS);
+            }),
+          ]);
+          if (!disconnected) console.warn(`${tag} The wallet did not disconnect in time`);
+        } catch (disconnectError) {
+          console.warn(`${tag} Could not disconnect the wallet:`, disconnectError);
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      throw new WalletAccountMismatchError(error, disconnected);
+    }
+    const lifetime = await lifetimeOfSigned(
+      connection,
+      signedTransaction,
+      { blockhash, lastValidBlockHeight },
+      Date.now() - startSign,
+      !!options.signers?.length,
       tag
     );
-  } catch (error) {
-    if (!isWalletAccountMismatch(error)) throw error;
-    console.error(
-      `${tag} The wallet refused to sign for ${payer.toBase58()}. Its active account is different.`,
-      error
-    );
-    // The page cannot follow the switch, because the wallet did not announce it.
-    // Disconnect, so the next connect reads the wallet's active account. This is
-    // the same call as the Disconnect button.
-    let disconnected = false;
-    if (wallet.disconnect) {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        disconnected = await Promise.race([
-          wallet.disconnect().then(() => true),
-          new Promise<false>((resolve) => {
-            timer = setTimeout(() => resolve(false), DISCONNECT_MAX_WAIT_MS);
-          }),
-        ]);
-        if (!disconnected) console.warn(`${tag} The wallet did not disconnect in time`);
-      } catch (disconnectError) {
-        console.warn(`${tag} Could not disconnect the wallet:`, disconnectError);
-      } finally {
-        clearTimeout(timer);
+    return { signedTransaction, ...lifetime };
+  };
+
+  // A wallet that keeps the blockhash (Backpack with a Keystone, measured
+  // 2026-11-23) returns a dead transaction when the user takes longer than the
+  // window. Offer to sign again with a fresh one, but only on the user's click,
+  // so a second wallet prompt never appears out of nowhere.
+  let signed: Awaited<ReturnType<typeof buildAndSign>>;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      signed = await buildAndSign();
+      break;
+    } catch (error) {
+      const signAgain = options.onStep?.signAgain;
+      if (!(error instanceof SignedAfterExpiryError) || !signAgain || attempt >= MAX_SIGN_AGAIN) {
+        throw error;
       }
+      console.warn(`${tag} Offering to sign again with a fresh blockhash`);
+      if (!(await signAgain({ signMs: error.signMs }))) {
+        console.log(`${tag} The user did not sign again`);
+        throw error;
+      }
+      console.log(`${tag} Signing again (attempt ${attempt + 2})`);
     }
-    throw new WalletAccountMismatchError(error, disconnected);
   }
-  const signed = await lifetimeOfSigned(
-    connection,
-    signedTransaction,
-    { blockhash, lastValidBlockHeight },
-    Date.now() - startSign,
-    !!options.signers?.length,
-    tag
-  );
+  const { signedTransaction } = signed;
   options.onStep?.('confirming');
 
   try {
