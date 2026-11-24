@@ -1,6 +1,7 @@
 import {
   PACKET_DATA_SIZE,
   PublicKey,
+  SendTransactionError,
   Transaction,
   TransactionMessage,
   VersionedTransaction,
@@ -160,13 +161,16 @@ export function describeSendError(error: unknown): string {
  *   2. simulate to measure compute, unless the caller already did;
  *   3. fetch a fresh blockhash, build the final transaction with the budget
  *      instructions in front, and check it fits in a packet;
- *   4. have the wallet sign; then
+ *   4. have the wallet sign, accepting a blockhash the wallet refreshed; then
  *   5. broadcast and rebroadcast until the signature confirms or the blockhash expires.
  *
  * Resolves with the signature. Throws `SimulationFailedError` before the wallet
  * prompt, `TransactionFailedError` / `TransactionExpiredError` /
  * `TransactionStatusUnknownError` from `sendAndConfirm`, `WalletAccountMismatchError`
- * if the wallet's active account is not the connected one, or the wallet's own
+ * if the wallet's active account is not the connected one, one of the
+ * `WalletSignatureTimeoutError` / `SignedAfterExpiryError` /
+ * `WalletChangedCoSignedTransactionError` / `WalletBlockhashUnknownError`
+ * family when what the wallet returned cannot be sent, or the wallet's own
  * error if the user declines to sign.
  */
 export async function signSendAndConfirm(
@@ -244,38 +248,119 @@ type Shape<T extends Transaction | VersionedTransaction> = {
 const SIGN_WATCHDOG_INTERVAL_MS = 5_000;
 /** Log a "still waiting" line this often, so a stuck prompt is visible in the console. */
 const SIGN_WATCHDOG_LOG_EVERY = 3;
-/** Give up on the wallet after this long if the RPC will not tell us the block height. */
+/**
+ * Give up on a wallet that has not answered after this long. Deliberately not
+ * tied to the blockhash: a wallet that refreshes it after the user approves
+ * returns a sendable transaction however long the review took.
+ */
 const SIGN_MAX_WAIT_MS = 180_000;
 /** Stop waiting for the wallet to disconnect after this long, so the error still shows. */
 const DISCONNECT_MAX_WAIT_MS = 3_000;
+/**
+ * How long a blockhash the wallet put in is assumed to live, in blocks past the
+ * height when the wallet returned it. 150 is the protocol limit; the margin
+ * covers a wallet RPC a few blocks ahead of ours. Too high only delays an
+ * "expired" verdict, because the status poll still reports a landing at once.
+ */
+const REFRESHED_BLOCKHASH_LIFETIME_BLOCKS = 150 + 20;
+/**
+ * Most blocks that can pass per millisecond: one per 200ms slot, Solana's
+ * fastest. Only used to bound a refreshed blockhash's life when the RPC will
+ * not tell us the current height.
+ */
+const MAX_BLOCKS_PER_MS = 1 / 200;
 
 /**
- * The wallet never returned a signature, or returned it after the blockhash it
- * signed had died. Nothing was sent either way, so retrying is always safe.
+ * An error whose message already reads as a sentence for the user. Many
+ * toasts interpolate the error as `${e}`, so `toString` returns only the
+ * message, not the class name in front of it.
  */
-export class WalletSignatureTimeoutError extends Error {
+class UserFacingError extends Error {
+  toString(): string {
+    return this.message;
+  }
+}
+
+/** The wallet never returned a signature. Nothing was sent, so retrying is safe. */
+export class WalletSignatureTimeoutError extends UserFacingError {
   constructor(public readonly waitedMs: number) {
     super(
-      `The wallet did not return a signature within ${Math.round(waitedMs / 1000)}s, ` +
-        'and the transaction has expired unsigned. Nothing was sent. Check the wallet ' +
-        '(and hardware device, if any) and try again.'
+      `The wallet did not return a signature within ${Math.round(waitedMs / 1000)}s. ` +
+        'Nothing was sent. Check the wallet (and hardware device, if any) and try again.'
     );
     this.name = 'WalletSignatureTimeoutError';
   }
 }
 
 /**
- * `wallet.signTransaction`, bounded by the life of the blockhash in the message.
- *
- * A wallet prompt that never settles — extension hung, hardware device asleep,
- * popup dismissed without a rejection event — otherwise leaves the caller
- * awaiting forever with nothing in the console. So while the wallet has the
- * transaction, the block height is checked every few seconds; once it passes
- * `lastValidBlockHeight` the signature can no longer land and the wait is
- * abandoned with a `WalletSignatureTimeoutError`. A signature that arrives
- * after that is dropped: sending it would only produce "Blockhash not found".
+ * The wallet signed, but only after the blockhash it signed had died, so the
+ * transaction could never land. Nothing was sent, so retrying is safe.
  */
-async function signBeforeExpiry<T extends Transaction | VersionedTransaction>(
+export class SignedAfterExpiryError extends UserFacingError {
+  constructor(public readonly signMs: number) {
+    super(
+      `The transaction expired while it waited in the wallet (approved after ` +
+        `${Math.round(signMs / 1000)}s). Nothing was sent. Try again and approve it sooner.`
+    );
+    this.name = 'SignedAfterExpiryError';
+  }
+}
+
+/**
+ * The wallet put in a new blockhash on a transaction that other keys had
+ * already signed, which invalidates their signatures. Nothing was sent.
+ */
+export class WalletChangedCoSignedTransactionError extends UserFacingError {
+  constructor() {
+    super(
+      "Your wallet replaced the transaction's blockhash, which invalidates the other " +
+        'signatures it needs. Nothing was sent. Try again.'
+    );
+    this.name = 'WalletChangedCoSignedTransactionError';
+  }
+}
+
+/**
+ * The wallet put in a blockhash that the app's RPC has never seen, so it was
+ * rejected before sending. Usually the wallet is on a different network.
+ */
+export class WalletBlockhashUnknownError extends UserFacingError {
+  constructor(
+    public readonly blockhash: string,
+    rpc: string
+  ) {
+    super(
+      `Your wallet replaced the transaction's blockhash with one that ${rpc} does not ` +
+        'recognize. Nothing was sent. Check that the wallet is set to the same network ' +
+        'as this app, then try again.'
+    );
+    this.name = 'WalletBlockhashUnknownError';
+  }
+}
+
+/** The blockhash a transaction carries, whichever format it is. */
+function blockhashOf(transaction: Transaction | VersionedTransaction): string | null {
+  return transaction instanceof VersionedTransaction
+    ? transaction.message.recentBlockhash
+    : (transaction.recentBlockhash ?? null);
+}
+
+/**
+ * `wallet.signTransaction`, with a watchdog.
+ *
+ * A wallet prompt that never settles (extension hung, hardware device asleep,
+ * popup dismissed without a rejection event) otherwise leaves the caller
+ * awaiting forever with nothing in the console. So while the wallet has the
+ * transaction, the block height is checked every few seconds and logged, and
+ * after `SIGN_MAX_WAIT_MS` the wait is abandoned.
+ *
+ * The wait is not cut off when the app's blockhash dies. Some wallets (Ledger's
+ * own provider, for one) show the transaction on the device and then fetch a
+ * fresh blockhash once the user approves, so review time does not count
+ * against the ~150-block window. Abandoning at expiry would throw away exactly
+ * those transactions. What came back is checked after signing instead.
+ */
+async function awaitWalletSignature<T extends Transaction | VersionedTransaction>(
   connection: Connection,
   sign: () => Promise<T>,
   lastValidBlockHeight: number,
@@ -285,11 +370,19 @@ async function signBeforeExpiry<T extends Transaction | VersionedTransaction>(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let abandoned = false;
 
-  const expiry = new Promise<never>((_, reject) => {
+  const watchdog = new Promise<never>((_, reject) => {
     let ticks = 0;
+    let loggedExpiry = false;
     const check = async () => {
       ticks += 1;
       const waitedMs = Date.now() - startedAt;
+      if (waitedMs > SIGN_MAX_WAIT_MS) {
+        abandoned = true;
+        console.error(`${tag} Gave up waiting for the wallet after ${waitedMs}ms`);
+        reject(new WalletSignatureTimeoutError(waitedMs));
+        return;
+      }
+
       let blockHeight: number | null = null;
       try {
         blockHeight = await connection.getBlockHeight('confirmed');
@@ -298,23 +391,21 @@ async function signBeforeExpiry<T extends Transaction | VersionedTransaction>(
       }
       if (abandoned) return;
 
-      const expired =
-        blockHeight !== null ? blockHeight > lastValidBlockHeight : waitedMs > SIGN_MAX_WAIT_MS;
-      if (expired) {
-        abandoned = true;
-        console.error(`${tag} Gave up waiting for the wallet after ${waitedMs}ms`, {
-          blockHeight,
-          lastValidBlockHeight,
-        });
-        reject(new WalletSignatureTimeoutError(waitedMs));
-        return;
-      }
-
-      if (ticks % SIGN_WATCHDOG_LOG_EVERY === 0) {
+      const waited = `${Math.round(waitedMs / 1000)}s`;
+      if (blockHeight !== null && blockHeight > lastValidBlockHeight) {
+        if (!loggedExpiry) {
+          loggedExpiry = true;
+          console.warn(
+            `${tag} The app's blockhash expired after ${waited} in the wallet. Still waiting: ` +
+              'a wallet that refreshes the blockhash on approval can still return a sendable ' +
+              'transaction.',
+            { blockHeight, lastValidBlockHeight }
+          );
+        }
+      } else if (ticks % SIGN_WATCHDOG_LOG_EVERY === 0) {
         const left = blockHeight !== null ? `${lastValidBlockHeight - blockHeight}` : 'unknown';
         console.warn(
-          `${tag} Still waiting for the wallet after ${Math.round(waitedMs / 1000)}s, ` +
-            `${left} blocks of validity left`
+          `${tag} Still waiting for the wallet after ${waited}, ${left} blocks of validity left`
         );
       }
       timer = setTimeout(check, SIGN_WATCHDOG_INTERVAL_MS);
@@ -323,11 +414,70 @@ async function signBeforeExpiry<T extends Transaction | VersionedTransaction>(
   });
 
   try {
-    return await Promise.race([sign(), expiry]);
+    return await Promise.race([sign(), watchdog]);
   } finally {
     abandoned = true;
     clearTimeout(timer);
   }
+}
+
+/**
+ * The `lastValidBlockHeight` to track a signed transaction against.
+ *
+ * If the wallet kept the app's blockhash, that is the one that came with it,
+ * and a transaction already past it is not sent. If the wallet put in its own,
+ * nothing says when that one dies, so it is bounded from above. Ledger's
+ * guidance is the same: do not confirm a refreshed transaction against the
+ * original blockhash's height.
+ */
+async function lifetimeOfSigned(
+  connection: Connection,
+  signed: Transaction | VersionedTransaction,
+  built: { blockhash: string; lastValidBlockHeight: number },
+  signMs: number,
+  hasCoSigners: boolean,
+  tag: string
+): Promise<{ lastValidBlockHeight: number; walletRefreshedBlockhash: boolean }> {
+  const signedBlockhash = blockhashOf(signed);
+  const walletRefreshedBlockhash = signedBlockhash !== built.blockhash;
+  console.log(`${tag} Signed in ${signMs}ms`, { walletRefreshedBlockhash, signedBlockhash });
+
+  let blockHeight: number | null = null;
+  try {
+    blockHeight = await connection.getBlockHeight('confirmed');
+  } catch (error) {
+    console.warn(`${tag} Block height lookup failed after signing:`, error);
+  }
+
+  if (!walletRefreshedBlockhash) {
+    // A lookup that failed, or a lagging node, just lets the send go ahead;
+    // preflight then rejects a dead blockhash with "Blockhash not found".
+    if (blockHeight !== null && blockHeight > built.lastValidBlockHeight) {
+      console.error(`${tag} The wallet signed after the blockhash expired; not sending`, {
+        blockHeight,
+        lastValidBlockHeight: built.lastValidBlockHeight,
+      });
+      throw new SignedAfterExpiryError(signMs);
+    }
+    return { lastValidBlockHeight: built.lastValidBlockHeight, walletRefreshedBlockhash };
+  }
+
+  if (hasCoSigners) {
+    console.error(`${tag} The wallet replaced the blockhash on a co-signed transaction`);
+    throw new WalletChangedCoSignedTransactionError();
+  }
+  const lastValidBlockHeight =
+    blockHeight !== null
+      ? blockHeight + REFRESHED_BLOCKHASH_LIFETIME_BLOCKS
+      : built.lastValidBlockHeight +
+        Math.ceil(signMs * MAX_BLOCKS_PER_MS) +
+        REFRESHED_BLOCKHASH_LIFETIME_BLOCKS;
+  console.log(`${tag} The wallet refreshed the blockhash; tracking expiry against an estimate`, {
+    builtBlockhash: built.blockhash,
+    signedBlockhash,
+    lastValidBlockHeight,
+  });
+  return { lastValidBlockHeight, walletRefreshedBlockhash };
 }
 
 /** Every account the instructions write to, deduplicated. */
@@ -452,7 +602,7 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
   const startSign = Date.now();
   let signedTransaction: T;
   try {
-    signedTransaction = await signBeforeExpiry(
+    signedTransaction = await awaitWalletSignature(
       connection,
       () => wallet.signTransaction!(transaction),
       lastValidBlockHeight,
@@ -486,10 +636,33 @@ async function pipeline<T extends Transaction | VersionedTransaction>(
     }
     throw new WalletAccountMismatchError(error, disconnected);
   }
-  console.log(`${tag} Signed in ${Date.now() - startSign}ms`);
+  const signed = await lifetimeOfSigned(
+    connection,
+    signedTransaction,
+    { blockhash, lastValidBlockHeight },
+    Date.now() - startSign,
+    !!options.signers?.length,
+    tag
+  );
   options.onStep?.('confirming');
 
-  return sendAndConfirm(connection, signedTransaction, lastValidBlockHeight, {
-    label: options.label,
-  });
+  try {
+    return await sendAndConfirm(connection, signedTransaction, signed.lastValidBlockHeight, {
+      label: options.label,
+    });
+  } catch (error) {
+    // Our own blockhash is one the RPC just handed out, so "not found" on a
+    // refreshed one points at the wallet: most often a different network.
+    if (
+      signed.walletRefreshedBlockhash &&
+      error instanceof SendTransactionError &&
+      /blockhash not found/i.test(error.message)
+    ) {
+      throw new WalletBlockhashUnknownError(
+        blockhashOf(signedTransaction) ?? '',
+        describeRpc(connection.rpcEndpoint)
+      );
+    }
+    throw error;
+  }
 }

@@ -23,8 +23,9 @@ const EXPIRY_GRACE_POLLS = 3;
  * Backstop on RPC silence. Expiry is normally decided by block height, but if
  * the RPC fails every status and height query we would otherwise loop forever.
  * Measured from the last query that got an answer, not from the send, so a
- * slow-but-working RPC is never cut off mid-flight. Blockhashes live ~60s;
- * twice that with no word from the RPC means the outcome cannot be known here.
+ * slow-but-working RPC is never cut off mid-flight. Blockhashes live ~150
+ * blocks (~30s on Solana's 200ms slots, ~55s on X1); two minutes with no word
+ * from the RPC means the outcome cannot be known here.
  */
 const MAX_RPC_SILENCE_MS = 120_000;
 
@@ -110,7 +111,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * poll, which lost transactions in two distinct ways:
  *
  *   1. `maxRetries: 3` caps how many times the *RPC* re-pushes the transaction to
- *      the leader. web3.js otherwise retries until the blockhash expires (~1 min).
+ *      the leader. web3.js otherwise retries until the blockhash expires.
  *      Capped at three, a few dropped packets at leader ingress kill the
  *      transaction permanently and silently — it simply never appears on chain.
  *      We set `maxRetries: 0` and drive rebroadcast ourselves instead, which also
@@ -336,9 +337,9 @@ export async function sendAndConfirm(
  *
  * Explicitly `confirmed`, never the connection default. An RPC's default
  * commitment is `finalized`, which hands back a blockhash roughly 31 blocks
- * (~12s) old — a fifth of the ~150-block validity window already spent before
- * the wallet has even prompted the user. On a hardware wallet, where approval
- * itself can take 30s, that difference decides whether the transaction lands.
+ * old — a fifth of the ~150-block validity window already spent before the
+ * wallet has even prompted the user. On Solana's 200ms slots the whole window
+ * is ~30s, which a hardware wallet approval can use up on its own.
  */
 export async function getSendableBlockhash(connection: Connection) {
   return connection.getLatestBlockhash('confirmed');
